@@ -1,0 +1,17 @@
+{
+  "channels": {
+    "whatsapp": {
+      "dmPolicy": "allowlist",
+      "allowFrom": ["+15555550123"],
+      "groupPolicy": "disabled",
+      "selfChatMode": false
+    }
+  },
+  "approvals": {
+    "plugin": {
+      "enabled": true,
+      "mode": "targets",
+      "targets": [{ "channel": "whatsapp", "to": "+15555550123" }]
+    }
+  }
+}
