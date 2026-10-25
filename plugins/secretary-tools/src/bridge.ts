@@ -26,7 +26,7 @@ export function createSecretary(options: Options) {
   catch (error) { if(error instanceof SecretaryError) throw error; fail('CORE_UNAVAILABLE_OUTCOME_UNKNOWN'); }
   const buffer = new Uint8Array(size); let offset=0; for(const chunk of chunks) {buffer.set(chunk,offset);offset+=chunk.length;}
   let result: Record<string,unknown>; try {result=object(JSON.parse(new TextDecoder().decode(buffer)));} catch {fail('INVALID_CORE_RESPONSE');}
-  if (result.ok !== true) { const error = object(result.error); return {ok:false,error:{code:typeof error.code==='string' && /^[A-Z_0-9]+$/.test(error.code) ? error.code : 'CORE_ERROR',message:'Core rejected the request',retryable:false}}; }
+  if (result.ok !== true) { const error = object(result.error); return {ok:false,error:{code:typeof error.code==='string' && /^[A-Za-z_0-9]{1,64}$/.test(error.code) ? error.code : 'CORE_ERROR',message:'Core rejected the request',retryable:false}}; }
   if (!response.ok) fail('INVALID_CORE_RESPONSE'); return result;
  }
  async function execute(name: string, value: unknown, identity: Identity) {

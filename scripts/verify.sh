@@ -7,7 +7,7 @@ if [[ ! -f Cargo.toml || ! -f package.json ]]; then
   exit 1
 fi
 cargo fmt --all -- --check
-cargo clippy --offline --workspace --all-targets -- -D warnings
-cargo test --offline --workspace
+cargo clippy --offline --locked --workspace --all-targets -- -D warnings
+cargo test --offline --locked --workspace
 bun run build
 bun run test

@@ -9,12 +9,21 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Require qualified dependency locks
+        run: |
+          if [ ! -f Cargo.lock ] || { [ ! -f bun.lock ] && [ ! -f bun.lockb ]; }; then
+            echo 'Release blocked: generate, validate, and commit dependency locks in a network-enabled environment.' >&2
+            exit 1
+          fi
       - uses: dtolnay/rust-toolchain@1.95.0
         with:
           components: rustfmt, clippy
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: '1.2.21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.16.0'
       - name: Fetch locked Rust dependencies
         run: cargo fetch --locked
       - name: Install locked JavaScript dependencies

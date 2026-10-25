@@ -89,3 +89,9 @@ test('oversized requests and previews without Core evidence never cross the boun
  await expect(bridge.execute('reminders_list',{},owner)).rejects.toThrow('SCHEDULER_UNAVAILABLE');
  await expect(bridge.execute('memory_capabilities',{},{})).rejects.toThrow('OWNER_REQUIRED');
 });
+(process.env.SECRETARY_HTTP_TESTS==='1'?test:test.skip)('Core lowercase error codes survive sanitization while raw provider messages stay hidden',async()=>{
+ const {server,options}=setup(()=>Response.json({ok:false,error:{code:'spreadsheet_not_registered',message:'private upstream diagnostic',retryable:false}},{status:404}));
+ try {
+  expect(await createSecretary(options).execute('sheets_describe',{spreadsheet:'denied'},owner)).toEqual({ok:false,error:{code:'spreadsheet_not_registered',message:'Core rejected the request',retryable:false}});
+ } finally {server.stop(true);}
+});

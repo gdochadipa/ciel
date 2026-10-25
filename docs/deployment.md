@@ -6,6 +6,8 @@ Deployment is disabled pending T007. No VPS, Google credential, WhatsApp account
 
 Run `bash scripts/verify.sh` after integration supplies both manifests. It runs formatting, Clippy, Rust tests and the package build/tests, plus Python syntax checks. CI fetches locked dependencies first. Offline builds require dependencies already cached; absent Reqwest or other required crates are blockers rather than permission to silently substitute another HTTP client. CI configuration has not been run by a hosted runner here. No code review or security review is claimed; code review is explicitly deferred by the user.
 
+The production dependency locks could not be generated under the current DNS restrictions. In a network-enabled qualification environment, run `cargo generate-lockfile` and `bun install`, validate the actual dependency graph and SDK, and commit the resulting locks before a release. CI has an explicit missing-lock gate and will fail until that prerequisite is satisfied. This is an outstanding reproducibility requirement, not a successful locked build.
+
 ## Operator prerequisites
 
 1. Qualify the actual Ubuntu host, Node version, OpenClaw `2026.10.7` package/SDK and plugin activation. Current [tool plugin docs](https://docs.openclaw.ai/plugins/tool-plugins) require Node 24.16+ or 26.1+; confirm against the pinned package. Keep package and dependency locks and an executable rollback artifact.
