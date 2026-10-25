@@ -1,0 +1,10 @@
+{
+ "name":"@personal-secretary/openclaw-tools",
+ "version":"0.1.0",
+ "private":true,
+ "type":"module",
+ "engines":{"node":">=24.16.0"},
+ "openclaw":{"extensions":["./dist/index.js"]},
+ "scripts":{"test":"bun test test","build":"openclaw plugins build","validate":"openclaw plugins validate"},
+ "peerDependencies":{"openclaw":"2026.10.7"}
+}
