@@ -45,7 +45,7 @@ fn address(row: usize, col: usize) -> String {
     }
     format!("{name}{}", row + 1)
 }
-fn sheet<'a>(book: &'a Value, v: &View) -> Result<&'a Value, ApiError> {
+pub(crate) fn sheet<'a>(book: &'a Value, v: &View) -> Result<&'a Value, ApiError> {
     book["sheets"]
         .as_array()
         .and_then(|s| {
@@ -56,7 +56,7 @@ fn sheet<'a>(book: &'a Value, v: &View) -> Result<&'a Value, ApiError> {
         })
         .ok_or_else(ApiError::drift)
 }
-fn cells(sheet: &Value) -> BTreeMap<String, Value> {
+pub(crate) fn cells(sheet: &Value) -> BTreeMap<String, Value> {
     let mut result = BTreeMap::new();
     if let Some(grids) = sheet["data"].as_array() {
         for grid in grids {
@@ -90,7 +90,7 @@ fn value(cell: Option<&Value>) -> Value {
     })
     .unwrap_or(Value::Null)
 }
-fn at(c: &BTreeMap<String, Value>, a: &str) -> Value {
+pub(crate) fn at(c: &BTreeMap<String, Value>, a: &str) -> Value {
     value(c.get(a))
 }
 fn text(v: &Value) -> Option<&str> {
@@ -341,6 +341,21 @@ pub fn project(
                     format!("{col}3:{col}10"),
                     json!({"name":at(&c,&format!("{col}3")),"base_cost":cost(at(&c,&format!("{col}4"))),"attributes":attrs,"selected":null,"quote_date":null}),
                 );
+            }
+        }
+        Kind::StructuredTasks | Kind::StructuredPayments => {
+            for row in crate::write_model::rows(s, v, book)? {
+                let mut record = record(
+                    s,
+                    v,
+                    format!("A{}:Z{}", row.row, row.row),
+                    row.fields,
+                    version,
+                    &rev,
+                    &now,
+                );
+                record["source"]["record_id"] = json!(row.record_id);
+                out.push(record);
             }
         }
         Kind::HouseholdItems => {

@@ -19,13 +19,17 @@ serde={version="1",features=["derive"]}
 serde_json="1"
 chrono="0.4"
 sha2="0.10"
+sqlx={version="0.7",default-features=false,features=["sqlite","runtime-tokio"]}
+uuid={version="1",features=["v4"]}
+tokio={version="1",features=["full"]}
 ''')
 lines=[]
-for name in ('error','registry','projection'):
+for name in ('error','registry','projection','journal','write_model'):
     lines.append('#[path='+json.dumps(str(src/'src'/f'{name}.rs'))+'] pub mod '+name+';')
 lines.append('pub use error::ApiError; pub use registry::Registry;')
 (target/'src/lib.rs').write_text('\n'.join(lines))
-(target/'tests/adapter.rs').write_text((src/'tests/adapter.rs').read_text())
+for name in ('adapter','write_adapter','write_journal'):
+    (target/'tests'/f'{name}.rs').write_text((src/'tests'/f'{name}.rs').read_text())
 common=(src/'tests/common/mod.rs').read_text().replace('"../../../../config/spreadsheets.example.json"',json.dumps(str(repo/'config/spreadsheets.example.json')))
 (target/'tests/common/mod.rs').write_text(common)
 PY

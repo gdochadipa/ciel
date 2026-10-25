@@ -1,5 +1,5 @@
 {
-  "version": "sanitized-demo-v1",
+  "version": "sanitized-demo-v2",
   "spreadsheets": [
     {
       "alias": "wedding-demo",
@@ -90,6 +90,88 @@
           },
           "merges": [],
           "formulas": {}
+        },
+        {
+          "name": "tasks",
+          "sheet_id": 106,
+          "title": "AI_Tasks",
+          "kind": "structured_tasks",
+          "range": "A1:Z1001",
+          "headers": {
+            "A1": "record_id",
+            "B1": "operation_id",
+            "C1": "title",
+            "D1": "status",
+            "E1": "due_date"
+          },
+          "merges": [],
+          "formulas": {},
+          "write_schema": {
+            "fields": {
+              "title": {
+                "column": "C",
+                "kind": "text",
+                "required": true
+              },
+              "status": {
+                "column": "D",
+                "kind": "task_status",
+                "required": true
+              },
+              "due_date": {
+                "column": "E",
+                "kind": "date",
+                "required": false
+              }
+            }
+          }
+        },
+        {
+          "name": "payments",
+          "sheet_id": 107,
+          "title": "AI_Payments",
+          "kind": "structured_payments",
+          "range": "A1:Z1001",
+          "headers": {
+            "A1": "record_id",
+            "B1": "operation_id",
+            "C1": "amount",
+            "D1": "currency",
+            "E1": "payment_date",
+            "F1": "cost_group",
+            "G1": "note"
+          },
+          "merges": [],
+          "formulas": {},
+          "write_schema": {
+            "fields": {
+              "amount": {
+                "column": "C",
+                "kind": "positive_integer",
+                "required": true
+              },
+              "currency": {
+                "column": "D",
+                "kind": "currency",
+                "required": true
+              },
+              "payment_date": {
+                "column": "E",
+                "kind": "date",
+                "required": true
+              },
+              "cost_group": {
+                "column": "F",
+                "kind": "text",
+                "required": true
+              },
+              "note": {
+                "column": "G",
+                "kind": "text",
+                "required": false
+              }
+            }
+          }
         }
       ]
     }

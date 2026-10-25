@@ -3,6 +3,8 @@ use secretary_core::{router, AppState, GoogleClient, Registry};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let registry: Registry =
         serde_json::from_slice(&std::fs::read(std::env::var("SECRETARY_CONFIG")?)?)?;
+    let enabled = std::env::var("SECRETARY_WRITES_ENABLED").as_deref() == Ok("true");
+    let token = std::env::var("SECRETARY_CORE_TOKEN")?;
     let google = if std::env::var("SECRETARY_MOCK_MODE").as_deref() == Ok("true") {
         GoogleClient::static_token(
             &std::env::var("SECRETARY_GOOGLE_BASE_URL")?,
@@ -13,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let credentials: serde_json::Value = serde_json::from_slice(&std::fs::read(
             std::env::var("GOOGLE_APPLICATION_CREDENTIALS")?,
         )?)?;
-        GoogleClient::service_account(
+        GoogleClient::service_account_with_writes(
             credentials["client_email"]
                 .as_str()
                 .ok_or("missing client_email")?
@@ -21,14 +23,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             credentials["private_key"]
                 .as_str()
                 .ok_or("missing private_key")?,
+            enabled,
         )?
     };
-    let state = AppState::new(
+    let mut state = AppState::new(
         registry,
-        std::env::var("SECRETARY_CORE_TOKEN")?,
+        token.clone(),
         std::env::var("SECRETARY_OWNER")?,
         google,
     )?;
+    if let Ok(directory) = std::env::var("SECRETARY_STATE_DIR") {
+        let journal = secretary_core::journal::Journal::open(std::path::Path::new(&directory))
+            .await
+            .map_err(|_| "journal initialization failed")?;
+        let writes = secretary_core::writes::Writes::new(
+            journal,
+            enabled,
+            std::env::var("SECRETARY_APPROVAL_TOKEN").unwrap_or_default(),
+            &token,
+        )?;
+        state = state.with_writes(writes);
+    } else if enabled {
+        return Err("SECRETARY_STATE_DIR is required when writes enabled".into());
+    }
     let listener = tokio::net::TcpListener::bind("127.0.0.1:8787").await?;
     axum::serve(listener, router(state)).await?;
     Ok(())
