@@ -13,7 +13,7 @@ The owner needs a personal secretary that can retrieve and organize existing inf
 
 Conversation history is insufficient as an authoritative record of budgets, payments, vendors, or deadlines. A helpful answer must identify its sources, distinguish uncertainty from missing data, and accurately report each side effect. Model costs, access to personal information, and operational complexity must stay bounded.
 
-The supplied master plan defines the intended system. The supplied workbook has now been inspected read-only: it contains five visible tabs with irregular budget sections, guest estimates, monthly notes, prewedding comparisons, and household purchases. The workspace contains planning documents and the workbook, but no application code, Git metadata, glossary, ADRs, contracts, or test conventions. Local workbook evidence supports the mapping proposal; live Google integration and VPS runtime compatibility remain unverified.
+The supplied master plan defines the intended system. The supplied workbook has been inspected read-only: it contains five visible tabs with irregular budget sections, guest estimates, monthly notes, prewedding comparisons, and household purchases. At discovery there was no application code, Git metadata, glossary, ADR, contract, or test convention. Local implementation is now tracked separately from its still-unverified live Google integration and VPS runtime compatibility.
 
 ## Solution
 
@@ -302,7 +302,7 @@ The owner confirmed the primary seam: test observable tool-to-core behavior at t
 9. Test deterministic reports against known results, including unknown balances, missing amounts, currencies, rounding, incomplete pagination, and stale source coverage. Do not use exact model wording as a proxy for financial correctness.
 10. Run explicit end-to-end acceptance checks on the pinned OpenClaw/runtime versions and a disposable Google spreadsheet before enabling production writes. Mock success is not evidence of Google compatibility; documentation is not a plugin activation test.
 11. Test WhatsApp only after owner-reviewed configuration, using the dedicated account and authorized destination. Record the strongest delivery evidence actually available and verify that absence of a receipt remains unknown.
-12. During Phase 0, perform documentary and read-only evidence checks only: complete inventory, traceable findings, correct source boundaries, and explicit unresolved assumptions. No application tests have been run for this spec because no application exists.
+12. During Phase 0, perform documentary and read-only evidence checks only: complete inventory, traceable findings, correct source boundaries, and explicit unresolved assumptions. During implementation, record actual application checks and blocked checks in the local tickets; do not treat a narrow adapter pass as a production or end-to-end pass.
 
 ## Out of Scope
 
@@ -334,13 +334,13 @@ The owner confirmed the primary seam: test observable tool-to-core behavior at t
 
 ### Evidence recorded in this session
 
-- The workspace was initially empty. It now contains this specification, a companion assessment, and the owner-supplied workbook. It is not a Git repository; no applicable project instruction file, glossary, ADR, API contract, or application test suite was found.
+- The workspace was initially empty; no prior project instruction file, glossary, ADR, contract, or application tests were found. Local implementation now includes Core, bridge, tests, contract, Skills, operations files, and tickets. Filesystem permissions prohibit creating Git metadata at the original workspace root, so the integration branch resides in a writable temporary repository and tracked source is copied back without overwriting the workbook.
 - The owner supplied the local workbook after the initial draft. All five tabs were inspected using read-only ZIP/XML analysis, all eight current formula caches were independently reconciled, ZIP integrity was checked, and the source checksum remained unchanged. Live Google access verification has not occurred.
 - A read-only GitHub lookup could not resolve `gdochadipa/openclaw-secretary`. This does not establish that the intended repository is absent under another owner. The owner then explicitly requested local-only delivery, so no repository, issue, label, or tracker configuration was created.
 - The owner explicitly accepted the proposed testing boundaries. This specification is still awaiting architecture review.
 - Current official Google Sheets and OpenClaw documentation was consulted; references appear beside the supported claims. This is documentation evidence only, not target-host compatibility evidence.
 - Postman's API engineering, discovery, and documentation guidance informed the contract decisions. The Orbit discovery request failed at DNS resolution, so no discovery brief or provider compatibility result was obtained through it. Official provider documentation supplied the referenced facts instead. No Postman workspace was initialized or published.
-- No application code, Google records, scheduler jobs, channel configuration, credentials, or production resources were modified. No application tests or deployment checks were run.
+- Before local implementation was authorized, only planning documents were created. Subsequent implementation and verification evidence lives in the local tickets. Google records, scheduler jobs, live channel configuration, credentials, and production resources remain untouched; no production deployment is claimed. Code review is explicitly deferred.
 
 ### Companion assessment and remaining discovery
 
