@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Secretary Core",
-    "version": "0.1.0",
-    "description": "Read-only T002 contract. JSON serialization is valid YAML. 64 KiB request bound; 2 MiB provider response bound; 10 second total provider operation; two maximum read retries. Production binds loopback 8787; bridge timeout 5 seconds."
+    "version": "0.2.0",
+    "description": "Secretary Core bounded reads and opt-in structured writes. JSON serialization is valid YAML. Legacy workbook views remain read-only. 64 KiB request, 2 MiB provider response, 10 second provider timeout, two read retries; writes never retried automatically. SQLite durable intent and owner-bound approvals; operator-only reconciliation. Google Sheets lacks atomic compare-and-swap: a human edit after preflight may still race the RAW request."
   },
   "servers": [
     {
@@ -62,7 +62,8 @@
                                 "const": true
                               },
                               "writable": {
-                                "const": false
+                                "type": "boolean",
+                                "description": "True only when writes globally enabled and at least one explicit structured schema is registered."
                               }
                             },
                             "required": [
@@ -225,7 +226,8 @@
                           }
                         },
                         "writable": {
-                          "const": false
+                          "type": "boolean",
+                          "description": "True only when writes globally enabled and at least one explicit structured schema is registered."
                         }
                       },
                       "required": [
@@ -908,7 +910,7 @@
     "/v1/tools/sheets_preview_change": {
       "post": {
         "operationId": "sheets_preview_change",
-        "description": "Unavailable in read-only T002. Authenticated calls return writes_disabled until controlled-write ticket is integrated.",
+        "description": "Immutable five-minute owner-bound preview. Only registered AI_Tasks/AI_Payments schemas; legacy views always read-only. Append omits record_id; update requires a stable record_id. Fields must satisfy registered allowlist/types; actor/approval/coordinates are rejected. Same operation ID and exact input replay original preview/state; changed input conflicts.",
         "security": [
           {
             "CoreBearer": []
@@ -918,13 +920,71 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "operation_id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,100}$"
+                  },
+                  "spreadsheet": {
+                    "type": "string"
+                  },
+                  "view": {
+                    "type": "string"
+                  },
+                  "action": {
+                    "enum": [
+                      "append",
+                      "update"
+                    ]
+                  },
+                  "record_id": {
+                    "type": "string"
+                  },
+                  "fields": {
+                    "type": "object",
+                    "minProperties": 1
+                  }
+                },
+                "required": [
+                  "operation_id",
+                  "spreadsheet",
+                  "view",
+                  "action",
+                  "fields"
+                ],
+                "additionalProperties": false
+              }
             }
           }
         },
         "responses": {
-          "403": {
-            "description": "Writes disabled",
+          "200": {
+            "description": "Operation result; inspect state for applied/conflict/known_failure/uncertain/reconciliation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Preview"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields or arguments",
             "content": {
               "application/json": {
                 "schema": {
@@ -934,7 +994,67 @@
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "Invalid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Writes disabled or view read-only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown operation or record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Operation id conflict, wrong action, missing approval or expired/rejected state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body exceeds 64 KiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bounded preflight provider read failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Journal unavailable; fail closed",
             "content": {
               "application/json": {
                 "schema": {
@@ -949,7 +1069,7 @@
     "/v1/tools/sheets_append": {
       "post": {
         "operationId": "sheets_append",
-        "description": "Unavailable in read-only T002. Authenticated calls return writes_disabled until controlled-write ticket is integrated.",
+        "description": "Commit only the approved immutable append action. No automatic write retries. Durable applying intent precedes provider request; reread fingerprint/identity must match preview. RAW writes are followed by read verification. Repeated applied intent returns prior result; uncertain/reconciliation intent cannot be reissued.",
         "security": [
           {
             "CoreBearer": []
@@ -959,13 +1079,47 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "operation_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "operation_id"
+                ],
+                "additionalProperties": false
+              }
             }
           }
         },
         "responses": {
-          "403": {
-            "description": "Writes disabled",
+          "200": {
+            "description": "Operation result; inspect state for applied/conflict/known_failure/uncertain/reconciliation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Preview"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields or arguments",
             "content": {
               "application/json": {
                 "schema": {
@@ -975,7 +1129,67 @@
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "Invalid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Writes disabled or view read-only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown operation or record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Operation id conflict, wrong action, missing approval or expired/rejected state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body exceeds 64 KiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bounded preflight provider read failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Journal unavailable; fail closed",
             "content": {
               "application/json": {
                 "schema": {
@@ -990,7 +1204,7 @@
     "/v1/tools/sheets_update": {
       "post": {
         "operationId": "sheets_update",
-        "description": "Unavailable in read-only T002. Authenticated calls return writes_disabled until controlled-write ticket is integrated.",
+        "description": "Commit only the approved immutable update action. No automatic write retries. Durable applying intent precedes provider request; reread fingerprint/identity must match preview. RAW writes are followed by read verification. Repeated applied intent returns prior result; uncertain/reconciliation intent cannot be reissued.",
         "security": [
           {
             "CoreBearer": []
@@ -1000,13 +1214,47 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "operation_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "operation_id"
+                ],
+                "additionalProperties": false
+              }
             }
           }
         },
         "responses": {
-          "403": {
-            "description": "Writes disabled",
+          "200": {
+            "description": "Operation result; inspect state for applied/conflict/known_failure/uncertain/reconciliation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Preview"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields or arguments",
             "content": {
               "application/json": {
                 "schema": {
@@ -1016,7 +1264,67 @@
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "Invalid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Writes disabled or view read-only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown operation or record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Operation id conflict, wrong action, missing approval or expired/rejected state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body exceeds 64 KiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bounded preflight provider read failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Journal unavailable; fail closed",
             "content": {
               "application/json": {
                 "schema": {
@@ -1031,7 +1339,7 @@
     "/v1/tools/sheets_get_history": {
       "post": {
         "operationId": "sheets_get_history",
-        "description": "Unavailable in read-only T002. Authenticated calls return writes_disabled until controlled-write ticket is integrated.",
+        "description": "Bounded durable history. An operation_id includes immutable preview and state plus timestamped sanitized audit events. Available while writes disabled if a journal is configured.",
         "security": [
           {
             "CoreBearer": []
@@ -1041,13 +1349,120 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "operation_id": {
+                    "type": "string"
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100,
+                    "default": 50
+                  },
+                  "cursor": {
+                    "type": "string"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
             }
           }
         },
         "responses": {
-          "403": {
-            "description": "Writes disabled",
+          "200": {
+            "description": "Operation result; inspect state for applied/conflict/known_failure/uncertain/reconciliation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "operation": {
+                              "$ref": "#/components/schemas/Preview"
+                            },
+                            "events": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "sequence": {
+                                    "type": "integer"
+                                  },
+                                  "event": {
+                                    "type": "string"
+                                  },
+                                  "occurred_at": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "sequence",
+                                  "event",
+                                  "occurred_at"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "next_cursor": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "operation",
+                            "events",
+                            "next_cursor"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "operations": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/Preview"
+                              }
+                            },
+                            "next_cursor": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "operations",
+                            "next_cursor"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields or arguments",
             "content": {
               "application/json": {
                 "schema": {
@@ -1057,7 +1472,67 @@
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "Invalid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Writes disabled or view read-only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown operation or record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Operation id conflict, wrong action, missing approval or expired/rejected state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body exceeds 64 KiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bounded preflight provider read failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Journal unavailable; fail closed",
             "content": {
               "application/json": {
                 "schema": {
@@ -1068,6 +1543,299 @@
           }
         }
       }
+    },
+    "/v1/operations/{operation_id}/approval": {
+      "post": {
+        "operationId": "approve_operation",
+        "description": "Operator-only approval for exact digest and configured owner. Separate bearer secret; never registered as a model-callable tool. Expired or rejected previews cannot commit.",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "decision": {
+                    "enum": [
+                      "approve",
+                      "reject"
+                    ]
+                  },
+                  "preview_digest": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "decision",
+                  "preview_digest"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Operation result; inspect state for applied/conflict/known_failure/uncertain/reconciliation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Preview"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields or arguments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Writes disabled or view read-only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown operation or record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Operation id conflict, wrong action, missing approval or expired/rejected state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body exceeds 64 KiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bounded preflight provider read failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Journal unavailable; fail closed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "operation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,100}$"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/operations/{operation_id}/reconcile": {
+      "post": {
+        "operationId": "reconcile_operation",
+        "description": "Operator-only read reconciliation of uncertain, interrupted applying or reconciliation state. Looks for unique stable record_id + operation_id and exact approved fields. Never reissues a provider write; missing evidence remains reconciliation.",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Operation result; inspect state for applied/conflict/known_failure/uncertain/reconciliation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Preview"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields or arguments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Writes disabled or view read-only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown operation or record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Operation id conflict, wrong action, missing approval or expired/rejected state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body exceeds 64 KiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bounded preflight provider read failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Journal unavailable; fail closed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "operation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,100}$"
+            }
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -1075,6 +1843,11 @@
       "CoreBearer": {
         "type": "http",
         "scheme": "bearer"
+      },
+      "OperatorBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Distinct operator-only approval token. Never exposed to model tool arguments."
       }
     },
     "schemas": {
@@ -1196,7 +1969,9 @@
               "guest_estimates",
               "planning_notes",
               "prewedding_options",
-              "household_items"
+              "household_items",
+              "structured_tasks",
+              "structured_payments"
             ]
           },
           "range": {
@@ -1219,8 +1994,134 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "write_schema": {
+            "type": "object",
+            "properties": {
+              "fields": {
+                "type": "object",
+                "minProperties": 1,
+                "maxProperties": 24,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/FieldSpec"
+                }
+              }
+            },
+            "required": [
+              "fields"
+            ],
+            "additionalProperties": false
           }
         },
+        "additionalProperties": false
+      },
+      "FieldSpec": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "pattern": "^[C-Z]$"
+          },
+          "kind": {
+            "enum": [
+              "text",
+              "positive_integer",
+              "currency",
+              "date",
+              "task_status"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "column",
+          "kind",
+          "required"
+        ],
+        "additionalProperties": false
+      },
+      "Preview": {
+        "type": "object",
+        "properties": {
+          "operation_id": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "spreadsheet": {
+            "type": "string"
+          },
+          "view": {
+            "type": "string"
+          },
+          "action": {
+            "enum": [
+              "append",
+              "update"
+            ]
+          },
+          "record_id": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "object"
+          },
+          "before": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "after": {
+            "type": "object"
+          },
+          "mapping_version": {
+            "type": "string"
+          },
+          "source_revision": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "preview_digest": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "previewed",
+              "approved",
+              "rejected",
+              "expired",
+              "conflict",
+              "applying",
+              "applied",
+              "known_failure",
+              "uncertain",
+              "reconciliation"
+            ]
+          }
+        },
+        "required": [
+          "operation_id",
+          "actor",
+          "spreadsheet",
+          "view",
+          "action",
+          "record_id",
+          "fields",
+          "before",
+          "after",
+          "mapping_version",
+          "source_revision",
+          "expires_at",
+          "preview_digest",
+          "state"
+        ],
         "additionalProperties": false
       }
     }
