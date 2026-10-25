@@ -1,0 +1,3 @@
+[workspace]
+members = ["services/secretary-core"]
+resolver = "2"
