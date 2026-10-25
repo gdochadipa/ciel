@@ -1,6 +1,9 @@
 pub mod google;
+pub mod journal;
 pub mod projection;
 pub mod registry;
+pub mod write_model;
+pub mod writes;
 use axum::{
     extract::{DefaultBodyLimit, Path, State},
     http::{HeaderMap, StatusCode},
@@ -19,8 +22,13 @@ pub struct AppState {
     pub google: GoogleClient,
     token: Arc<str>,
     pub owner: Arc<str>,
+    pub writes: Option<Arc<writes::Writes>>,
 }
 impl AppState {
+    pub fn with_writes(mut self, writes: writes::Writes) -> Self {
+        self.writes = Some(Arc::new(writes));
+        self
+    }
     pub fn new(
         registry: Registry,
         token: String,
@@ -38,6 +46,7 @@ impl AppState {
             google,
             token: token.into(),
             owner: owner.into(),
+            writes: None,
         })
     }
 }
@@ -71,6 +80,8 @@ struct Search {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/v1/tools/{name}", post(tool))
+        .route("/v1/operations/{id}/approval", post(operator_approval))
+        .route("/v1/operations/{id}/reconcile", post(operator_reconcile))
         .layer(DefaultBodyLimit::max(65536))
         .with_state(state)
 }
@@ -91,19 +102,38 @@ async fn tool(
     let b = Sha256::digest(expected.as_bytes());
     let diff = a.iter().zip(b.iter()).fold(0u8, |n, (x, y)| n | (x ^ y));
     if diff != 0 {
+        if let Some(writes) = &state.writes {
+            writes.journal.audit(None, "denied_core_auth").await?;
+        }
         return Err(ApiError(StatusCode::UNAUTHORIZED, "unauthorized"));
     }
-    let body = body.map_err(|_| ApiError(StatusCode::PAYLOAD_TOO_LARGE, "request_too_large"))?;
-    let input: Value = serde_json::from_slice(&body).map_err(|_| ApiError::invalid())?;
+    let body = match body {
+        Ok(b) => b,
+        Err(_) => {
+            if let Some(w) = &state.writes {
+                w.journal.audit(None, "request_too_large").await?
+            }
+            return Err(ApiError(StatusCode::PAYLOAD_TOO_LARGE, "request_too_large"));
+        }
+    };
+    let input: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(_) => {
+            if let Some(w) = &state.writes {
+                w.journal.audit(None, "invalid_input").await?
+            }
+            return Err(ApiError::invalid());
+        }
+    };
     let data = match name.as_str() {
         "sheets_list" => {
             let _: Empty = parse(input)?;
-            json!({"spreadsheets":state.registry.spreadsheets.iter().filter(|s|s.readable).map(|s|json!({"spreadsheet":s.alias,"id":s.id,"readable":true,"writable":false})).collect::<Vec<_>>(),"mapping_version":state.registry.version})
+            json!({"spreadsheets":state.registry.spreadsheets.iter().filter(|s|s.readable).map(|s|json!({"spreadsheet":s.alias,"id":s.id,"readable":true,"writable":state.writes.as_ref().is_some_and(|w|w.enabled)&&s.views.iter().any(|v|v.structured())})).collect::<Vec<_>>(),"mapping_version":state.registry.version})
         }
         "sheets_describe" => {
             let p: Describe = parse(input)?;
             let s = state.registry.lookup(&p.spreadsheet)?;
-            json!({"spreadsheet":s.alias,"id":s.id,"mapping_version":state.registry.version,"views":s.views,"writable":false})
+            json!({"spreadsheet":s.alias,"id":s.id,"mapping_version":state.registry.version,"views":s.views,"writable":state.writes.as_ref().is_some_and(|w|w.enabled)&&s.views.iter().any(|v|v.structured())})
         }
         "sheets_read" => {
             let p: Read = parse(input)?;
@@ -132,7 +162,11 @@ async fn tool(
             projection::report(s, &workbook, &state.registry.version)?
         }
         "sheets_preview_change" | "sheets_append" | "sheets_update" | "sheets_get_history" => {
-            return Err(ApiError(StatusCode::FORBIDDEN, "writes_disabled"))
+            let writes = state
+                .writes
+                .as_ref()
+                .ok_or(ApiError(StatusCode::FORBIDDEN, "writes_disabled"))?;
+            writes.tool(&state, &name, input).await?
         }
         _ => return Err(ApiError(StatusCode::NOT_FOUND, "unknown_tool")),
     };
@@ -209,4 +243,72 @@ fn literal_match(value: &Value, query: &str) -> bool {
         Value::Object(o) => o.values().any(|v| literal_match(v, query)),
         _ => false,
     }
+}
+
+async fn operator_approval(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+    body: Result<axum::body::Bytes, axum::extract::rejection::BytesRejection>,
+) -> Result<Json<Value>, ApiError> {
+    operator(&state, &id, headers, body, false).await
+}
+async fn operator_reconcile(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+    body: Result<axum::body::Bytes, axum::extract::rejection::BytesRejection>,
+) -> Result<Json<Value>, ApiError> {
+    operator(&state, &id, headers, body, true).await
+}
+async fn operator(
+    state: &AppState,
+    id: &str,
+    headers: HeaderMap,
+    body: Result<axum::body::Bytes, axum::extract::rejection::BytesRejection>,
+    reconcile: bool,
+) -> Result<Json<Value>, ApiError> {
+    let writes = state
+        .writes
+        .as_ref()
+        .ok_or(ApiError(StatusCode::FORBIDDEN, "writes_disabled"))?;
+    if !writes.authorize_operator(
+        headers
+            .get("authorization")
+            .and_then(|h| h.to_str().ok())
+            .unwrap_or(""),
+    ) {
+        writes.journal.audit(None, "denied_operator_auth").await?;
+        return Err(ApiError(StatusCode::UNAUTHORIZED, "unauthorized"));
+    }
+    if !write_model::valid_id(id) {
+        writes.journal.audit(None, "invalid_operation_id").await?;
+        return Err(ApiError::invalid());
+    }
+    let body = match body {
+        Ok(b) => b,
+        Err(_) => {
+            writes.journal.audit(None, "request_too_large").await?;
+            return Err(ApiError(StatusCode::PAYLOAD_TOO_LARGE, "request_too_large"));
+        }
+    };
+    let input = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(_) => {
+            writes.journal.audit(None, "invalid_input").await?;
+            return Err(ApiError::invalid());
+        }
+    };
+    let data = if reconcile {
+        match writes.reconcile(state, id, input).await {
+            Ok(v) => v,
+            Err(e) => {
+                writes.journal.audit(Some(id), e.1).await?;
+                return Err(e);
+            }
+        }
+    } else {
+        writes.approve(id, input).await?
+    };
+    Ok(Json(json!({"ok":true,"data":data})))
 }
