@@ -1,8 +1,8 @@
 # OpenClaw Personal AI Secretary — Architecture & Delivery Specification
 
-Version: 1.1 draft  
+Version: 1.2 implementation baseline  
 Date: 2026-10-25  
-Status: Local workbook assessed; live integration verification and architecture review pending  
+Status: Local implementation authorized; live activation qualification pending  
 Delivery: Local specification, as requested; no tracker issue published  
 Target: Sumopod VPS, Ubuntu 24.04 LTS  
 Development: macOS Apple Silicon
@@ -21,7 +21,7 @@ Start with one Secretary Agent in OpenClaw. Domain Skills guide its behavior; ex
 
 The first deliverable is a read-only discovery and architecture package. Inspect the workbook, identify its relationships and quality issues, map supported records without changing their source layout, and verify the deployed integration capabilities. Present the assessment, decisions, risks, and phased acceptance criteria for review. Do not implement application services, create production tabs, connect WhatsApp, or deploy changes before that review.
 
-This specification covers the intended MVP and its later roadmap. It authorizes Phase 0 investigation only. The user has confirmed the testing boundaries below and requested that the spec remain local.
+This specification covers the intended MVP and its later roadmap. After receiving the workbook assessment, the user explicitly requested implementation, confirmed local Markdown tickets, requested medium-effort implementation agents, and deferred code review. That later instruction authorizes local implementation; production writes, native runtime activation, WhatsApp connection, and VPS deployment remain subject to the affected capability checks. The user-confirmed testing boundaries remain in force.
 
 ## User Stories
 
@@ -106,7 +106,7 @@ These definitions are provisional because no existing domain glossary was found.
 
 The supplied VPS, Ubuntu version, OpenClaw v2026.10.7 installation, OAuth authentication, working Google access, loopback Gateway, disabled elevated/browser tools, and security-audit result are owner-reported facts. None has been inspected in this session. Phase 0 must record observed versions, configurations, capabilities, and timestamps without exposing secrets.
 
-Architecture review must resolve workbook mappings, write permissions, record identity, approval transport, audit storage, and runtime compatibility before implementation starts. Approval of this document's testing boundary does not constitute architecture or deployment approval.
+Workbook mappings, write permissions, record identity, approval transport, audit storage, and runtime compatibility must be resolved before activating the affected production capabilities. Local implementation is now authorized by the user's subsequent instruction. Approval of the testing boundary alone does not authorize deployment. Code review is deferred at the user's explicit request; tests and validation still apply.
 
 ### 2. Workbook discovery and data quality assessment
 
@@ -306,7 +306,7 @@ The owner confirmed the primary seam: test observable tool-to-core behavior at t
 
 ## Out of Scope
 
-- Implementing the later phases before architecture review.
+- Activating production capabilities before their documented qualification gates pass.
 - Fabricated workbook findings, guessed live mappings, or unverified SDK commands and model IDs.
 - Replacing Google Sheets with a custom record database or importing the XLSX as a new planning system automatically.
 - Automatic cleanup, renaming, restructuring, deletion, formula repair, or creation of proposed management tabs.

@@ -1,0 +1,11 @@
+# Architecture and evidence
+
+WhatsApp → OpenClaw Secretary Agent → bounded TypeScript tool plugin → authenticated loopback Rust Core → approved Google Sheets registry. One agent uses five domain Skills. Rust owns mappings, deterministic arithmetic, immutable previews, approval consumption, the operation journal and reconciliation. Sheets remains authoritative for planning records; the native OpenClaw scheduler remains authoritative for jobs.
+
+The bridge derives the requester from trusted tool factory context rather than tool arguments. Current documented SDK `defineToolPlugin` ordinary execute has no actor field; runtime factories expose `requesterSenderId`, `senderIsOwner` and an invocation guard. Approval hooks require a mixed plugin entry. [Pinned v2026.10.7 factory source](https://github.com/openclaw/openclaw/blob/v2026.10.7/src/plugin-sdk/tool-plugin.ts) and [tool context](https://github.com/openclaw/openclaw/blob/v2026.10.7/src/plugins/tool-types.ts) ground these boundaries; actual installed package activation remains a separate check.
+
+Native scheduler integration uses supported `cron.*` Gateway RPC through `api.runtime.gateway.request`, with caller scope enforced by the host. There is no presumed `runtime.cron` object and no custom scheduler or native-state editing. Job execution, provider acceptance and delivery evidence remain separate. [Pinned runtime](https://github.com/openclaw/openclaw/blob/v2026.10.7/src/plugins/runtime/types.ts) and [wire schema](https://github.com/openclaw/openclaw/blob/v2026.10.7/packages/gateway-protocol/src/schema/cron.ts) are interface evidence, not live compatibility proof.
+
+The native memory lifecycle is unresolved. Ordinary Markdown search/get does not establish bounded save/update/archive/history with explicit consent or prevent automatic persistence. Do not silently replace native memory with a separate personal database.
+
+[Interface notes](../contracts/interface-notes.md) define the implementation boundary. [Specification](specs/openclaw-personal-secretary.md) and [workbook assessment](spreadsheet-assessment.md) retain source decisions. The local ticket graph records completed checks and unresolved T007 live activation evidence. Code review is deferred by the user.
