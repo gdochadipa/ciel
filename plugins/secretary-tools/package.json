@@ -1,10 +1,23 @@
 {
- "name":"@personal-secretary/openclaw-tools",
- "version":"0.1.0",
- "private":true,
- "type":"module",
- "engines":{"node":">=24.16.0"},
- "openclaw":{"extensions":["./dist/index.js"]},
- "scripts":{"test":"bun test test","build":"openclaw plugins build","validate":"openclaw plugins validate"},
- "peerDependencies":{"openclaw":"2026.10.7"}
+  "name": "@personal-secretary/openclaw-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.16.0"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
+  "scripts": {
+    "test": "bun test test",
+    "build": "bun build ./src/index.ts --target=node --external \"openclaw/*\" --outdir ./dist && openclaw plugins build --entry ./dist/index.js",
+    "validate": "openclaw plugins validate",
+    "build:bridge": "bun build ./src/bridge.ts --target=node --outdir ./dist/bridge"
+  },
+  "peerDependencies": {
+    "openclaw": "2026.10.7"
+  }
 }
