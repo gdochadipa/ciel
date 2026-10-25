@@ -55,3 +55,53 @@ paths:
         '404': {description: Spreadsheet not found}
         '429': {description: Quota exhausted}
         '503': {description: Temporary provider failure}
+  /spreadsheets/{spreadsheetId}/values/{range}:append:
+    post:
+      operationId: appendValues
+      parameters:
+        - {in: path, name: spreadsheetId, required: true, schema: {type: string}}
+        - {in: path, name: range, required: true, schema: {type: string}}
+        - {in: query, name: valueInputOption, required: true, schema: {enum: [RAW]}}
+        - {in: query, name: insertDataOption, schema: {enum: [INSERT_ROWS]}}
+        - {in: query, name: includeValuesInResponse, schema: {type: boolean}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [majorDimension, values]
+              properties:
+                majorDimension: {enum: [ROWS]}
+                values: {type: array, items: {type: array, items: {}}}
+      responses:
+        '200': {description: Append values response with spreadsheetId and updates}
+        '400': {description: Invalid input}
+        '503': {description: Unavailable or uncertain provider outcome}
+  /spreadsheets/{spreadsheetId}/values:batchUpdate:
+    post:
+      operationId: batchUpdateValues
+      parameters:
+        - {in: path, name: spreadsheetId, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [valueInputOption, data]
+              properties:
+                valueInputOption: {enum: [RAW]}
+                data:
+                  type: array
+                  items:
+                    type: object
+                    required: [range, majorDimension, values]
+                    properties:
+                      range: {type: string}
+                      majorDimension: {enum: [ROWS]}
+                      values: {type: array, items: {type: array, items: {}}}
+      responses:
+        '200': {description: BatchUpdateValuesResponse with update totals and responses}
+        '400': {description: Invalid input}
+        '503': {description: Unavailable or uncertain provider outcome}

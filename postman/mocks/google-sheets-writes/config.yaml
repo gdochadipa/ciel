@@ -1,0 +1,11 @@
+version: 1
+name: Google Sheets synthetic stateful writes
+slug: google-sheets-secretary-writes
+protocol: http
+port: 4901
+origin: sheets.googleapis.com
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

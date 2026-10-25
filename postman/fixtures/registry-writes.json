@@ -1,0 +1,179 @@
+{
+  "version": "sanitized-demo-v2",
+  "spreadsheets": [
+    {
+      "alias": "wedding-demo",
+      "id": "demo-spreadsheet",
+      "readable": true,
+      "views": [
+        {
+          "name": "wedding_costs",
+          "sheet_id": 101,
+          "title": "Sheet1",
+          "kind": "wedding_costs",
+          "range": "A1:G63",
+          "headers": {
+            "B1": "KEPERLUAN",
+            "C1": "VENDOR",
+            "D1": "BIAYA",
+            "F1": "SUMBER BIAYA",
+            "G1": "PERSIAPAN"
+          },
+          "merges": [
+            "D12:D13",
+            "D50:D52",
+            "D53:D54"
+          ],
+          "formulas": {
+            "D9": "=SUM(D2:D8)",
+            "D10": "=SUM(D2:D7)",
+            "D18": "=SUM(D12:D17)",
+            "D27": "=SUM(D20:D26)",
+            "D48": "=SUM(D29:D44)",
+            "D60": "=SUM(D50:D59)",
+            "B63": "=SUM(D60,D48,D27,D18,D10)"
+          }
+        },
+        {
+          "name": "guest_estimates",
+          "sheet_id": 102,
+          "title": "Sheet2",
+          "kind": "guest_estimates",
+          "range": "A1:F13",
+          "headers": {
+            "A1": "DEMO LEFT",
+            "C1": "DEMO RIGHT"
+          },
+          "merges": [],
+          "formulas": {
+            "D12": "=SUM(D3:D10)"
+          }
+        },
+        {
+          "name": "planning_notes",
+          "sheet_id": 103,
+          "title": "Sheet3",
+          "kind": "planning_notes",
+          "range": "A3:C26",
+          "headers": {
+            "A4": "MONTH",
+            "B4": "OWNER A",
+            "C4": "OWNER B"
+          },
+          "merges": [
+            "A5:A10",
+            "B5:B10",
+            "C5:C10"
+          ],
+          "formulas": {}
+        },
+        {
+          "name": "prewedding_options",
+          "sheet_id": 104,
+          "title": "Sheet4",
+          "kind": "prewedding_options",
+          "range": "A1:C10",
+          "headers": {
+            "A4": "BASE PRICE"
+          },
+          "merges": [],
+          "formulas": {}
+        },
+        {
+          "name": "household_items",
+          "sheet_id": 105,
+          "title": "RUMAH",
+          "kind": "household_items",
+          "range": "A1:D16",
+          "headers": {
+            "C2": "LUNAS"
+          },
+          "merges": [],
+          "formulas": {}
+        },
+        {
+          "name": "tasks",
+          "sheet_id": 106,
+          "title": "AI_Tasks",
+          "kind": "structured_tasks",
+          "range": "A1:Z1001",
+          "headers": {
+            "A1": "record_id",
+            "B1": "operation_id",
+            "C1": "title",
+            "D1": "status",
+            "E1": "due_date"
+          },
+          "merges": [],
+          "formulas": {},
+          "write_schema": {
+            "fields": {
+              "title": {
+                "column": "C",
+                "kind": "text",
+                "required": true
+              },
+              "status": {
+                "column": "D",
+                "kind": "task_status",
+                "required": true
+              },
+              "due_date": {
+                "column": "E",
+                "kind": "date",
+                "required": false
+              }
+            }
+          }
+        },
+        {
+          "name": "payments",
+          "sheet_id": 107,
+          "title": "AI_Payments",
+          "kind": "structured_payments",
+          "range": "A1:Z1001",
+          "headers": {
+            "A1": "record_id",
+            "B1": "operation_id",
+            "C1": "amount",
+            "D1": "currency",
+            "E1": "payment_date",
+            "F1": "cost_group",
+            "G1": "note"
+          },
+          "merges": [],
+          "formulas": {},
+          "write_schema": {
+            "fields": {
+              "amount": {
+                "column": "C",
+                "kind": "positive_integer",
+                "required": true
+              },
+              "currency": {
+                "column": "D",
+                "kind": "currency",
+                "required": true
+              },
+              "payment_date": {
+                "column": "E",
+                "kind": "date",
+                "required": true
+              },
+              "cost_group": {
+                "column": "F",
+                "kind": "text",
+                "required": true
+              },
+              "note": {
+                "column": "G",
+                "kind": "text",
+                "required": false
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

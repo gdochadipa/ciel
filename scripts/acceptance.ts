@@ -6,7 +6,7 @@ export const syntheticToken='synthetic-acceptance-core-token';
 export function acceptanceConfiguration(coreUrl:string, scenario:string) {
  const url=new URL(coreUrl);
  if(url.origin!=='http://127.0.0.1:8787'||url.pathname!=='/'||url.search||url.hash||url.username||url.password) throw Error('Acceptance requires disposable Core at http://127.0.0.1:8787');
- if(!['read','error','slow','drift','retry'].includes(scenario)) throw Error('Unsupported acceptance scenario');
+ if(!['read','error','slow','drift','retry','writes'].includes(scenario)) throw Error('Unsupported acceptance scenario');
  return {coreUrl:url.origin,coreToken:syntheticToken,owner:syntheticOwner};
 }
 export function simulationGoogleBase(log:string) {
@@ -47,6 +47,9 @@ export async function runAcceptance(coreUrl:string,scenario:string) {
  } else if(scenario==='error'||scenario==='drift') {
   const failure=await bridge.execute('sheets_read',{spreadsheet:'wedding-demo',view:'wedding_costs'},owner) as any;
   assert.equal(failure.ok,false);assert.equal(failure.error.code,scenario==='error'?'provider_unavailable':'schema_drift');
+ } else if(scenario==='writes') {
+  const {runWriteAcceptance}=await import('./acceptance-writes');
+  await runWriteAcceptance(coreUrl,process.env.SECRETARY_ACCEPTANCE_PROVIDER_URL??'');
  } else {
   const read=await bridge.execute('sheets_read',{spreadsheet:'wedding-demo',view:'wedding_costs',limit:2},owner) as any;
   assert.equal(read.ok,true);assert.equal(read.data.records.length,2);

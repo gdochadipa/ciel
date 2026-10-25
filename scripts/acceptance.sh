@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 scenario="${1:-read}"
-case "$scenario" in read|error|slow|drift|retry) ;; *) echo 'Use read, error, slow, drift or retry' >&2; exit 2;; esac
+case "$scenario" in read|error|slow|drift|retry|writes) ;; *) echo 'Use read, error, slow, drift, retry or writes' >&2; exit 2;; esac
 log_dir="$(mktemp -d "${TMPDIR:-/tmp}/secretary-acceptance.XXXXXX")"
 sim_pid=''; core_pid=''
 cleanup() {
@@ -26,13 +26,17 @@ fi
 # Derive the provider address from the actual listening event, never a guessed port.
 provider_base="$(bun scripts/acceptance.ts --simulation-base "$log_dir/sim.ndjson")"
 cat "$log_dir/sim.ndjson"
-SECRETARY_CONFIG="$PWD/postman/fixtures/registry.json" \
+registry="$PWD/postman/fixtures/registry.json"
+writes_enabled=false
+if [ "$scenario" = writes ]; then registry="$PWD/postman/fixtures/registry-writes.json"; writes_enabled=true; fi
+SECRETARY_CONFIG="$registry" SECRETARY_WRITES_ENABLED="$writes_enabled" \
+SECRETARY_STATE_DIR="$log_dir/state" SECRETARY_APPROVAL_TOKEN=synthetic-separate-operator-token \
 SECRETARY_CORE_TOKEN=synthetic-acceptance-core-token SECRETARY_OWNER=+15555550123 \
 SECRETARY_MOCK_MODE=true SECRETARY_GOOGLE_BASE_URL="$provider_base" \
 SECRETARY_GOOGLE_TOKEN=synthetic-provider-token \
 cargo run --offline --locked -p secretary-core > "$log_dir/core.log" 2>&1 &
 core_pid=$!
-if ! bun scripts/acceptance.ts "$scenario"; then
+if ! SECRETARY_ACCEPTANCE_PROVIDER_URL="$provider_base" bun scripts/acceptance.ts "$scenario"; then
  cat "$log_dir/core.log" >&2
  echo "Acceptance failed; disposable logs: $log_dir" >&2
  exit 1
