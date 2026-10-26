@@ -4,11 +4,13 @@ Updated: 2026-10-26 · Asia/Makassar
 
 ## Current position
 
-T017 completes local qualification against the actual OpenClaw 2026.10.7 SDK and full Rust dependency graph. **Live activation remains T007 and is not accepted.** The plugin owns 17 spreadsheet/report/reminder tools; personal memory is delegated to OpenClaw. No custom memory database or lifecycle is required.
+T018 adds operator-gate and journal backup/restore checks after T017 completed local qualification against the actual OpenClaw 2026.10.7 SDK and full Rust dependency graph. **Live activation remains T007 and is not accepted.** The plugin owns 17 spreadsheet/report/reminder tools; personal memory is delegated to OpenClaw. No custom memory database or lifecycle is required.
 
 The full verification script passed in qualified Linux: 21 Rust tests, 31 plugin tests and three acceptance-configuration tests with no skips, strict SDK type checking, actual host build/validation and package generation. All six Postman scenarios passed through the real bridge and Rust Core with Google as the only simulated dependency. Cargo/Bun locks were generated from actual registries and frozen installs validated. See [T017](.scratch/secretary-mvp/T017.md) and [implementation status](docs/implementation-status.md) for evidence and boundaries.
 
 The real SDK requires Node `>=24.22.1 <25 || >=26.12.1`, correcting the previous 24.16 assumption. Verification used Node 24.22.1, Bun 1.2.21, Rust 1.95.0, TypeScript 7.0.2 and Postman 1.75.0. The entry now uses actual `defineToolPlugin` authoring metadata/context factories, lazy bridge construction and preserved native approval-hook registration.
+
+Latest local increment: [T018](.scratch/secretary-mvp/T018.md) fixes temporary SQLite sidecars left by the backup script, verifies standalone snapshots and restores an actual Core WAL journal without authorizing interrupted-write replay. Ten operator CLI tests and all 22 Rust tests pass; formatting and Clippy pass. The plugin/SDK/provider code is unchanged from T017, so its 34 TypeScript and six simulation results were not rerun. Owner preference: continue local preparation first. [T007](.scratch/secretary-mvp/T007.md) now lists the exact live evidence still needed.
 
 ## Read these first
 
@@ -19,7 +21,7 @@ The real SDK requires Node `>=24.22.1 <25 || >=26.12.1`, correcting the previous
 
 ## Next unresolved work
 
-1. T007: qualify the actual target VPS and plugin activation, disposable Google service-account OAuth/read/write preservation, trusted owner-only approvals with complete preview rendering and callback failure blocking.
+1. T007 (deferred while preparing locally): qualify the actual target VPS and plugin activation, disposable Google service-account OAuth/read/write preservation, trusted owner-only approvals with complete preview rendering and callback failure blocking.
 2. Qualify native Gateway declaration convergence, concurrent edits, restart persistence, history and owner-only WhatsApp delivery/outbound policy. Native offset pagination is not a transactional snapshot.
 3. Test supported native scheduler backup/restore plus Core journal recovery on disposable resources; qualify model entitlement and hosted CI.
 4. Verify native OpenClaw memory privacy/permissions separately. Keep low-resource FTS-only retrieval defaults and the three-result primary-memory default; neither is a measured saving or hard token ceiling. Markdown is native source, OpenClaw owns its SQLite index, JSON is configuration/interchange, and Core's separate SQLite journal is operation state.

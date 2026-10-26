@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Create a coherent SQLite journal snapshot using SQLite's backup API."""
 import argparse
+from contextlib import closing
 import os
 from pathlib import Path
 import sqlite3
@@ -27,9 +28,15 @@ def main():
         fd, temporary_name = tempfile.mkstemp(prefix='.secretary-backup-', dir=destination.parent)
         temporary = Path(temporary_name)
         os.close(fd)
-        with sqlite3.connect(source.as_uri() + '?mode=ro', uri=True, timeout=10) as live:
-            with sqlite3.connect(temporary, timeout=10) as backup:
+        # sqlite3's connection context manager commits/rolls back but does not close.
+        # Close both handles before publishing so temporary WAL/SHM files are removed.
+        with closing(sqlite3.connect(source.as_uri() + '?mode=ro', uri=True, timeout=10)) as live:
+            with closing(sqlite3.connect(temporary, timeout=10)) as backup:
                 live.backup(backup)
+                # A source in WAL mode transfers its journal mode to the snapshot.
+                # Publish a standalone database, never a file that depends on sidecars.
+                if backup.execute('PRAGMA journal_mode=DELETE').fetchone() != ('delete',):
+                    raise ValueError('backup could not become a standalone snapshot')
                 if backup.execute('PRAGMA integrity_check').fetchone() != ('ok',):
                     raise ValueError('backup integrity check failed')
         # Publish only the completed snapshot; link refuses any existing target.

@@ -19,3 +19,7 @@ docs/*.xlsx
 postman/.dependencies/
 sim.ndjson
 sim.err
+
+# Python operator checks
+__pycache__/
+*.py[cod]
