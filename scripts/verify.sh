@@ -10,4 +10,6 @@ cargo fmt --all -- --check
 cargo clippy --offline --locked --workspace --all-targets -- -D warnings
 cargo test --offline --locked --workspace
 bun run build
-bun run test
+bun run validate
+SECRETARY_HTTP_TESTS=1 bun run test
+bun test scripts/acceptance.test.ts

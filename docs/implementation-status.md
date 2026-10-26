@@ -4,6 +4,8 @@ Updated: 2026-10-26
 Integration branch: `integration/secretary-mvp`  
 Delivery: source copied to the original workspace; integration Git repository retained at `/private/tmp/openclaw-secretary-implementation.on4Zt7` because workspace permissions prohibit creating its root `.git`.
 
+Current scope (owner decision, 2026-10-26): personal memory is delegated to OpenClaw. The plugin now owns 17 spreadsheet/report/reminder tools; `memory_capabilities` has been removed. T008 is outside plugin implementation scope. Native host memory/privacy remains an operator responsibility, not a custom lifecycle release gate. Historical memory assessments below record earlier scope.
+
 ## Implemented locally
 
 - Rust/Axum Core with configured owner authentication, bounded approved-spreadsheet registry, read/describe/search, source references and five legacy workbook projections. Real Reqwest Google service-account/OAuth code is present but has not completed a production build here.
@@ -18,9 +20,9 @@ Initial implementation agents ran at medium reasoning effort. The owner subseque
 | Check | Result and limit |
 | --- | --- |
 | Actual-source Rust domain/application/presentation/journal harness | 16 passed. Covers mappings, identity rules, approvals, expiry/rejection, restart/exclusive journal ownership, typed source-port commands and real in-process Axum authentication/dispatch. Excludes production Google/OAuth and socket transport. |
-| Public bridge tests | Sixteen bridge and six approval checks pass; three real HTTP tests skip because this sandbox cannot bind loopback. New approval checks use synthetic Core responses at the fetch boundary, not actual Core/host execution. Native Gateway fixtures establish adapter behavior only. |
+| Public bridge tests | Seventeen bridge and six approval checks pass; three real HTTP tests skip because this sandbox cannot bind loopback. New approval checks use synthetic Core responses at the fetch boundary, not actual Core/host execution. Native Gateway fixtures establish adapter behavior only. |
 | Acceptance configuration checks | Three additional checks pass. These are not Core/provider acceptance evidence. |
-| Plugin metadata and package selection | Three checks pass: 18 tool ownership/activation declarations, rejection of metadata/file-allowlist drift, and an actual offline npm file-selection test. Actual local-package dry-run selects exactly four files. No SDK activation or archive publication. |
+| Plugin metadata and package selection | Three checks pass: 17 tool ownership/activation declarations, rejection of metadata/file-allowlist drift, and an actual offline npm file-selection test. Actual local-package dry-run selects exactly four files. No SDK activation or archive publication. |
 | Standalone bridge and acceptance runner bundles | Pass syntax/bundling checks; do not prove installed SDK type compatibility or activation. |
 | Rust formatting; JSON contract/config/reference checks; script syntax | Pass. |
 | Direct preflight/SQLite backup smokes | Pass on safe temporary fixtures; no production service was started. |
@@ -33,14 +35,14 @@ The original workbook checksum remains `b24351dbda4c69a7cbf5f14d9b18d7fbbc983def
 
 ## Still incomplete
 
-The whole specification is not yet implemented and accepted. In particular, native explicit memory save/update/archive/history and prevention of automatic saving have no qualified adapter; memory mutation currently returns unavailable. Independent agents and approved external research providers remain later extensions rather than implicitly enabled capabilities.
+The revised plugin scope is not yet fully accepted: production builds, actual SDK/HTTP/provider acceptance and live qualification remain incomplete. Personal-memory lifecycle implementation belongs to OpenClaw and is no longer missing plugin work. Independent agents and approved external research providers remain later extensions rather than implicitly enabled capabilities.
 
 Required release gates remain open:
 
 1. Generate, validate and commit production dependency locks in a network-enabled environment. No lockfile was fabricated; CI deliberately fails its missing-lock gate.
 2. Compile the complete Rust service and actual pinned OpenClaw/Node SDK, run all public HTTP/OAuth tests, then run the real read/write acceptance simulations with socket permission. The cached-source harness cannot satisfy the full Google/OAuth and transport gate.
 3. Qualify the actual VPS, approved live spreadsheet mapping, credential permissions, full-preview trusted-owner approval and crash/deny behavior, Google write preservation/conflict/recovery, native reminder persistence, owner-only WhatsApp delivery evidence, model entitlement and restore procedure.
-4. Design and qualify the remaining explicit native-memory lifecycle without silently introducing a second personal knowledge database.
+4. Inspect native host memory permissions/privacy and preserve source-of-truth isolation during deployment; no custom plugin memory lifecycle is required.
 
 Use the [local graph](../.scratch/secretary-mvp/index.md) and per-ticket evidence for exact scope. Implemented-but-unaccepted tickets remain open. Deployment instructions and preflight deliberately keep production writes off; deployment has not been authorized or attempted.
 
@@ -76,7 +78,7 @@ T013 fixes the local approval presentation gap: the dialog description contains 
 
 Environment probes again found no OpenClaw CLI, Node 20.20.2 active, no installed Node 24, registry DNS failures, loopback EPERM, uncached jsonwebtoken and plugin build exit 127. T007 still requires trusted owner routing, complete untruncated display and callback-error blocking on the real host. Capability defaults remain off.
 
-T008 remains unresolved. Current [memory SDK documentation](https://docs.openclaw.ai/plugins/sdk-overview/memory-and-context) describes shared search/retrieval/health and provider-owned mutation tools; it does not establish a generic companion-plugin save/update/archive/history interface. It documents disabling pre-compaction flush through configuration, which alone does not prove all automatic saving is disabled. This is current documentation, not pinned 2026.10.7 runtime evidence. No memory store or unverified mutation adapter was added.
+Before the owner delegated memory to OpenClaw, T008 was unresolved. Current [memory SDK documentation](https://docs.openclaw.ai/plugins/sdk-overview/memory-and-context) describes shared search/retrieval/health and provider-owned mutation tools; it does not establish a generic companion-plugin save/update/archive/history interface. It documents disabling pre-compaction flush through configuration, which alone does not prove all automatic saving is disabled. This is current documentation, not pinned 2026.10.7 runtime evidence. No memory store or unverified mutation adapter was added.
 
 
 ## Pinned Gateway and memory policy continuation
@@ -86,3 +88,12 @@ T014 fixes a pinned host-interface mismatch found while assessing memory: Gatewa
 T008 now has a [pinned-source assessment](native-memory-assessment.md) and a dedicated ticket. The dedicated-runtime template disables documented automatic memory paths and restricts ordinary tools to secretary operations, native search/get and session status. Static JSON/allowlist checks pass; real schema validation, effective policies, enabled provider/hooks/jobs and explicit-only behavior remain unverified. Native read methods exist in pinned documentation, but exact RPC schemas still need inspection; no guessed adapter or new provider was introduced. Save/update/archive/history remain unavailable.
 
 Fresh environment probes still find the same CLI/Node/DNS/socket blockers. Live capability defaults and production resources were unchanged, and the workbook checksum matches.
+
+
+## Native memory ownership and verification gates
+
+T015 applies the owner's scope decision: personal memory is managed by OpenClaw, and the secretary plugin owns only 17 spreadsheet/report/reminder tools. The former memory_capabilities placeholder was removed; calls to memory operations through the bridge now return UNKNOWN_TOOL. T008 is delegated outside plugin implementation scope, with no claim that native history/lifecycle has been accepted. The specification and personal-secretary guidance reflect that ownership. Native host privacy/permissions remain deployment concerns; no broad write access or automatic saving was enabled.
+
+Current local evidence: 17 bridge, six approval, three packaging and three acceptance-configuration checks pass (29 total); three socket HTTP checks remain skipped by default. Metadata checks, SDK-external entry bundling, template invariants and shell syntax pass. Ruby's YAML parser accepted the workflow and verified the HTTP-test flag and read-only repository permissions. The qualified verify script now invokes actual host validation, enables HTTP bridge checks and includes acceptance-configuration checks; the source CI step also enables HTTP checks. Hosted execution is unverified.
+
+A direct opt-in HTTP regression attempt failed before request handling at Bun.serve with EADDRINUSE on port 0; an independent Node listener again failed EPERM. Direct host validation passed metadata checks, then exited 127 because OpenClaw is absent; Node remains 20.20.2. These are recorded blocked/failed checks, not HTTP or SDK success. Full Rust/provider acceptance was not rerun for this TypeScript/scope/verification slice. Workbook SHA-256 remains unchanged and no live resource was modified.

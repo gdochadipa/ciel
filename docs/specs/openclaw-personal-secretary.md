@@ -1,11 +1,13 @@
 # OpenClaw Personal AI Secretary — Architecture & Delivery Specification
 
-Version: 1.2 implementation baseline  
-Date: 2026-10-25  
+Version: 1.3 native-memory scope amendment\
+Date: 2026-10-26\
 Status: Local implementation authorized; live activation qualification pending  
 Delivery: Local specification, as requested; no tracker issue published  
 Target: Sumopod VPS, Ubuntu 24.04 LTS  
 Development: macOS Apple Silicon
+
+Scope amendment (owner decision, 2026-10-26): personal-memory management belongs to OpenClaw. The secretary plugin implements spreadsheet/report operations and native reminder coordination. It owns no personal-memory tools, lifecycle adapter or knowledge store. Earlier personal-memory stories describe desired host behavior, not custom plugin acceptance requirements. Native host privacy/permissions remain part of deployment qualification.
 
 ## Problem Statement
 
@@ -231,11 +233,11 @@ For “Catat DP catering 3 juta, lalu ingatkan aku bayar sisanya bulan depan,”
 
 ### 9. Memory, domain Skills, reporting, and models
 
-Use the existing supported agent-memory mechanism where it meets explicit save/update/archive/history requirements. Do not introduce vector storage or a second personal knowledge database by default. Verify permissions, provenance, lifecycle support, and opt-out of unintended saving during discovery; an unavailable history capability becomes an explicit gap rather than an invented feature.
+OpenClaw owns personal-memory storage, retrieval, saving, correction, archive and any history that its selected facility supports. The secretary plugin registers no memory operations and stores no preferences. Native host configuration and permissions determine availability; report unsupported native capabilities honestly. Custom memory lifecycle/history implementation is outside this plugin's scope and no longer a plugin release blocker. Preserve explicit intent and the owner's low-CPU/low-token preference in native host setup without introducing a second knowledge store.
 
 Structured external memory remains in its approved authoritative system. Retrieved spreadsheet or web text is untrusted data and cannot authorize tools, save secrets, change policy, or supply an approval. Persist a sensitive personal fact only following an explicit save request with clear scope.
 
-Personal Secretary coordinates general tasks and memory. Wedding Planner uses the mapped existing workbook for vendors, tasks, budgets, payments, and priorities. Report Assistant produces source-linked reports. Research Assistant is a later extension with approved source access and citations. Engineering Coach is a later teaching Skill. Enforce permissions through runtime and service policy; Skill text alone is not a security boundary. Where one shared agent cannot enforce domain-specific capability isolation, withhold the sensitive capability or review a stronger isolation design.
+Personal Secretary coordinates general tasks and routes memory requests to OpenClaw. Wedding Planner uses the mapped existing workbook for vendors, tasks, budgets, payments, and priorities. Report Assistant produces source-linked reports. Research Assistant is a later extension with approved source access and citations. Engineering Coach is a later teaching Skill. Enforce permissions through runtime and service policy; Skill text alone is not a security boundary. Where one shared agent cannot enforce domain-specific capability isolation, withhold the sensitive capability or review a stronger isolation design.
 
 Compute financial values in Rust using exact decimal or integer minor-unit arithmetic and explicit currency/rounding rules. Derive outstanding balances only when the source semantics support that calculation. Do not sum mixed currencies without an approved conversion policy. Reports state retrieval time, source coverage, relevant missing fields, assumptions, and independently labeled recommendations. Reading multiple tabs is not automatically a consistent transactional snapshot.
 
@@ -278,7 +280,7 @@ Each phase requires observable acceptance criteria, relevant automated tests, fa
 | 1 — Repository & Foundation | Establish private repository, Rust/TypeScript packages, OpenAPI, configuration examples, CI, and operator documentation after review. | Builds and checks pass without production credentials; secrets stay excluded; a documented clean setup works. No production deployment implied. |
 | 2 — Read-only Sheets | Authentication, registry, mappings, describe/read/search tools and source references. | Real supported fixture structures are readable; unknown mappings fail safely; provider write requests are impossible in this mode; access denial and pagination are covered. Disable plugin to roll back. |
 | 3 — Controlled Writes | Preview/approval, append/update, operation journal, idempotency, conflict handling, verification, reconciliation. | Approval required; expired/tampered requests rejected; retries do not replay known operations; uncertain writes reconcile; formulas/formatting preserved on a disposable sheet. Disable writes and use reviewed recovery operations if needed. |
-| 4 — Secretary & Memory | Personal Secretary Skill, explicit memory lifecycle, intent/tool guidance, escalation policy. | Source facts override stale conversation; sensitive saves require explicit intent; memory lifecycle and permissions verified. Disable memory mutation independently if needed. |
+| 4 — Secretary & native memory ownership | Personal Secretary Skill, planning/reminder guidance, delegation of personal memory to OpenClaw. | Plugin registers no personal-memory tools or preference store; source facts override stale memory. Qualify native host permissions/privacy separately; no custom lifecycle adapter is required for plugin acceptance. |
 | 5 — Native Reminders | Create/list/reschedule/pause/resume/cancel, timezone handling, metadata synchronization, restart behavior. | Jobs persist; ambiguous dates are clarified; cancellation is respected; execution is not delivery. Test without WhatsApp; pause test jobs for rollback. |
 | 6 — WhatsApp | Dedicated account, owner admission, groups disabled, conversational writes and reminders, outbound evidence. | Unauthorized senders and destinations are rejected; approved round trips work; failure/unknown delivery stays explicit. Disable the channel and pause outbound jobs if needed. |
 | 7 — Wedding Planner | Existing-workbook task/vendor/payment workflows and weekly progress reporting. | Source-linked answers and deterministic totals match inspected data; the deposit-plus-reminder example reports partial outcomes truthfully. Disable the Skill without changing workbook data. |
@@ -311,6 +313,7 @@ The owner confirmed the primary seam: test observable tool-to-core behavior at t
 - Replacing Google Sheets with a custom record database or importing the XLSX as a new planning system automatically.
 - Automatic cleanup, renaming, restructuring, deletion, formula repair, or creation of proposed management tabs.
 - A custom scheduler, WhatsApp gateway, dashboard, Kubernetes, Redis, message broker, or distributed deployment.
+- Plugin-owned personal-memory tools, lifecycle/history adapter or preference database; these responsibilities belong to OpenClaw.
 - Unrestricted shell, elevated tools, arbitrary filesystem/browser access, arbitrary Google API requests, or broad Drive discovery by default.
 - Payments, purchases, vendor outreach, group messaging, or arbitrary outbound recipients.
 - A separate calendar-provider integration; schedules in this MVP are reminders and source-linked planning records.

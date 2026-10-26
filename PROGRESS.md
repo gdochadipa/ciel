@@ -4,7 +4,7 @@ Updated: 2026-10-26 · Timezone: Asia/Makassar
 
 ## Current position
 
-Local implementation exists, but the MVP is **not fully accepted or ready for production**. The latest increment is T014 — pinned Gateway availability fix and native-memory safety defaults. Its implementation commit can be found with `git log -- .scratch/secretary-mvp/T014.md` in the integration repository. T008 now has a pinned-source assessment; memory save/update/archive/history are still unavailable. Validation below includes this continuation session.
+Local implementation exists, but the MVP is **not fully accepted or ready for production**. The latest increment is T015 — personal-memory ownership delegated to OpenClaw, placeholder removal and qualified verification gates. Its implementation commit can be found with `git log -- .scratch/secretary-mvp/T015.md` in the integration repository. The plugin owns 17 spreadsheet/report/reminder tools; T008 is outside plugin implementation scope. Native memory lifecycle support is a host responsibility, not a missing custom plugin feature. Validation below includes this continuation session.
 
 Latest storage follow-up: the owner prioritized low CPU/token use. The local template now requests native FTS-only retrieval (`provider: "none"`, no embedding fallback) and three primary-memory results by default. Markdown remains native readable source notes; OpenClaw owns its SQLite index/provenance, and Core keeps a separate protected operation journal. JSON is configuration/interchange. Static template checks pass; these defaults are not measured runtime savings, a hard token cap or memory lifecycle acceptance. See the memory diagram in docs/architecture.md.
 
@@ -23,11 +23,11 @@ The current focus is the **OpenClaw secretary plugin**. Recent work fixed the re
 | [Security](docs/security.md) and [deployment](docs/deployment.md) | Capability qualification and operating procedures. |
 | [API contract](contracts/openapi.yaml) | Public Core requests and response envelopes. |
 
-Latest follow-ups: [T009 review fixes](.scratch/secretary-mvp/T009.md), [T010 Rust architecture](.scratch/secretary-mvp/T010.md), [T011 reminder reliability](.scratch/secretary-mvp/T011.md), [T012 discovery and packaging](.scratch/secretary-mvp/T012.md), [T013 approval presentation](.scratch/secretary-mvp/T013.md), [T014 pinned Gateway and memory safety](.scratch/secretary-mvp/T014.md).
+Latest follow-ups: [T009 review fixes](.scratch/secretary-mvp/T009.md), [T010 Rust architecture](.scratch/secretary-mvp/T010.md), [T011 reminder reliability](.scratch/secretary-mvp/T011.md), [T012 discovery and packaging](.scratch/secretary-mvp/T012.md), [T013 approval presentation](.scratch/secretary-mvp/T013.md), [T014 pinned Gateway and memory safety](.scratch/secretary-mvp/T014.md), [T015 scope and verification](.scratch/secretary-mvp/T015.md).
 
 ## Last verified checks
 
-- **28 TypeScript checks passed:** 16 bridge, 6 fetch-boundary approval, 3 packaging, 3 acceptance-configuration checks. The new approval checks use synthetic Core responses and do not run Core or the host. Three socket HTTP tests remain skipped.
+- **29 TypeScript checks passed:** 17 bridge, 6 fetch-boundary approval, 3 packaging, 3 acceptance-configuration checks. The new approval checks use synthetic Core responses and do not run Core or the host. Three socket HTTP tests remain skipped by default; a direct opt-in attempt still fails before listening. Qualified verify/source CI now enable them, and full verify also invokes host validation.
 - **16 cached-source Rust checks passed in the preceding session**, including real in-process Axum dispatch; Clippy passed for that cached-source graph. Rust source was unchanged and was not retested in this TypeScript/config slice.
 - Metadata checks, SDK-external bundles and offline npm package file-selection checks passed.
 - Full Rust/Google/OAuth build, actual SDK validation, socket acceptance, live delivery and hosted CI have **not** passed here. See the evidence table in the implementation status for exact limits.
@@ -38,7 +38,7 @@ Latest follow-ups: [T009 review fixes](.scratch/secretary-mvp/T009.md), [T010 Ru
 2. When dependencies can actually resolve, generate and validate real Bun/Cargo locks. Compile against the real SDK and production Rust dependencies. Do not fabricate SDK declarations, lockfiles, CLI behavior or test success.
 3. Resolve real host build/validation errors, then run the retained HTTP tests and Google-only Postman read/write simulations through the real bridge/Core. Existing simulations and context notes are under `postman/`.
 4. T013 now includes the full captured preview in the dialog description and rejects action mismatch/Core refusal. Qualify trusted owner approval routing, complete rendering without truncation, callback-error blocking, denial/expiry/replay behavior, native scheduler persistence and owner-only WhatsApp delivery evidence on disposable resources. T007 remains the production gate; do not enable capabilities or deploy merely because metadata/bundling passes.
-5. Continue from [T008](.scratch/secretary-mvp/T008.md) and the [pinned memory assessment](docs/native-memory-assessment.md): verify exact native read RPC schemas and a provider supporting the required lifecycle. The dedicated-runtime template now disables documented automatic memory paths and broad write/shell access, but effective host policy is unqualified. Do not silently select a different provider, introduce another personal-memory database or enable automatic saving.
+5. Personal memory is delegated to OpenClaw. Do not resume custom memory adapter work from the historical T008 assessment. Preserve the low-resource native defaults and verify native host permissions/privacy separately; the plugin owns no preference store and registers no memory tools. No host writes or automatic saving were enabled by this scope change.
 
 Native offset pagination is not a transactional snapshot, and declaration convergence still needs actual host checks. Those limitations and other remaining gaps are recorded in T011/T012 and the implementation status.
 

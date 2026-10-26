@@ -17,6 +17,8 @@ jobs:
         with:
           node-version: '24.16.0'
       - name: Check metadata, adapters and package file selection
+        env:
+          SECRETARY_HTTP_TESTS: '1'
         run: |
           bun run check:plugin
           bun run test

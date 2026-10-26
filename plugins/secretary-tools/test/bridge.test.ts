@@ -1,6 +1,13 @@
 import { test, expect } from 'bun:test';
-import { createSecretary } from '../src/bridge';
+import { createSecretary,secretaryToolNames } from '../src/bridge';
 const owner = { requesterSenderId: '+628123', senderIsOwner: true };
+test('personal memory belongs to OpenClaw and is absent from the secretary tool surface',async()=>{
+ const bridge=createSecretary({coreToken:'synthetic',owner:'+628123'});
+ expect(secretaryToolNames.some(name=>name.startsWith('memory_'))).toBe(false);
+ for(const name of ['memory_capabilities','memory_search','memory_get','memory_save','memory_update','memory_archive','memory_history']) {
+  await expect(bridge.execute(name,{},owner)).rejects.toThrow('UNKNOWN_TOOL');
+ }
+});
 function setup(handler: (request: Request) => Response | Promise<Response>) {
  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: handler });
  return { server, options: { coreUrl: server.url.origin, coreToken: 'private-token', owner: '+628123' } };
@@ -20,7 +27,7 @@ test('unknown owner, injected credentials, unqualified writes and memory fail cl
  await expect(bridge.execute('sheets_list',{},{})).rejects.toThrow('OWNER_REQUIRED');
  await expect(bridge.execute('sheets_list',{coreToken:'attack'},owner)).rejects.toThrow('INVALID_INPUT');
  await expect(bridge.execute('sheets_append',{operation_id:'op1'},owner)).rejects.toThrow('WRITES_DISABLED');
- await expect(bridge.execute('memory_save',{text:'secret'},owner)).rejects.toThrow('MEMORY_UNAVAILABLE');
+ await expect(bridge.execute('memory_save',{text:'secret'},owner)).rejects.toThrow('UNKNOWN_TOOL');
  expect(() => createSecretary({coreUrl:'http://example.com',coreToken:'secret',owner:'+628123'})).toThrow('INVALID_CORE_DESTINATION');
 });
 test('owner creates and reconciles a declared native reminder and sees separate run evidence', async () => {
@@ -98,7 +105,7 @@ test('oversized requests and previews without Core evidence never cross the boun
 
 test('owner-only configuration defaults to the Core listener without requiring a URL', async () => {
  const bridge=createSecretary({coreToken:'synthetic-secret',owner:'+628123'});
- expect(await bridge.execute('memory_capabilities',{},owner)).toMatchObject({available:false});
+ await expect(bridge.execute('sheets_append',{operation_id:'disabled'},owner)).rejects.toThrow('WRITES_DISABLED');
  const manifest=await Bun.file(new URL('../openclaw.plugin.json',import.meta.url)).json();
  expect(manifest.configSchema.properties.coreUrl.default).toBe('http://127.0.0.1:8787');
 });

@@ -3,7 +3,7 @@ import {coreTools} from '../src/bridge';
 
 test('manifest declares ownership of every secretary tool before runtime loading', async()=>{
  const manifest=await Bun.file(new URL('../openclaw.plugin.json',import.meta.url)).json();
- const expected=[...coreTools,...['create','list','get','reschedule','pause','resume','cancel','history'].map(action=>`reminders_${action}`),'memory_capabilities'];
+ const expected=[...coreTools,...['create','list','get','reschedule','pause','resume','cancel','history'].map(action=>`reminders_${action}`)];
  expect(manifest.contracts?.tools?.toSorted()).toEqual(expected.toSorted());
  expect(manifest.activation?.onStartup).toBe(true);
  expect(manifest.configSchema.properties.approvalTransportQualified.default).toBe(false);

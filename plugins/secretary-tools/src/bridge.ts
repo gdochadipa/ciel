@@ -4,7 +4,7 @@ type ApprovalDecision = 'allow-once' | 'allow-always' | 'deny' | 'timeout' | 'ca
 export type Options = { coreUrl?: string; coreToken: string; owner: string; timeoutMs?: number; maxResponseBytes?: number; approvalToken?: string; approvalTransportQualified?: boolean; gateway?: Gateway; schedulerQualified?: boolean };
 export const coreTools = ['sheets_list','sheets_describe','sheets_read','sheets_search','sheets_preview_change','sheets_append','sheets_update','sheets_get_history','reports_wedding'] as const;
 export const reminderTools = ['create','list','get','reschedule','pause','resume','cancel','history'].map(action=>`reminders_${action}`);
-export const secretaryToolNames = [...coreTools,...reminderTools,'memory_capabilities'];
+export const secretaryToolNames = [...coreTools,...reminderTools];
 const fields: Record<string, [string[], string[]]> = {
  sheets_list:[[],[]], sheets_describe:[['spreadsheet'],[]], sheets_read:[['spreadsheet','view'],['limit','cursor']], sheets_search:[['spreadsheet','view','query'],['limit','cursor']],
  sheets_preview_change:[['operation_id','spreadsheet','view','action','fields'],['record_id']], sheets_append:[['operation_id'],[]], sheets_update:[['operation_id'],[]], sheets_get_history:[[],['operation_id','limit','cursor']], reports_wedding:[['spreadsheet'],[]],
@@ -40,8 +40,6 @@ export function createSecretary(options: Options) {
  }
  async function execute(name: string, value: unknown, identity: Identity) {
   authorize(identity);
-  if(name==='memory_capabilities') {shape(value,[]);return {available:false,reason:'Native memory CRUD, history and automatic-save opt-out require qualification'};}
-  if (name.startsWith('memory_')) fail('MEMORY_UNAVAILABLE');
   if (name.startsWith('reminders_')) return reminder(name, value, identity);
   if (!fields[name]) fail('UNKNOWN_TOOL');
   const input = shape(value,...fields[name]);

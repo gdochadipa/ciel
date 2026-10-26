@@ -20,7 +20,7 @@ export default definePluginEntry({
   const bridge=createSecretary(options);
   const names=secretaryToolNames;
   api.registerTool((context: OpenClawPluginToolContext): AnyAgentTool[] => names.map(name=>({
-   name,label:name,description:reminderDescriptions[name]??(name==='memory_capabilities'?'Native memory mutations are unavailable.':'Owner-only secretary operation; input cannot set actor, credentials, host or outbound recipient.'),
+   name,label:name,description:reminderDescriptions[name]??'Owner-only secretary operation; input cannot set actor, credentials, host or outbound recipient.',
    parameters: schemas[name]??{type:'object',additionalProperties:false,properties:{}},
    async execute(_toolCallId,params) {
     try {

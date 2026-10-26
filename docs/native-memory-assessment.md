@@ -2,6 +2,8 @@
 
 Observed: 2026-10-26. Target: OpenClaw **v2026.10.7**. Scope: T008 explicit personal-memory lifecycle. This is source/documentation evidence, not installed SDK or runtime acceptance. No native memory, live configuration, provider or database was changed.
 
+Scope update: the owner subsequently delegated personal memory entirely to OpenClaw. This assessment is background for native host configuration, not a requirement to implement a secretary memory adapter. The plugin registers no memory tools or preference store.
+
 ## Verified native facilities
 
 The pinned Memory Core entry registers `memory_search`, `memory_get` and `intent`; its manifest declares those same tools. The entry describes a file-backed memory integration and supplies its existing search manager and memory flush resolver. It does not register secretary-style save/update/archive/history tools. This finding describes the inspected provider, rather than proving all possible providers lack those capabilities. [Pinned Memory Core entry](https://github.com/openclaw/openclaw/blob/v2026.10.7/extensions/memory-core/index.ts), [pinned manifest](https://github.com/openclaw/openclaw/blob/v2026.10.7/extensions/memory-core/openclaw.plugin.json).
@@ -33,7 +35,7 @@ Pinned user-model guidance supports active/superseded directives, but says perso
 
 The current Knowledge plugin documentation may be useful for later provider evaluation, but its pinned manifest/guide could not be retrieved here. Selecting a different memory provider would be an explicit architecture/configuration choice, not an assumed existing capability. No recommendation here authorizes enabling it. [Current Knowledge documentation](https://docs.openclaw.ai/plugins/knowledge).
 
-## Recommended implementation boundary
+## Earlier implementation recommendation (superseded by delegation)
 
 The supported direction is a **partial native read adapter** through Gateway memory search/get/status after verifying exact pinned payloads and admitted-run authority. Bind the configured agent and owner outside model arguments; preserve native references and provenance, bound returned data, recheck invocation authority after asynchronous reads, and never convert provider denial or unavailability to an empty successful search. Keep it independently disabled until actual host checks pass. Do not register native Memory Core tool names as secretary-owned tools.
 

@@ -49,8 +49,7 @@
       "reminders_pause",
       "reminders_resume",
       "reminders_cancel",
-      "reminders_history",
-      "memory_capabilities"
+      "reminders_history"
     ]
   },
   "activation": {
