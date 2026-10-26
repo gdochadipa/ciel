@@ -13,11 +13,19 @@
   },
   "scripts": {
     "test": "bun test test",
-    "build": "bun build ./src/index.ts --target=node --external \"openclaw/*\" --outdir ./dist && openclaw plugins build --entry ./dist/index.js",
-    "validate": "openclaw plugins validate",
-    "build:bridge": "bun build ./src/bridge.ts --target=node --outdir ./dist/bridge"
+    "build": "bun run bundle && openclaw plugins build --root . --entry ./dist/index.js",
+    "validate": "bun run check:package && openclaw plugins validate --root . --entry ./dist/index.js --json",
+    "build:bridge": "bun build ./src/bridge.ts --target=node --outdir ./dist/bridge",
+    "check:package": "bun ./scripts/check-package.ts",
+    "bundle": "bun run check:package && bun build ./src/index.ts --target=node --external \"openclaw/*\" --outdir ./dist",
+    "pack": "bun run build && bun run validate && openclaw plugins pack --root . --out ./dist/secretary-tools.tgz --json"
   },
   "peerDependencies": {
     "openclaw": "2026.10.7"
-  }
+  },
+  "files": [
+    "dist/index.js",
+    "openclaw.plugin.json",
+    "README.md"
+  ]
 }

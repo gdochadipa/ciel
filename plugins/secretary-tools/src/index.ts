@@ -1,7 +1,6 @@
 // Host imports deliberately isolated: bridge tests require no substituted SDK.
 import { definePluginEntry, type OpenClawPluginApi, type OpenClawPluginToolContext, type AnyAgentTool } from 'openclaw/plugin-sdk/plugin-entry';
-import {createSecretary, coreTools, type Options} from './bridge.js';
-const reminderTools=['create','list','get','reschedule','pause','resume','cancel','history'].map(action=>`reminders_${action}`);
+import {createSecretary, reminderTools, secretaryToolNames, type Options} from './bridge.js';
 const reminderDescriptions:Record<string,string>={
  reminders_create:'Create a reminder using a stable reminder_id and an exact timestamp with offset or a five-field cron schedule. Clarify ambiguous dates first. Reuse the ID to reconcile a retry; a changed request conflicts. Execution does not prove message delivery.',
  reminders_list:'List owner-scoped native reminders, including disabled and retained completed jobs. A scheduler discovery error means the list is incomplete; do not infer that a reminder is missing.',
@@ -19,7 +18,7 @@ export default definePluginEntry({
   const config=api.pluginConfig as {coreUrl?:string;owner?:string;approvalTransportQualified?:boolean;schedulerQualified?:boolean};
   const options:Options={coreUrl:config.coreUrl,owner:config.owner??'',coreToken:process.env.SECRETARY_CORE_TOKEN??'',approvalToken:process.env.SECRETARY_APPROVAL_TOKEN,approvalTransportQualified:config.approvalTransportQualified===true,schedulerQualified:config.schedulerQualified===true,gateway:api.runtime.gateway};
   const bridge=createSecretary(options);
-  const names=[...coreTools,...reminderTools,'memory_capabilities'];
+  const names=secretaryToolNames;
   api.registerTool((context: OpenClawPluginToolContext): AnyAgentTool[] => names.map(name=>({
    name,label:name,description:reminderDescriptions[name]??(name==='memory_capabilities'?'Native memory mutations are unavailable.':'Owner-only secretary operation; input cannot set actor, credentials, host or outbound recipient.'),
    parameters: schemas[name]??{type:'object',additionalProperties:false,properties:{}},

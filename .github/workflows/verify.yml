@@ -5,6 +5,23 @@ on:
 permissions:
   contents: read
 jobs:
+  plugin-source:
+    name: Plugin source checks (no SDK activation)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.2.21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.16.0'
+      - name: Check metadata, adapters and package file selection
+        run: |
+          bun run check:plugin
+          bun run test
+          bun test scripts/acceptance.test.ts
+          bun run --cwd plugins/secretary-tools bundle
   verify:
     runs-on: ubuntu-24.04
     steps:

@@ -1,6 +1,59 @@
 {
- "id":"secretary-tools",
- "name":"Personal Secretary tools",
- "description":"Owner-only bounded Core bridge and native reminders",
- "configSchema":{"type":"object","additionalProperties":false,"required":["owner"],"properties":{"coreUrl":{"type":"string","default":"http://127.0.0.1:8787"},"owner":{"type":"string"},"approvalTransportQualified":{"type":"boolean","default":false},"schedulerQualified":{"type":"boolean","default":false}}}
+  "id": "secretary-tools",
+  "name": "Personal Secretary tools",
+  "description": "Owner-only bounded Core bridge and native reminders",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "owner"
+    ],
+    "properties": {
+      "coreUrl": {
+        "type": "string",
+        "default": "http://127.0.0.1:8787"
+      },
+      "owner": {
+        "type": "string",
+        "minLength": 1
+      },
+      "approvalTransportQualified": {
+        "type": "boolean",
+        "default": false
+      },
+      "schedulerQualified": {
+        "type": "boolean",
+        "default": false
+      }
+    }
+  },
+  "version": "0.1.0",
+  "categories": [
+    "other"
+  ],
+  "contracts": {
+    "tools": [
+      "sheets_list",
+      "sheets_describe",
+      "sheets_read",
+      "sheets_search",
+      "sheets_preview_change",
+      "sheets_append",
+      "sheets_update",
+      "sheets_get_history",
+      "reports_wedding",
+      "reminders_create",
+      "reminders_list",
+      "reminders_get",
+      "reminders_reschedule",
+      "reminders_pause",
+      "reminders_resume",
+      "reminders_cancel",
+      "reminders_history",
+      "memory_capabilities"
+    ]
+  },
+  "activation": {
+    "onStartup": true
+  }
 }

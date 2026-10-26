@@ -2,6 +2,8 @@ export type Identity = { requesterSenderId?: string; senderIsOwner?: boolean; as
 export type Gateway = { isAvailable(): boolean; request<T = unknown>(method: string, params?: unknown): Promise<T> };
 export type Options = { coreUrl?: string; coreToken: string; owner: string; timeoutMs?: number; maxResponseBytes?: number; approvalToken?: string; approvalTransportQualified?: boolean; gateway?: Gateway; schedulerQualified?: boolean };
 export const coreTools = ['sheets_list','sheets_describe','sheets_read','sheets_search','sheets_preview_change','sheets_append','sheets_update','sheets_get_history','reports_wedding'] as const;
+export const reminderTools = ['create','list','get','reschedule','pause','resume','cancel','history'].map(action=>`reminders_${action}`);
+export const secretaryToolNames = [...coreTools,...reminderTools,'memory_capabilities'];
 const fields: Record<string, [string[], string[]]> = {
  sheets_list:[[],[]], sheets_describe:[['spreadsheet'],[]], sheets_read:[['spreadsheet','view'],['limit','cursor']], sheets_search:[['spreadsheet','view','query'],['limit','cursor']],
  sheets_preview_change:[['operation_id','spreadsheet','view','action','fields'],['record_id']], sheets_append:[['operation_id'],[]], sheets_update:[['operation_id'],[]], sheets_get_history:[[],['operation_id','limit','cursor']], reports_wedding:[['spreadsheet'],[]],

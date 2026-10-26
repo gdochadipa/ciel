@@ -20,6 +20,7 @@ Initial implementation agents ran at medium reasoning effort. The owner subseque
 | Actual-source Rust domain/application/presentation/journal harness | 16 passed. Covers mappings, identity rules, approvals, expiry/rejection, restart/exclusive journal ownership, typed source-port commands and real in-process Axum authentication/dispatch. Excludes production Google/OAuth and socket transport. |
 | Public bridge tests | Fourteen passed, three real HTTP tests skipped by default because this sandbox cannot bind loopback. Native Gateway fixtures establish adapter behavior only. |
 | Acceptance configuration checks | Three additional checks pass. These are not Core/provider acceptance evidence. |
+| Plugin metadata and package selection | Three checks pass: 18 tool ownership/activation declarations, rejection of metadata/file-allowlist drift, and an actual offline npm file-selection test. Actual local-package dry-run selects exactly four files. No SDK activation or archive publication. |
 | Standalone bridge and acceptance runner bundles | Pass syntax/bundling checks; do not prove installed SDK type compatibility or activation. |
 | Rust formatting; JSON contract/config/reference checks; script syntax | Pass. |
 | Direct preflight/SQLite backup smokes | Pass on safe temporary fixtures; no production service was started. |
@@ -60,3 +61,10 @@ T010 applies the owner's DDD/hexagonal direction to Rust: domain rules and a typ
 ## Continued plugin work
 
 T011 strengthens native reminders: bounded paged discovery across disabled/retained jobs, duplicate/invalid/overflow rejection, required native revisions on updates, trusted invocation checks immediately before mutation, and refusal to reactivate jobs with changed native payloads/delivery routes. Reminder tool descriptions now explain retry, cancellation and delivery semantics. Fourteen public bridge checks and three acceptance-configuration checks pass; three socket HTTP tests remain skipped. Native Gateway fixtures prove local adapter behavior only. Pagination snapshots, creation convergence, installed SDK activation and live channel behavior remain qualification gaps; no live jobs were touched.
+
+
+## Plugin discovery and packaging checks
+
+T012 adds missing static ownership declarations for all 18 tools and explicit startup activation metadata while keeping capabilities off. Local metadata checks now run before bundling/build/validation. Distribution files are limited to the built entry, manifest, README and package metadata. An independent source CI job is defined; it has not run on GitHub. Full packaging remains gated on the real host build and validation commands.
+
+Current local TypeScript evidence: 14 bridge checks, three packaging checks and three acceptance-configuration checks pass (20 total); three socket HTTP checks remain skipped. Metadata checks and SDK-external entry bundling pass. Both a fixture with synthetic private files and the actual local package pass offline npm dry-run file-selection checks. Full build still exits 127 at the missing OpenClaw CLI. A fresh npm registry probe still fails DNS resolution; no dependencies/locks were fabricated, no SDK substitute was added, and no live approval capability is claimed.

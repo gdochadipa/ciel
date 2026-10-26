@@ -26,3 +26,21 @@ Scheduler discovery requests at most 200 jobs per page, ten pages total and 2 Mi
 Pause/resume/reschedule/cancel require a nonempty native `configRevision` and forward it as `expectedConfigRevision`. Missing revisions leave the job readable but disable edits. No retry occurs after a rejected or uncertain update; read current native state before deciding on a new request. Resume/reschedule refuse jobs whose native payload/session/delivery no longer match the secretary's main-session system-event profile. Pause/cancel can still stop such a job. Trusted invocation guards run during discovery and immediately before mutations so an expired tool context cannot continue after an awaited lookup.
 
 The pinned [v2026.10.7 protocol schema](https://github.com/openclaw/openclaw/blob/v2026.10.7/packages/gateway-protocol/src/schema/cron.ts) verifies request pagination fields, job revision fields and the update revision parameter. External Gateway fixtures test adapter behavior through the public tool interface; they do not establish installed SDK compatibility, native persistence or actual WhatsApp delivery. Google-only Postman simulations are unchanged by this native RPC slice. No host/runtime is mocked and reported as activated.
+
+
+## Discovery and packaging
+
+The manifest declares all 18 runtime tools in `contracts.tools`, has explicit startup activation when the plugin is enabled, and leaves both capability flags off. Declaration is ownership metadata; it grants no tool permission, owner identity or write approval. Runtime registration and metadata checks share the exported tool catalog, while the manifest remains a standalone JSON artifact the host can read before loading code. The [pinned capability contract](https://github.com/openclaw/openclaw/blob/v2026.10.7/docs/plugins/manifest/capabilities.md) requires runtime registrations to match the manifest's tool names.
+
+From the repository root, `bun run check:plugin` checks this repository's metadata invariants without importing the host SDK, reading credentials or connecting to a runtime. It checks tool ownership, identity/version consistency, the built runtime entry, owner config, disabled defaults, pinned host requirement and the exact distribution file allowlist. It is not a replacement for host validation.
+
+From this package directory:
+
+- `bun run bundle`: metadata checks plus SDK-external JavaScript bundling; no SDK compatibility claim.
+- `bun run build`: bundle, then the actual host's documented plugin build command.
+- `bun run validate`: metadata checks and host validation of the explicit built entry.
+- `bun run pack`: full build and host validation before the documented host pack command. It cannot proceed when the host command is missing or fails.
+
+The [pinned CLI reference](https://github.com/openclaw/openclaw/blob/v2026.10.7/docs/cli/plugins.md) documents build/validate/pack and explicit root/entry options. No install, enable, reload or publish action is part of these scripts. The `files` allowlist selects only `dist/index.js`, this README and the manifest; npm also includes package metadata. Development scripts and source remain checkout-only.
+
+An offline npm dry-run checks both synthetic private-file exclusion and the actual local package selection. It neither executes the bundled entry nor produces an activated plugin. The independent `plugin-source` CI job checks these local guarantees without waiting for Rust locks/SDK installation; the existing full verification/release job still requires qualified dependency locks and the actual host. Hosted CI has not been run here.

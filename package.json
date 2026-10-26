@@ -2,11 +2,16 @@
   "name": "openclaw-secretary",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["plugins/secretary-tools"],
-  "engines": {"node": ">=24.16.0"},
+  "workspaces": [
+    "plugins/secretary-tools"
+  ],
+  "engines": {
+    "node": ">=24.16.0"
+  },
   "scripts": {
     "build": "bun run --cwd plugins/secretary-tools build",
     "test": "bun run --cwd plugins/secretary-tools test",
-    "validate": "bun run --cwd plugins/secretary-tools validate"
+    "validate": "bun run --cwd plugins/secretary-tools validate",
+    "check:plugin": "bun run --cwd plugins/secretary-tools check:package"
   }
 }
