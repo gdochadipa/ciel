@@ -3,6 +3,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 scenario="${1:-read}"
 case "$scenario" in read|error|slow|drift|retry|writes) ;; *) echo 'Use read, error, slow, drift, retry or writes' >&2; exit 2;; esac
+# The write scenario also exercises the actual SDK's registered distribution entry.
+if [ "$scenario" = writes ]; then bun run build; fi
 log_dir="$(mktemp -d "${SECRETARY_ACCEPTANCE_LOG_ROOT:-${TMPDIR:-/tmp}}/secretary-acceptance.XXXXXX")"
 sim_pid=''; core_pid=''
 cleanup() {

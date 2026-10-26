@@ -1,6 +1,6 @@
 # Implementation status
 
-Updated 2026-10-26. The local plugin/Core verification milestone is complete; T018 adds tested operator gates and Core journal recovery. **Live activation remains unqualified (T007)**; this is not a production acceptance claim.
+Updated 2026-10-26. The local plugin/Core verification milestone is complete; T018 adds tested operator gates and Core journal recovery; T019 adds built-entry factory/hook integration. **Live activation remains unqualified (T007)**; this is not a production acceptance claim.
 
 ## Implemented behavior
 
@@ -18,6 +18,7 @@ All checks below used synthetic data in isolated Linux. Actual dependency locks 
 | Operator CLI and restore | Ten Python checks pass on native macOS and qualified Linux. Actual Core WAL journal backup/restore preserves approval/digest, recovers interrupted writes to reconciliation and rejects replay. Temporary backup sidecars are cleaned; existing snapshots remain untouched (T018). |
 | TypeScript checks | 31 plugin tests plus three acceptance-configuration tests passed, with all four HTTP tests enabled and no skips. Native Gateway behavior remains a boundary fixture. |
 | Actual SDK | Strict type checking against the installed public SDK passed. OpenClaw build and validation passed (`valid: true`, no errors); metadata import requires no credentials. |
+| Built entry integration | Actual SDK recognizes bundle metadata and all 17 factory registrations match the manifest. Exercised tool factories and approval hook execute through a host registration fixture. Preview/hook sharing, API-instance isolation, owner/revocation guards and one-shot approval → real Core → one synthetic Google append passed (T019). Live host UI/policy remains unqualified. |
 | Distribution | Actual host pack produced a local archive with three runtime files: package metadata, manifest and bundled entry. npm dry-run separately verifies its four-file selection, including README, and private-file exclusion. No install/enable/reload/publish occurred. |
 | Full verification script | `bash scripts/verify.sh` exited successfully in T017 with the supported runtime and real locks. T018 adds the ten Python checks; those and the full Rust checks passed separately. Hosted CI has not run. |
 | Real bridge → Rust Core → simulated Google | All six Postman scenarios passed: read, writes, retry, drift, persistent error and slow response. Core and its journal ran for real; Google was the sole simulated dependency. |

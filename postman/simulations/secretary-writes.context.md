@@ -8,7 +8,7 @@ Stateful approved writes and uncertain-outcome reconciliation. Google is the sol
 
 ## Execution
 
-Run `bash scripts/acceptance.sh writes` in the qualified environment from `docs/local-verification.md`. The launcher waits for the listening event, derives the actual Google address, starts Core, invokes public tools and stops only its spawned processes. Inspect private `sim.ndjson` alongside the caller result.
+Run `bash scripts/acceptance.sh writes` in the qualified environment from `docs/local-verification.md`. The launcher first builds the actual SDK entry, then waits for the listening event, derives the actual Google address, starts Core, invokes public tools and stops only its spawned processes. Inspect private `sim.ndjson` alongside the caller result.
 
 ## Assumptions
 
@@ -19,5 +19,6 @@ Run `bash scripts/acceptance.sh writes` in the qualified environment from `docs/
 ## Observations
 
 <!-- begin:observations -->
+2026-10-26 (T019): Google served the existing stateful workflow plus the built entry’s registered factory/hook append. SDK metadata, lazy construction, API-instance preview isolation and exactly-once append assertions passed; the host registry remains a boundary fixture.
 2026-10-26: Google served stateful reads, append and updates; actual bridge/Core approval, replay, conflict and accepted-write/lost-response reconciliation passed with one payment.
 <!-- end:observations -->

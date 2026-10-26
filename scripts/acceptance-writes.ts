@@ -62,4 +62,6 @@ export async function runWriteAcceptance(coreUrl:string,providerUrl:string) {
  const payments=await tool('sheets_read',{spreadsheet:'wedding-demo',view:'payments'});assert.equal(payments.data.records.length,1);assert.equal(payments.data.records[0].fields.amount,100);assert.equal(payments.data.records[0].source.record_id,paymentPreview.data.record_id);
  const history=await tool('sheets_get_history',{operation_id:payment.operation_id});assert.equal(history.data.operation.state,'applied');assert.equal(history.data.operation.preview_digest,paymentPreview.data.preview_digest);
  console.log(JSON.stringify({acceptance:'passed',scenario:'writes',scope:'actual bridge/Core with stateful Google-only fixture; no live approval transport proof'}));
+ const {runEntryAcceptance}=await import('./acceptance-entry');
+ await runEntryAcceptance(coreUrl);
 }

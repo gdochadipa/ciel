@@ -38,7 +38,7 @@ secretary_verify_run none -c 'bash scripts/verify.sh'
 
 The locked OpenClaw dependency is explicitly trusted for its reviewed local package postinstall. Optional untrusted dependency lifecycle scripts need not be enabled for these authoring checks. Do not generate substitute SDK declarations or silently replace production dependencies if installation fails.
 
-Run dependency scenarios separately, with no external network. Core and the bridge run for real; Google is the only simulation member. Ports belong to each disposable container, avoiding host-port publication.
+Run dependency scenarios separately, with no external network. The writes launcher rebuilds the current plugin and includes actual SDK/built-entry factory and approval-hook integration using a host registration fixture. Core and the bridge run for real; Google is the only simulation member. Ports belong to each disposable container, avoiding host-port publication.
 
 ```sh
 for secretary_scenario in read writes retry drift error slow; do
