@@ -22,6 +22,29 @@ function setup(handler: (request: Request) => Response | Promise<Response>) {
  try { expect(await createSecretary(options).execute('sheets_list', {}, owner)).toEqual({ok:true,data:[{spreadsheet:'wedding'}]}); }
  finally { server.stop(true); }
 });
+
+(process.env.SECRETARY_HTTP_TESTS==='1'?test:test.skip)('revoked owner invocation cannot return a pending Core read',async()=>{
+ let current=true;
+ const {server,options}=setup(()=>{
+  current=false;
+  return Response.json({ok:true,data:[{spreadsheet:'private-owner-data'}]});
+ });
+ try {
+  const identity={...owner,assertInvocationCurrent(){if(!current)throw Error('INVOCATION_EXPIRED');}};
+  await expect(createSecretary(options).execute('sheets_list',{},identity)).rejects.toThrow('INVOCATION_EXPIRED');
+ } finally {server.stop(true);}
+});
+
+test('revoked owner invocation cannot return a pending native reminder list',async()=>{
+ let current=true;
+ const gateway={isAvailable:()=>true,async request():Promise<any>{
+  current=false;
+  return {jobs:[{id:'owner-job',declarationKey:'secretary:+628123:private'}]};
+ }};
+ const bridge=createSecretary({coreToken:'synthetic',owner:'+628123',gateway,schedulerQualified:true});
+ const identity={...owner,assertInvocationCurrent(){if(!current)throw Error('INVOCATION_EXPIRED');}};
+ await expect(bridge.execute('reminders_list',{},identity)).rejects.toThrow('INVOCATION_EXPIRED');
+});
 test('unknown owner, injected credentials, unqualified writes and memory fail closed', async () => {
  const bridge = createSecretary({coreUrl:'http://127.0.0.1:1',coreToken:'secret',owner:'+628123'});
  await expect(bridge.execute('sheets_list',{},{})).rejects.toThrow('OWNER_REQUIRED');

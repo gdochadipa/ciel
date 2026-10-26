@@ -8,6 +8,8 @@ Run `bash scripts/verify.sh` after integration supplies both manifests. It runs 
 
 The production dependency locks could not be generated under the current DNS restrictions. In a network-enabled qualification environment, run `cargo generate-lockfile` and `bun install`, validate the actual dependency graph and SDK, and commit the resulting locks before a release. CI has an explicit missing-lock gate and will fail until that prerequisite is satisfied. This is an outstanding reproducibility requirement, not a successful locked build.
 
+For source/loopback checks on a Docker-capable machine, use `bash scripts/test-plugin-container.sh your-cached-test-image:tag` with an already cached Bun/Node/npm image. This offline helper mounts only test source read-only and disables external networking; it does not build Core, install SDK dependencies, generate production locks or qualify live resources. A direct equivalent Docker invocation passed 34 checks with no skips in this session, using Bun 1.3.13 and Node 22.22.2; these differ from the pinned Bun/source-CI and required Node/SDK versions. The current shell wrapper itself cannot access the Docker daemon under its sandbox, although approved direct Docker invocations can; see T016 for the exact evidence. Full production verification still requires the qualified runtime and dependency graph above.
+
 ## Operator prerequisites
 
 1. Qualify the actual Ubuntu host, Node version, OpenClaw `2026.10.7` package/SDK and plugin activation. Current [tool plugin docs](https://docs.openclaw.ai/plugins/tool-plugins) require Node 24.16+ or 26.1+; confirm against the pinned package. Keep package and dependency locks and an executable rollback artifact.

@@ -25,7 +25,8 @@ export function createSecretary(options: Options) {
  if (url.protocol !== 'http:' || !['127.0.0.1','[::1]'].includes(url.hostname) || url.username || url.password || url.search || url.hash || url.pathname !== '/') fail('INVALID_CORE_DESTINATION');
  if (!options.coreToken || !options.owner) fail('INVALID_CONFIGURATION');
  const authorize = (identity: Identity) => { if (identity.senderIsOwner !== true || identity.requesterSenderId !== options.owner) fail('OWNER_REQUIRED'); identity.assertInvocationCurrent?.(); };
- async function request(path: string, input: unknown, approval = false) {
+ async function request(path: string, input: unknown, identity:Identity, approval = false) {
+  authorize(identity);
   const body = JSON.stringify(input); if (new TextEncoder().encode(body).length > 65536) fail('REQUEST_TOO_LARGE');
   let response: Response;
   try { response = await fetch(new URL(path, url), {method:'POST',redirect:'error',headers:{'content-type':'application/json',authorization:`Bearer ${approval ? options.approvalToken : options.coreToken}`},body,signal:AbortSignal.timeout(options.timeoutMs ?? 5000)}); }
@@ -33,6 +34,7 @@ export function createSecretary(options: Options) {
   const reader = response.body?.getReader(); const chunks: Uint8Array[] = []; let size = 0;
   try { if(reader) while(true) { const part = await reader.read(); if(part.done) break; size += part.value.length; if(size > (options.maxResponseBytes ?? 2097152)) { await reader.cancel(); fail('RESPONSE_TOO_LARGE'); } chunks.push(part.value); } }
   catch (error) { if(error instanceof SecretaryError) throw error; fail('CORE_UNAVAILABLE_OUTCOME_UNKNOWN'); }
+  authorize(identity);
   const buffer = new Uint8Array(size); let offset=0; for(const chunk of chunks) {buffer.set(chunk,offset);offset+=chunk.length;}
   let result: Record<string,unknown>; try {result=object(JSON.parse(new TextDecoder().decode(buffer)));} catch {fail('INVALID_CORE_RESPONSE');}
   if (result.ok !== true) { const error = object(result.error); return {ok:false,error:{code:typeof error.code==='string' && /^[A-Za-z_0-9]{1,64}$/.test(error.code) ? error.code : 'CORE_ERROR',message:'Core rejected the request',retryable:false}}; }
@@ -50,7 +52,7 @@ export function createSecretary(options: Options) {
   }
   if(name==='sheets_preview_change' && !['append','update'].includes(String(input.action))) fail('INVALID_INPUT');
   if(['sheets_append','sheets_update'].includes(name) && (!options.approvalTransportQualified || !options.approvalToken)) fail('WRITES_DISABLED');
-  const result=await request(`/v1/tools/${name}`,input);
+  const result=await request(`/v1/tools/${name}`,input,identity);
   if(name==='sheets_preview_change' && result.ok===true) {
    const preview=object(result.data);
    if(preview.operation_id!==input.operation_id || typeof preview.preview_digest!=='string' || typeof preview.actor!=='string' || typeof preview.expires_at!=='string') fail('INVALID_CORE_RESPONSE');
@@ -61,6 +63,12 @@ export function createSecretary(options: Options) {
  async function reminder(name: string, value: unknown, identity: Identity): Promise<unknown> {
   const gateway=options.gateway;
   if(!options.schedulerQualified || !gateway || await gateway.isAvailable()!==true) fail('SCHEDULER_UNAVAILABLE');
+  const rpc=async(method:string,params:Record<string,unknown>)=>{
+   authorize(identity);
+   const result=await gateway.request(method,params);
+   authorize(identity);
+   return result;
+  };
   const action=name.slice('reminders_'.length);
   const allowed: Record<string,[string[],string[]]>={create:[['reminder_id','text','schedule'],[]],list:[[],[]],get:[['reminder_id'],[]],reschedule:[['reminder_id','schedule'],[]],pause:[['reminder_id'],[]],resume:[['reminder_id'],[]],cancel:[['reminder_id'],[]],history:[['reminder_id'],[]]};
   if(!allowed[action]) fail('UNKNOWN_TOOL');
@@ -77,7 +85,7 @@ export function createSecretary(options: Options) {
   for(let page=0;;page++) {
    if(page>=10) fail('SCHEDULER_LIST_TOO_LARGE');
    authorize(identity);
-   const result=object(await gateway.request('cron.list',{includeDisabled:true,limit:200,offset,sortBy:'name',sortDir:'asc'}));
+   const result=object(await rpc('cron.list',{includeDisabled:true,limit:200,offset,sortBy:'name',sortDir:'asc'}));
    responseBytes+=new TextEncoder().encode(JSON.stringify(result)).length;
    if(responseBytes>(options.maxResponseBytes??2097152)) fail('SCHEDULER_LIST_TOO_LARGE');
    if(!Array.isArray(result.jobs) || result.jobs.length>200 || (result.hasMore!==undefined && typeof result.hasMore!=='boolean')) fail('INVALID_GATEWAY_RESPONSE');
@@ -104,18 +112,18 @@ export function createSecretary(options: Options) {
     return {reconciled:true,job:existing};
    }
    authorize(identity);
-   const added=object(await gateway.request('cron.add',{name:`Secretary ${input.reminder_id}`,declarationKey:key,schedule,sessionTarget:'main',wakeMode:'now',payload:{kind:'systemEvent',text:input.text},deleteAfterRun:false}));
+   const added=object(await rpc('cron.add',{name:`Secretary ${input.reminder_id}`,declarationKey:key,schedule,sessionTarget:'main',wakeMode:'now',payload:{kind:'systemEvent',text:input.text},deleteAfterRun:false}));
    return {reconciled:false,job:added.job??added,delivery:'unconfirmed'};
   }
   if(!existing || typeof existing.id!=='string') fail('REMINDER_NOT_FOUND');
-  if(action==='get') return {job:await gateway.request('cron.get',{id:existing.id})};
-  if(action==='history') return gateway.request('cron.runs',{id:existing.id,limit:100});
+  if(action==='get') return {job:await rpc('cron.get',{id:existing.id})};
+  if(action==='history') return rpc('cron.runs',{id:existing.id,limit:100});
   if(['resume','reschedule'].includes(action) && !isReminderJob(existing)) fail('REMINDER_CONFLICT');
   if(typeof existing.configRevision!=='string' || !existing.configRevision.trim() || existing.configRevision.length>128) fail('REMINDER_REVISION_REQUIRED');
   authorize(identity);
   // Cancellation retains the native identity and run history; an explicit resume can reactivate it.
-  if(action==='cancel') return gateway.request('cron.update',{id:existing.id,expectedConfigRevision:existing.configRevision,patch:{enabled:false,deleteAfterRun:false,description:canceledReminderDescription}});
-  return gateway.request('cron.update',{id:existing.id,expectedConfigRevision:existing.configRevision,patch:action==='reschedule'?{schedule}:{enabled:action==='resume',...(action==='resume' && existing.description===canceledReminderDescription?{description:''}:{})}});
+  if(action==='cancel') return rpc('cron.update',{id:existing.id,expectedConfigRevision:existing.configRevision,patch:{enabled:false,deleteAfterRun:false,description:canceledReminderDescription}});
+  return rpc('cron.update',{id:existing.id,expectedConfigRevision:existing.configRevision,patch:action==='reschedule'?{schedule}:{enabled:action==='resume',...(action==='resume' && existing.description===canceledReminderDescription?{description:''}:{})}});
  }
  async function prepareApproval(name: string, value: unknown, identity: Identity) {
   authorize(identity);
@@ -136,7 +144,7 @@ export function createSecretary(options: Options) {
     if(Date.parse(snapshot.expires_at)<=Date.now()) fail('PREVIEW_EXPIRED');
     previews.delete(String(input.operation_id));
     if(decision!=='allow-once' && decision!=='deny') fail('APPROVAL_DENIED');
-    const result=await request(`/v1/operations/${encodeURIComponent(String(input.operation_id))}/approval`,{decision:decision==='allow-once'?'approve':'reject',preview_digest:snapshot.preview_digest},true);
+    const result=await request(`/v1/operations/${encodeURIComponent(String(input.operation_id))}/approval`,{decision:decision==='allow-once'?'approve':'reject',preview_digest:snapshot.preview_digest},identity,true);
     if(result.ok!==true) fail('APPROVAL_REJECTED');
    }};
  }
