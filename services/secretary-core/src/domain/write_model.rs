@@ -1,10 +1,10 @@
+use crate::domain::error::ErrorKind;
 use crate::{
-    journal::Preview,
-    projection,
-    registry::{FieldType, Spreadsheet, View},
-    ApiError,
+    domain::error::CoreError,
+    domain::operation::Preview,
+    domain::projection,
+    domain::registry::{FieldType, Spreadsheet, View},
 };
-use axum::http::StatusCode;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashSet;
@@ -32,18 +32,18 @@ pub fn valid_id(id: &str) -> bool {
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
-pub fn validate_fields(view: &View, fields: &Value, append: bool) -> Result<(), ApiError> {
+pub fn validate_fields(view: &View, fields: &Value, append: bool) -> Result<(), CoreError> {
     let schema = view
         .write_schema
         .as_ref()
         .filter(|_| view.structured())
-        .ok_or(ApiError(StatusCode::FORBIDDEN, "view_read_only"))?;
+        .ok_or(CoreError(ErrorKind::Forbidden, "view_read_only"))?;
     let fields = fields
         .as_object()
         .filter(|f| !f.is_empty())
-        .ok_or_else(ApiError::invalid)?;
+        .ok_or_else(CoreError::invalid)?;
     for (name, value) in fields {
-        let spec = schema.fields.get(name).ok_or_else(ApiError::invalid)?;
+        let spec = schema.fields.get(name).ok_or_else(CoreError::invalid)?;
         if value.is_null() && !spec.required {
             continue;
         }
@@ -65,7 +65,7 @@ pub fn validate_fields(view: &View, fields: &Value, append: bool) -> Result<(), 
             }),
         };
         if !good {
-            return Err(ApiError::invalid());
+            return Err(CoreError::invalid());
         }
     }
     if append
@@ -74,16 +74,16 @@ pub fn validate_fields(view: &View, fields: &Value, append: bool) -> Result<(), 
             .iter()
             .any(|(name, spec)| spec.required && !fields.contains_key(name))
     {
-        return Err(ApiError::invalid());
+        return Err(CoreError::invalid());
     }
     Ok(())
 }
-pub fn rows(_s: &Spreadsheet, v: &View, book: &Value) -> Result<Vec<StructuredRow>, ApiError> {
+pub fn rows(_s: &Spreadsheet, v: &View, book: &Value) -> Result<Vec<StructuredRow>, CoreError> {
     let schema = v
         .write_schema
         .as_ref()
         .filter(|_| v.structured())
-        .ok_or(ApiError(StatusCode::FORBIDDEN, "view_read_only"))?;
+        .ok_or(CoreError(ErrorKind::Forbidden, "view_read_only"))?;
     let cells = projection::cells(projection::sheet(book, v)?);
     let mut rows = Vec::new();
     let mut ids = HashSet::new();
@@ -98,7 +98,7 @@ pub fn rows(_s: &Spreadsheet, v: &View, book: &Value) -> Result<Vec<StructuredRo
                 let owned =
                     col <= b'B' || schema.fields.values().any(|f| f.column.as_bytes() == [col]);
                 if !owned {
-                    return Err(ApiError::drift());
+                    return Err(CoreError::drift());
                 }
             }
         }
@@ -110,15 +110,15 @@ pub fn rows(_s: &Spreadsheet, v: &View, book: &Value) -> Result<Vec<StructuredRo
         let id = id
             .as_str()
             .filter(|s| valid_id(s))
-            .ok_or_else(ApiError::drift)?
+            .ok_or_else(CoreError::drift)?
             .to_owned();
         let op = op
             .as_str()
             .filter(|s| valid_id(s))
-            .ok_or_else(ApiError::drift)?
+            .ok_or_else(CoreError::drift)?
             .to_owned();
         if !ids.insert(id.clone()) || !ops.insert(op.clone()) {
-            return Err(ApiError(StatusCode::CONFLICT, "duplicate_record_identity"));
+            return Err(CoreError(ErrorKind::Conflict, "duplicate_record_identity"));
         }
         for (name, spec) in &schema.fields {
             let value = projection::at(&cells, &format!("{}{row}", spec.column));
@@ -132,7 +132,7 @@ pub fn rows(_s: &Spreadsheet, v: &View, book: &Value) -> Result<Vec<StructuredRo
             );
         }
         let fields = Value::Object(values);
-        validate_fields(v, &fields, true).map_err(|_| ApiError::drift())?;
+        validate_fields(v, &fields, true).map_err(|_| CoreError::drift())?;
         rows.push(StructuredRow {
             row,
             record_id: id,
@@ -142,6 +142,11 @@ pub fn rows(_s: &Spreadsheet, v: &View, book: &Value) -> Result<Vec<StructuredRo
     }
     Ok(rows)
 }
+/// Application supplies generated identity and expiry; validation itself performs no IO.
+pub struct PreparationContext<'a> {
+    pub new_record_id: &'a str,
+    pub expires_at: i64,
+}
 pub fn prepare(
     change: &Change,
     owner: &str,
@@ -149,23 +154,24 @@ pub fn prepare(
     v: &View,
     book: &Value,
     version: &str,
-) -> Result<Preview, ApiError> {
+    context: &PreparationContext<'_>,
+) -> Result<Preview, CoreError> {
     if !valid_id(&change.operation_id)
         || !matches!(change.action.as_str(), "append" | "update")
         || change.action == "append" && change.record_id.is_some()
         || change.action == "update" && !change.record_id.as_deref().is_some_and(valid_id)
     {
-        return Err(ApiError::invalid());
+        return Err(CoreError::invalid());
     }
     validate_fields(v, &change.fields, change.action == "append")?;
-    if v.kind == crate::registry::Kind::StructuredPayments {
+    if v.kind == crate::domain::registry::Kind::StructuredPayments {
         let cost_group = change.fields.get("cost_group").and_then(Value::as_str);
         if let Some(group) = cost_group {
             let mut found = false;
             for costs in s
                 .views
                 .iter()
-                .filter(|v| v.kind == crate::registry::Kind::WeddingCosts)
+                .filter(|v| v.kind == crate::domain::registry::Kind::WeddingCosts)
             {
                 if projection::project(s, costs, book, version)?
                     .iter()
@@ -176,7 +182,7 @@ pub fn prepare(
                 }
             }
             if !found {
-                return Err(ApiError(StatusCode::BAD_REQUEST, "unknown_cost_group"));
+                return Err(CoreError(ErrorKind::InvalidInput, "unknown_cost_group"));
             }
         }
     }
@@ -185,7 +191,7 @@ pub fn prepare(
         let row = rows
             .iter()
             .find(|r| Some(&r.record_id) == change.record_id.as_ref())
-            .ok_or(ApiError(StatusCode::NOT_FOUND, "record_not_found"))?;
+            .ok_or(CoreError(ErrorKind::NotFound, "record_not_found"))?;
         (
             row.record_id.clone(),
             row.fields.clone(),
@@ -194,14 +200,14 @@ pub fn prepare(
     } else {
         // Appending beyond the bounded table would become unobservable to reconciliation.
         if rows.iter().any(|r| r.row >= 1001) || rows.len() >= 1000 {
-            return Err(ApiError(StatusCode::CONFLICT, "table_full"));
+            return Err(CoreError(ErrorKind::Conflict, "table_full"));
         }
         let mut empty = serde_json::Map::new();
         for name in v.write_schema.as_ref().unwrap().fields.keys() {
             empty.insert(name.clone(), Value::Null);
         }
         (
-            uuid::Uuid::new_v4().to_string(),
+            context.new_record_id.to_owned(),
             Value::Null,
             Value::Object(empty),
         )
@@ -221,7 +227,7 @@ pub fn prepare(
         after,
         mapping_version: version.into(),
         source_revision: projection::fingerprint(book),
-        expires_at: chrono::Utc::now().timestamp() + 300,
+        expires_at: context.expires_at,
         preview_digest: String::new(),
     })
 }

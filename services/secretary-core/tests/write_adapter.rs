@@ -2,9 +2,30 @@ mod common;
 use common::{cell, fixture};
 use secretary_core::{
     projection,
-    write_model::{prepare, rows, Change},
+    write_model::{prepare as domain_prepare, rows, Change, PreparationContext},
 };
 use serde_json::json;
+fn prepare(
+    change: &Change,
+    owner: &str,
+    s: &secretary_core::registry::Spreadsheet,
+    v: &secretary_core::registry::View,
+    book: &serde_json::Value,
+    version: &str,
+) -> Result<secretary_core::domain::operation::Preview, secretary_core::CoreError> {
+    domain_prepare(
+        change,
+        owner,
+        s,
+        v,
+        book,
+        version,
+        &PreparationContext {
+            new_record_id: "fixture-record",
+            expires_at: 2_000_000_000,
+        },
+    )
+}
 fn change() -> Change {
     serde_json::from_value(json!({"operation_id":"sample-operation","spreadsheet":"wedding-demo","view":"tasks","action":"append","fields":{"title":"=literal text stays RAW","status":"todo"}})).unwrap()
 }

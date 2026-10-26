@@ -1,6 +1,6 @@
 # Secretary Core
 
-Axum/Tokio service on `127.0.0.1:8787`. All tool calls require the configured business bearer token; its owner identity comes from configuration. This ticket exposes only reads. Existing sheet shapes cannot issue provider writes.
+Axum/Tokio service on `127.0.0.1:8787`. All tool calls require the configured business bearer token; its owner identity comes from configuration. The domain/application/presentation/infrastructure layers separate business rules from HTTP, Google transport and SQLite persistence. Legacy views cannot issue provider writes.
 
 Build/test with `cargo test -p secretary-core`; run with `cargo run -p secretary-core`. The production dependency graph includes Reqwest + rustls and jsonwebtoken RS256 service-account assertions. No handwritten signing or replacement HTTP client is used.
 
@@ -14,7 +14,7 @@ Views preserve cost-group anchors, raw guest estimates, yearless planning blocks
 
 Provider responses are streamed under a 2 MiB limit with redirects disabled. Each socket has a 10 second bound, and the entire read including OAuth/retries is also bounded to 10 seconds. At most two read retries apply to connection/timeout failures, 429 or 5xx responses; no writes exist here. Errors expose only stable sanitized codes. Bridge requests have a separate 5 second timeout, so a bridge may stop waiting before a bounded provider read finishes.
 
-`services/secretary-core/scripts/check-adapter-offline.sh` builds **the actual production adapter, registry and error modules** with cached dependencies and executes the committed adapter-seam tests when network dependencies are unavailable. This is deliberately narrower evidence than a production build: it does not compile Reqwest/OAuth, the full router, or execute the external HTTP stand-in tests. The latter remain in `tests/public_api.rs` and must pass in an environment permitting dependency fetch and localhost binds. No credentials or private workbook data are needed for these sanitized tests.
+`services/secretary-core/scripts/check-adapter-offline.sh` builds **the actual domain, application, Axum presentation and SQLite adapter modules** with cached dependencies and executes the committed adapter-seam tests when network dependencies are unavailable. This is deliberately narrower evidence than a production build: it compiles the real router and exercises it with in-process requests, but it does not compile Reqwest/OAuth or execute the socket-based HTTP stand-in tests. The latter remain in `tests/public_api.rs` and must pass in an environment permitting dependency fetch and localhost binds. No credentials or private workbook data are needed for these sanitized tests.
 
 ## Controlled structured writes
 
@@ -29,3 +29,14 @@ A business tool requests an immutable five-minute preview containing configured 
 Before one provider request, the service durably marks `applying`, revalidates structure/unique identity and compares the exact source snapshot. Append writes a new contiguous owned row with RAW input; update touches only approved field cells and the operation-ID cell. After a successful response it rereads and verifies unique IDs and the exact expected field values. Provider 400/401/403/404/422 is a known rejection; transport failures, timeouts and ambiguous server statuses become `uncertain`. There are no automatic write retries. Google has no atomic compare-and-swap for this operation: an external human edit between preflight and mutation can still race, and row movement in that interval can target the wrong physical cells. The exact post-read detects many such outcomes but cannot guarantee recovery of overwritten data. Production activation must accept this residual limitation or retain read-only mode.
 
 An interrupted `applying` operation becomes `reconciliation` on startup. Operator-only `POST /v1/operations/{id}/reconcile` with `{}` performs reads and checks unique `record_id`/`operation_id` plus approved values. It can establish `applied`, report `conflict`, or retain `reconciliation`; it never resends. Missing evidence cannot prove a failed write. A completed operation is returned idempotently; unresolved or rejected operations cannot be blindly recommitted. Bounded `sheets_get_history` returns immutable previews, current states and sanitized events even after writes are disabled, provided the journal is configured. Back up the SQLite database using the documented SQLite-aware backup tool; editable sheet rows cannot rewrite the journal.
+
+
+## Source layout
+
+- `domain/`: source mappings, deterministic validation/calculation, immutable previews and the operation FSM. No HTTP, provider SDK or persistence dependency.
+- `application/`: typed commands, command bus, mutation coordination and source/journal ports. No concrete adapter imports.
+- `infrastructure/`: bounded Google/OAuth transport and durable SQLite journal adapters.
+- `presentation/`: Axum routes, strict request decoding, Core/operator authentication and error/status responses.
+- `main.rs`: environment loading and adapter composition.
+
+HTTP tool names, JSON envelopes and stored operation names remain stable. Internal Rust write construction now keeps credentials in presentation: create `Writes::new(journal, enabled)`, then `AppState::with_writes(writes, approval_token)` validates the distinct operator secret. Application-only callers can dispatch typed `Command`s directly without transport credentials; they are trusted code, not externally callable LLM tools.

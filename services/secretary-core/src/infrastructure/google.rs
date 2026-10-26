@@ -1,4 +1,5 @@
-use crate::{registry::Spreadsheet, ApiError};
+pub use crate::application::ports::WriteOutcome;
+use crate::domain::{error::CoreError, registry::Spreadsheet};
 use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -75,7 +76,7 @@ impl GoogleClient {
             }),
         })
     }
-    async fn token(&self) -> Result<String, ApiError> {
+    async fn token(&self) -> Result<String, CoreError> {
         match self.auth.as_ref() {
             Auth::Static(t) => Ok(t.clone()),
             Auth::Service {
@@ -97,7 +98,7 @@ impl GoogleClient {
                     &claims,
                     key,
                 )
-                .map_err(|_| ApiError::upstream())?;
+                .map_err(|_| CoreError::upstream())?;
                 let response = self
                     .client
                     .post("https://oauth2.googleapis.com/token")
@@ -107,15 +108,15 @@ impl GoogleClient {
                     ])
                     .send()
                     .await
-                    .map_err(|_| ApiError::upstream())?;
+                    .map_err(|_| CoreError::upstream())?;
                 if !response.status().is_success() {
-                    return Err(ApiError::upstream());
+                    return Err(CoreError::upstream());
                 }
                 let body = bounded(response).await?;
                 let token = body["access_token"]
                     .as_str()
                     .filter(|s| !s.is_empty())
-                    .ok_or_else(ApiError::upstream)?
+                    .ok_or_else(CoreError::upstream)?
                     .to_owned();
                 let ttl = body["expires_in"]
                     .as_u64()
@@ -127,18 +128,18 @@ impl GoogleClient {
             }
         }
     }
-    pub async fn read(&self, s: &Spreadsheet) -> Result<Value, ApiError> {
+    pub async fn read(&self, s: &Spreadsheet) -> Result<Value, CoreError> {
         // Bound whole operation, including OAuth and retries, independently of socket timeout.
         tokio::time::timeout(Duration::from_secs(10), self.read_inner(s))
             .await
-            .map_err(|_| ApiError::upstream())?
+            .map_err(|_| CoreError::upstream())?
     }
     /// Exactly one send. Any ambiguous transport/server outcome must be reconciled by row operation_id.
     pub async fn write_values(
         &self,
         s: &Spreadsheet,
-        v: &crate::registry::View,
-        p: &crate::journal::Preview,
+        v: &crate::domain::registry::View,
+        p: &crate::domain::operation::Preview,
         row: Option<usize>,
     ) -> WriteOutcome {
         let result =
@@ -151,11 +152,11 @@ impl GoogleClient {
     async fn write_inner(
         &self,
         s: &Spreadsheet,
-        v: &crate::registry::View,
-        p: &crate::journal::Preview,
+        v: &crate::domain::registry::View,
+        p: &crate::domain::operation::Preview,
         row: Option<usize>,
-    ) -> Result<WriteOutcome, ApiError> {
-        let schema = v.write_schema.as_ref().ok_or_else(ApiError::invalid)?;
+    ) -> Result<WriteOutcome, CoreError> {
+        let schema = v.write_schema.as_ref().ok_or_else(CoreError::invalid)?;
         let token = self.token().await?;
         let title = v.title.replace('\'', "''");
         let request = if p.action == "append" {
@@ -163,9 +164,9 @@ impl GoogleClient {
             let range = format!("'{title}'!A2:{last}1001");
             let mut url =
                 reqwest::Url::parse(&format!("{}/spreadsheets/{}/values/", self.base, s.id))
-                    .map_err(|_| ApiError::invalid())?;
+                    .map_err(|_| CoreError::invalid())?;
             url.path_segments_mut()
-                .map_err(|_| ApiError::invalid())?
+                .map_err(|_| CoreError::invalid())?
                 .pop_if_empty()
                 .push(&format!("{range}:append"));
             let mut values = vec![Value::Null; schema.fields.len() + 2];
@@ -184,12 +185,12 @@ impl GoogleClient {
                 ])
                 .json(&json!({"majorDimension":"ROWS","values":[values]}))
         } else {
-            let row = row.ok_or_else(ApiError::invalid)?;
+            let row = row.ok_or_else(CoreError::invalid)?;
             let mut data = vec![
                 json!({"range":format!("'{title}'!B{row}"),"majorDimension":"ROWS","values":[[p.operation_id]]}),
             ];
-            for (name, value) in p.fields.as_object().ok_or_else(ApiError::invalid)? {
-                let f = schema.fields.get(name).ok_or_else(ApiError::invalid)?;
+            for (name, value) in p.fields.as_object().ok_or_else(CoreError::invalid)? {
+                let f = schema.fields.get(name).ok_or_else(CoreError::invalid)?;
                 data.push(json!({"range":format!("'{title}'!{}{row}",f.column),"majorDimension":"ROWS","values":[[raw(value)]]}));
             }
             self.client
@@ -217,7 +218,7 @@ impl GoogleClient {
             Ok(WriteOutcome::Uncertain)
         }
     }
-    async fn read_inner(&self, s: &Spreadsheet) -> Result<Value, ApiError> {
+    async fn read_inner(&self, s: &Spreadsheet) -> Result<Value, CoreError> {
         let token = self.token().await?;
         let mut params=vec![("includeGridData".to_owned(),"true".to_owned()),("fields".to_owned(),"spreadsheetId,sheets(properties(sheetId,title),merges,data(startRow,startColumn,rowData(values(userEnteredValue,effectiveValue,formattedValue))))".to_owned())];
         for v in &s.views {
@@ -238,42 +239,54 @@ impl GoogleClient {
                 Ok(r) if r.status().is_success() => return bounded(r).await,
                 Ok(r) if r.status().as_u16() == 429 || r.status().is_server_error() => {}
                 Err(e) if e.is_timeout() || e.is_connect() => {}
-                _ => return Err(ApiError::upstream()),
+                _ => return Err(CoreError::upstream()),
             }
             if attempt < 2 {
                 tokio::time::sleep(Duration::from_millis(100 * (1 << attempt))).await;
             }
         }
-        Err(ApiError::upstream())
+        Err(CoreError::upstream())
     }
 }
-async fn bounded(response: reqwest::Response) -> Result<Value, ApiError> {
+async fn bounded(response: reqwest::Response) -> Result<Value, CoreError> {
     const MAX: usize = 2 * 1024 * 1024;
     if response.content_length().is_some_and(|n| n > MAX as u64) {
-        return Err(ApiError::upstream());
+        return Err(CoreError::upstream());
     }
     let mut stream = response.bytes_stream();
     let mut bytes = Vec::new();
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|_| ApiError::upstream())?;
+        let chunk = chunk.map_err(|_| CoreError::upstream())?;
         if bytes.len() + chunk.len() > MAX {
-            return Err(ApiError::upstream());
+            return Err(CoreError::upstream());
         }
         bytes.extend_from_slice(&chunk)
     }
-    serde_json::from_slice(&bytes).map_err(|_| ApiError::upstream())
+    serde_json::from_slice(&bytes).map_err(|_| CoreError::upstream())
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum WriteOutcome {
-    Accepted,
-    Rejected,
-    Uncertain,
-}
 fn raw(value: &Value) -> Value {
     if value.is_null() {
         json!("")
     } else {
         value.clone()
+    }
+}
+
+impl crate::application::ports::SpreadsheetPort for GoogleClient {
+    fn read<'a>(
+        &'a self,
+        s: &'a Spreadsheet,
+    ) -> crate::application::ports::PortFuture<'a, Result<Value, CoreError>> {
+        Box::pin(self.read(s))
+    }
+    fn write_values<'a>(
+        &'a self,
+        s: &'a Spreadsheet,
+        v: &'a crate::domain::registry::View,
+        p: &'a crate::domain::operation::Preview,
+        row: Option<usize>,
+    ) -> crate::application::ports::PortFuture<'a, WriteOutcome> {
+        Box::pin(self.write_values(s, v, p, row))
     }
 }

@@ -18,3 +18,6 @@ This is the implementation contract seed. `openapi.yaml` is the final machine-re
 - Unknown fields must be rejected at mutation boundaries. Defaults: 64 KiB request body, 2 MiB provider response, 100 returned records maximum, 5s bridge/core and 10s provider timeout, at most two read retries. Never automatically retry an uncertain write.
 
 Implementation tests should use public tool routes and external HTTP stand-ins. Production dependency availability and live runtime compatibility are separately evidenced.
+
+
+Rust implementation: HTTP presentation decodes these tool names into typed application commands. The in-process command bus coordinates domain rules through source/journal ports. Concrete Google/SQLite adapters implement those ports; error categories become HTTP statuses only in presentation. The command-bus refactor does not alter this public contract or grant tool-callable operator authorization.

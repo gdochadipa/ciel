@@ -15,3 +15,6 @@ Local HTTP stand-ins and disposable fixtures demonstrate only their exercised be
 Native memory save/update/archive/history and prevention of automatic saving remain unresolved; memory mutation must stay unavailable until qualified. Sources, ambiguous amounts, shared costs and unknown dates remain visible rather than being filled from conversation guesses. A payment record and its reminder have separate operation outcomes.
 
 Before live activation, supply and qualify the actual VPS/runtime, approved Google spreadsheet/registry, service account, owner WhatsApp account and outbound recipient policy, trusted full diff approval, model entitlement, native scheduler delivery, and backup/restore. Keep `SECRETARY_WRITES_ENABLED=false` throughout initial qualification. The five guides under `skills/` grant no tools or additional authority. A low-effort review found two P2 defects; both have local regression fixes. Full runtime qualification remains open.
+
+
+The Rust Core now uses domain/application/infrastructure/presentation layers with a typed in-process command bus and an explicit mutation FSM. See [the architecture](docs/architecture.md) for dependencies, legal transitions and preserved contracts.

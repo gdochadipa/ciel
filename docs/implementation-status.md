@@ -17,7 +17,7 @@ Initial implementation agents ran at medium reasoning effort. The owner subseque
 
 | Check | Result and limit |
 | --- | --- |
-| Actual-source Rust read/structured-write/journal harness | 11 passed. Covers mapping preservation, shared costs/unknowns, schema/identity rules, preview/approval expiry/rejection, restart recovery and exclusive journal ownership. Excludes production HTTP/OAuth modules. |
+| Actual-source Rust domain/application/presentation/journal harness | 16 passed. Covers mappings, identity rules, approvals, expiry/rejection, restart/exclusive journal ownership, typed source-port commands and real in-process Axum authentication/dispatch. Excludes production Google/OAuth and socket transport. |
 | Public bridge tests | Eight passed, three real HTTP tests skipped by default because this sandbox cannot bind loopback. Native Gateway fixtures establish adapter behavior only. |
 | Acceptance configuration checks | Three additional checks pass. These are not Core/provider acceptance evidence. |
 | Standalone bridge and acceptance runner bundles | Pass syntax/bundling checks; do not prove installed SDK type compatibility or activation. |
@@ -37,7 +37,7 @@ The whole specification is not yet implemented and accepted. In particular, nati
 Required release gates remain open:
 
 1. Generate, validate and commit production dependency locks in a network-enabled environment. No lockfile was fabricated; CI deliberately fails its missing-lock gate.
-2. Compile the complete Rust service and actual pinned OpenClaw/Node SDK, run all public HTTP/OAuth tests, then run the real read/write acceptance simulations with socket permission. A narrow adapter pass cannot satisfy this gate.
+2. Compile the complete Rust service and actual pinned OpenClaw/Node SDK, run all public HTTP/OAuth tests, then run the real read/write acceptance simulations with socket permission. The cached-source harness cannot satisfy the full Google/OAuth and transport gate.
 3. Qualify the actual VPS, approved live spreadsheet mapping, credential permissions, full-preview trusted-owner approval and crash/deny behavior, Google write preservation/conflict/recovery, native reminder persistence, owner-only WhatsApp delivery evidence, model entitlement and restore procedure.
 4. Design and qualify the remaining explicit native-memory lifecycle without silently introducing a second personal knowledge database.
 
@@ -48,3 +48,10 @@ Use the [local graph](../.scratch/secretary-mvp/index.md) and per-ticket evidenc
 `bun run test` runs the public bridge checks; `bun test scripts/acceptance.test.ts` runs the additional acceptance configuration checks. `bash services/secretary-core/scripts/check-adapter-offline.sh` runs the narrower actual-source Rust harness using cached dependencies.
 
 Once dependency locks and the actual runtime are available, run `bash scripts/verify.sh`. In a socket-capable environment, enable the retained HTTP tests with `SECRETARY_HTTP_TESTS=1`, and use `bash scripts/acceptance.sh read` or `bash scripts/acceptance.sh writes` for the real synthetic upstream workflow. These commands do not establish live Google or WhatsApp compatibility; the live qualification gate is separate.
+
+
+## Review fixes and requested Rust architecture
+
+T009 resolves both P2 findings from the authorized low-effort review: the bridge and manifest default to the Core listener on 8787; native reminders are retained after cancellation/completion so history and idempotent creation can reconcile them. Eight bridge checks and three acceptance configuration checks pass; three HTTP tests remain skipped.
+
+T010 applies the owner's DDD/hexagonal direction to Rust: domain rules and a typed operation FSM, an application command bus and ports, Google/SQLite infrastructure adapters, and HTTP presentation. Credentials and HTTP status mapping stay in presentation. Existing HTTP/JSON/journal formats are preserved. Uncertain operations cannot be downgraded to known failure without evidence or replayed. The harness now compiles the real application and router using cached dependencies; 16 checks pass, including in-process HTTP requests. Clippy with warnings denied passes for this cached-source graph. This evidence still excludes actual Reqwest/OAuth, sockets, installed SDK activation and live resources.

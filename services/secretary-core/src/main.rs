@@ -36,13 +36,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let journal = secretary_core::journal::Journal::open(std::path::Path::new(&directory))
             .await
             .map_err(|_| "journal initialization failed")?;
-        let writes = secretary_core::writes::Writes::new(
-            journal,
-            enabled,
+        let writes = secretary_core::writes::Writes::new(journal, enabled);
+        state = state.with_writes(
+            writes,
             std::env::var("SECRETARY_APPROVAL_TOKEN").unwrap_or_default(),
-            &token,
         )?;
-        state = state.with_writes(writes);
     } else if enabled {
         return Err("SECRETARY_STATE_DIR is required when writes enabled".into());
     }

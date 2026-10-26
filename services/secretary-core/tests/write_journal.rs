@@ -1,4 +1,7 @@
-use secretary_core::journal::{Journal, Preview};
+use secretary_core::{
+    domain::operation::OperationState,
+    journal::{Journal, Preview},
+};
 use serde_json::json;
 async fn store() -> Journal {
     let dir = std::env::temp_dir().join(format!("secretary-journal-{}", uuid::Uuid::new_v4()));
@@ -44,7 +47,7 @@ async fn immutable_previews_and_approvals_survive_restart_without_replaying_inte
     let restarted = Journal::open(&dir).await.unwrap();
     assert_eq!(
         restarted.get("op-demo-one").await.unwrap().state,
-        "reconciliation"
+        OperationState::Reconciliation
     );
     assert!(restarted.begin_apply("op-demo-one").await.is_err());
 }
@@ -65,7 +68,10 @@ async fn rejected_or_expired_previews_cannot_enter_applying() {
         .approve("expired-op", &p.preview_digest, "approve")
         .await
         .is_err());
-    assert_eq!(journal.get("expired-op").await.unwrap().state, "expired");
+    assert_eq!(
+        journal.get("expired-op").await.unwrap().state,
+        OperationState::Expired
+    );
 }
 #[tokio::test]
 async fn a_second_service_cannot_claim_the_same_journal_and_recover_a_live_write() {
@@ -79,5 +85,46 @@ async fn a_second_service_cannot_claim_the_same_journal_and_recover_a_live_write
             .mode()
             & 0o777,
         0o600
+    );
+}
+
+#[tokio::test]
+async fn uncertainty_requires_evidence_and_terminal_operations_cannot_be_replayed() {
+    use secretary_core::domain::operation::Outcome;
+    let journal = store().await;
+    let p = journal.create(preview()).await.unwrap();
+    journal
+        .approve(&p.operation_id, &p.preview_digest, "approve")
+        .await
+        .unwrap();
+    journal.begin_apply(&p.operation_id).await.unwrap();
+    journal
+        .finish(&p.operation_id, Outcome::Uncertain)
+        .await
+        .unwrap();
+    assert!(journal
+        .finish(&p.operation_id, Outcome::KnownFailure)
+        .await
+        .is_err());
+    assert!(journal.begin_apply(&p.operation_id).await.is_err());
+    assert_eq!(
+        journal.get(&p.operation_id).await.unwrap().state,
+        OperationState::Uncertain
+    );
+    journal
+        .finish(&p.operation_id, Outcome::Applied)
+        .await
+        .unwrap();
+    assert!(journal
+        .approve(&p.operation_id, &p.preview_digest, "approve")
+        .await
+        .is_err());
+    assert!(journal
+        .finish(&p.operation_id, Outcome::Conflict)
+        .await
+        .is_err());
+    assert_eq!(
+        journal.history(Some(&p.operation_id), 20, 0).await.unwrap()["operation"]["state"],
+        "applied"
     );
 }

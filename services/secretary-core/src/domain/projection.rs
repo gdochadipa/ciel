@@ -1,6 +1,6 @@
 use crate::{
-    registry::{Kind, Spreadsheet, View},
-    ApiError,
+    domain::error::CoreError,
+    domain::registry::{Kind, Spreadsheet, View},
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -45,7 +45,7 @@ fn address(row: usize, col: usize) -> String {
     }
     format!("{name}{}", row + 1)
 }
-pub(crate) fn sheet<'a>(book: &'a Value, v: &View) -> Result<&'a Value, ApiError> {
+pub(crate) fn sheet<'a>(book: &'a Value, v: &View) -> Result<&'a Value, CoreError> {
     book["sheets"]
         .as_array()
         .and_then(|s| {
@@ -54,7 +54,7 @@ pub(crate) fn sheet<'a>(book: &'a Value, v: &View) -> Result<&'a Value, ApiError
                     && s["properties"]["title"].as_str() == Some(&v.title)
             })
         })
-        .ok_or_else(ApiError::drift)
+        .ok_or_else(CoreError::drift)
 }
 pub(crate) fn cells(sheet: &Value) -> BTreeMap<String, Value> {
     let mut result = BTreeMap::new();
@@ -162,16 +162,16 @@ fn merged_anchor(v: &View, cell: &str) -> String {
 fn inherited(cells: &BTreeMap<String, Value>, v: &View, cell: &str) -> Value {
     at(cells, &merged_anchor(v, cell))
 }
-pub fn validate(s: &Spreadsheet, book: &Value) -> Result<(), ApiError> {
+pub fn validate(s: &Spreadsheet, book: &Value) -> Result<(), CoreError> {
     if book["spreadsheetId"].as_str() != Some(s.id.as_str()) {
-        return Err(ApiError::drift());
+        return Err(CoreError::drift());
     }
     for v in &s.views {
         let sh = sheet(book, v)?;
         let c = cells(sh);
         for (a, expected) in &v.headers {
             if at(&c, a).as_str() != Some(expected) {
-                return Err(ApiError::drift());
+                return Err(CoreError::drift());
             }
         }
         let observed: BTreeMap<String, String> = c
@@ -183,12 +183,12 @@ pub fn validate(s: &Spreadsheet, book: &Value) -> Result<(), ApiError> {
             })
             .collect();
         if observed != v.formulas {
-            return Err(ApiError::drift());
+            return Err(CoreError::drift());
         }
         if c.values()
             .any(|v| v["effectiveValue"].get("errorValue").is_some())
         {
-            return Err(ApiError::drift());
+            return Err(CoreError::drift());
         }
         let expected: BTreeSet<_> = v.merges.iter().filter_map(|m| parse_range(m)).collect();
         let mut observed = BTreeSet::new();
@@ -196,16 +196,16 @@ pub fn validate(s: &Spreadsheet, book: &Value) -> Result<(), ApiError> {
             for m in merges {
                 let r0 = m["startRowIndex"].as_u64().unwrap_or(0) as usize;
                 let c0 = m["startColumnIndex"].as_u64().unwrap_or(0) as usize;
-                let r1 = m["endRowIndex"].as_u64().ok_or_else(ApiError::drift)? as usize;
-                let c1 = m["endColumnIndex"].as_u64().ok_or_else(ApiError::drift)? as usize;
-                let (vr, vc, vrr, vcc) = parse_range(&v.range).ok_or_else(ApiError::drift)?;
+                let r1 = m["endRowIndex"].as_u64().ok_or_else(CoreError::drift)? as usize;
+                let c1 = m["endColumnIndex"].as_u64().ok_or_else(CoreError::drift)? as usize;
+                let (vr, vc, vrr, vcc) = parse_range(&v.range).ok_or_else(CoreError::drift)?;
                 if r0 < vrr && r1 > vr && c0 < vcc && c1 > vc {
                     observed.insert((r0, c0, r1, c1));
                 }
             }
         }
         if expected != observed {
-            return Err(ApiError::drift());
+            return Err(CoreError::drift());
         }
     }
     Ok(())
@@ -226,7 +226,7 @@ pub fn project(
     v: &View,
     book: &Value,
     version: &str,
-) -> Result<Vec<Value>, ApiError> {
+) -> Result<Vec<Value>, CoreError> {
     let c = cells(sheet(book, v)?);
     let rev = fingerprint(book);
     let now = chrono::Utc::now().to_rfc3339();
@@ -246,7 +246,7 @@ pub fn project(
                     let description = at(&c, &format!("{}{}", if r == 17 { "C" } else { "B" }, r));
                     // Missing mandatory item position indicates structural drift rather than silent omission.
                     if text(&description).is_none() {
-                        return Err(ApiError::drift());
+                        return Err(CoreError::drift());
                     }
                     let anchor = merged_anchor(v, &format!("D{r}"));
                     let observed = at(&c, &anchor);
@@ -344,7 +344,7 @@ pub fn project(
             }
         }
         Kind::StructuredTasks | Kind::StructuredPayments => {
-            for row in crate::write_model::rows(s, v, book)? {
+            for row in crate::domain::write_model::rows(s, v, book)? {
                 let mut record = record(
                     s,
                     v,
@@ -362,7 +362,7 @@ pub fn project(
             for r in 3..=16 {
                 let label = at(&c, &format!("A{r}"));
                 if text(&label).is_none() {
-                    return Err(ApiError::drift());
+                    return Err(CoreError::drift());
                 }
                 push(
                     format!("A{r}:D{r}"),
@@ -374,12 +374,12 @@ pub fn project(
     }
     Ok(out)
 }
-pub fn report(s: &Spreadsheet, book: &Value, version: &str) -> Result<Value, ApiError> {
+pub fn report(s: &Spreadsheet, book: &Value, version: &str) -> Result<Value, CoreError> {
     let v = s
         .views
         .iter()
         .find(|v| v.kind == Kind::WeddingCosts)
-        .ok_or_else(ApiError::invalid)?;
+        .ok_or_else(CoreError::invalid)?;
     let records = project(s, v, book, version)?;
     let mut sum = 0i64;
     let mut known = 0;
@@ -392,9 +392,9 @@ pub fn report(s: &Spreadsheet, book: &Value, version: &str) -> Result<Value, Api
                     .checked_add(
                         r["fields"]["cost"]["amount"]
                             .as_i64()
-                            .ok_or_else(ApiError::drift)?,
+                            .ok_or_else(CoreError::drift)?,
                     )
-                    .ok_or_else(ApiError::drift)?;
+                    .ok_or_else(CoreError::drift)?;
                 known += 1
             }
             Some("shared") => shared += 1,

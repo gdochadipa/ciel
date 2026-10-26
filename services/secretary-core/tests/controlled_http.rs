@@ -75,15 +75,8 @@ async fn accepted_append_with_lost_response_is_reconciled_once_without_reissuing
         GoogleClient::static_token(&base, "fixture-token").unwrap(),
     )
     .unwrap()
-    .with_writes(
-        Writes::new(
-            journal,
-            true,
-            "operator-token-secret".into(),
-            "business-token-secret",
-        )
-        .unwrap(),
-    );
+    .with_writes(Writes::new(journal, true), "operator-token-secret".into())
+    .unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     let core = tokio::spawn(async move { axum::serve(listener, router(state)).await.unwrap() });

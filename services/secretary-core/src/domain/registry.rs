@@ -1,5 +1,5 @@
-use crate::ApiError;
-use axum::http::StatusCode;
+use super::error::CoreError;
+use crate::domain::error::ErrorKind;
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -192,12 +192,12 @@ impl Registry {
                     return Err("invalid bounded view registration".into());
                 }
                 for cell in v.headers.keys().chain(v.formulas.keys()) {
-                    if crate::projection::coordinate(cell).is_none() {
+                    if crate::domain::projection::coordinate(cell).is_none() {
                         return Err("invalid cell coordinate".into());
                     }
                 }
                 for m in &v.merges {
-                    if crate::projection::parse_range(m).is_none() {
+                    if crate::domain::projection::parse_range(m).is_none() {
                         return Err("invalid merge coordinate".into());
                     }
                 }
@@ -205,13 +205,10 @@ impl Registry {
         }
         Ok(())
     }
-    pub fn lookup(&self, name: &str) -> Result<&Spreadsheet, ApiError> {
+    pub fn lookup(&self, name: &str) -> Result<&Spreadsheet, CoreError> {
         self.spreadsheets
             .iter()
             .find(|s| s.alias == name && s.readable)
-            .ok_or(ApiError(
-                StatusCode::NOT_FOUND,
-                "spreadsheet_not_registered",
-            ))
+            .ok_or(CoreError(ErrorKind::NotFound, "spreadsheet_not_registered"))
     }
 }

@@ -1,9 +1,11 @@
 //! Durable immutable operation journal. SQLite is authoritative for intent and approval, never sheet cells.
-use crate::ApiError;
-use axum::http::StatusCode;
-use serde::{Deserialize, Serialize};
+use crate::domain::error::ErrorKind;
+pub use crate::domain::operation::Preview;
+use crate::domain::{
+    error::CoreError,
+    operation::{digest, Operation, OperationEvent, OperationState, Outcome},
+};
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
     Row, SqlitePool,
@@ -12,62 +14,20 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Preview {
-    pub operation_id: String,
-    pub actor: String,
-    pub spreadsheet: String,
-    pub view: String,
-    pub action: String,
-    pub record_id: String,
-    pub fields: Value,
-    pub before: Value,
-    pub after: Value,
-    pub mapping_version: String,
-    pub source_revision: String,
-    pub expires_at: i64,
-    pub preview_digest: String,
-}
-impl Preview {
-    pub fn request_digest(&self) -> String {
-        digest(
-            &json!({"operation_id":self.operation_id,"actor":self.actor,"spreadsheet":self.spreadsheet,"view":self.view,"action":self.action,"record_id":if self.action=="update"{Some(&self.record_id)}else{None},"fields":self.fields}),
-        )
-    }
-    pub fn public(&self, state: &str) -> Value {
-        let mut out = serde_json::to_value(self).unwrap_or(Value::Null);
-        out["state"] = json!(state);
-        out["expires_at"] = json!(chrono::DateTime::from_timestamp(self.expires_at, 0)
-            .map(|t| t.to_rfc3339())
-            .unwrap_or_default());
-        out
-    }
-}
-fn digest(v: &Value) -> String {
-    format!(
-        "{:x}",
-        Sha256::digest(serde_json::to_vec(v).unwrap_or_default())
-    )
-}
-#[derive(Clone, Debug)]
-pub struct Operation {
-    pub preview: Preview,
-    pub state: String,
-}
 #[derive(Clone)]
 pub struct Journal {
     pool: SqlitePool,
     directory: PathBuf,
     _lock: std::sync::Arc<std::fs::File>,
 }
-fn storage() -> ApiError {
-    ApiError(StatusCode::SERVICE_UNAVAILABLE, "journal_unavailable")
+fn storage() -> CoreError {
+    CoreError(ErrorKind::Unavailable, "journal_unavailable")
 }
-fn conflict() -> ApiError {
-    ApiError(StatusCode::CONFLICT, "operation_conflict")
+fn conflict() -> CoreError {
+    CoreError(ErrorKind::Conflict, "operation_conflict")
 }
 impl Journal {
-    pub async fn open(directory: &Path) -> Result<Self, ApiError> {
+    pub async fn open(directory: &Path) -> Result<Self, CoreError> {
         use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
         if let Ok(meta) = std::fs::symlink_metadata(directory) {
             if meta.file_type().is_symlink() || !meta.is_dir() {
@@ -91,6 +51,7 @@ impl Journal {
         use std::os::unix::fs::OpenOptionsExt;
         let lock = std::fs::OpenOptions::new()
             .create(true)
+            .truncate(false)
             .read(true)
             .write(true)
             .mode(0o600)
@@ -132,20 +93,24 @@ impl Journal {
             _lock: std::sync::Arc::new(lock),
         };
         // A process may have stopped after sending a request. Never resend that intent.
-        sqlx::query(
-            "UPDATE operations SET state='reconciliation',updated_at=? WHERE state='applying'",
-        )
-        .bind(chrono::Utc::now().timestamp())
-        .execute(&journal.pool)
-        .await
-        .map_err(|_| storage())?;
+        sqlx::query("UPDATE operations SET state=?,updated_at=? WHERE state=?")
+            .bind(
+                OperationState::Applying
+                    .transition(OperationEvent::Recover)?
+                    .as_str(),
+            )
+            .bind(chrono::Utc::now().timestamp())
+            .bind(OperationState::Applying.as_str())
+            .execute(&journal.pool)
+            .await
+            .map_err(|_| storage())?;
         journal.audit(None, "startup_recovery").await?;
         Ok(journal)
     }
     pub fn directory(&self) -> &Path {
         &self.directory
     }
-    pub async fn audit(&self, id: Option<&str>, event: &str) -> Result<(), ApiError> {
+    pub async fn audit(&self, id: Option<&str>, event: &str) -> Result<(), CoreError> {
         sqlx::query("INSERT INTO audit(operation_id,event,occurred_at) VALUES(?,?,?)")
             .bind(id)
             .bind(event)
@@ -155,7 +120,7 @@ impl Journal {
             .map_err(|_| storage())?;
         Ok(())
     }
-    pub async fn find(&self, id: &str) -> Result<Option<Operation>, ApiError> {
+    pub async fn find(&self, id: &str) -> Result<Option<Operation>, CoreError> {
         let row = sqlx::query("SELECT preview,state FROM operations WHERE operation_id=?")
             .bind(id)
             .fetch_optional(&self.pool)
@@ -165,17 +130,17 @@ impl Journal {
             Ok(Operation {
                 preview: serde_json::from_str(r.get::<&str, _>("preview"))
                     .map_err(|_| storage())?,
-                state: r.get("state"),
+                state: r.get::<&str, _>("state").parse()?,
             })
         })
         .transpose()
     }
-    pub async fn get(&self, id: &str) -> Result<Operation, ApiError> {
+    pub async fn get(&self, id: &str) -> Result<Operation, CoreError> {
         self.find(id)
             .await?
-            .ok_or(ApiError(StatusCode::NOT_FOUND, "operation_not_found"))
+            .ok_or(CoreError(ErrorKind::NotFound, "operation_not_found"))
     }
-    pub async fn create(&self, mut p: Preview) -> Result<Preview, ApiError> {
+    pub async fn create(&self, mut p: Preview) -> Result<Preview, CoreError> {
         let mut tx = self.pool.begin().await.map_err(|_| storage())?;
         if let Some(row) =
             sqlx::query("SELECT request_digest,preview FROM operations WHERE operation_id=?")
@@ -202,25 +167,19 @@ impl Journal {
         tx.commit().await.map_err(|_| storage())?;
         Ok(p)
     }
-    async fn transition(
-        &self,
-        id: &str,
-        expected: &[&str],
-        state: &str,
-    ) -> Result<Operation, ApiError> {
+    async fn transition(&self, id: &str, event: OperationEvent) -> Result<Operation, CoreError> {
         let mut tx = self.pool.begin().await.map_err(|_| storage())?;
         let row = sqlx::query("SELECT state FROM operations WHERE operation_id=?")
             .bind(id)
             .fetch_optional(&mut *tx)
             .await
             .map_err(|_| storage())?
-            .ok_or(ApiError(StatusCode::NOT_FOUND, "operation_not_found"))?;
-        if !expected.contains(&row.get::<&str, _>("state")) {
-            return Err(conflict());
-        }
+            .ok_or(CoreError(ErrorKind::NotFound, "operation_not_found"))?;
+        let current: OperationState = row.get::<&str, _>("state").parse()?;
+        let state = current.transition(event)?;
         let now = chrono::Utc::now().timestamp();
         sqlx::query("UPDATE operations SET state=?,updated_at=? WHERE operation_id=?")
-            .bind(state)
+            .bind(state.as_str())
             .bind(now)
             .bind(id)
             .execute(&mut *tx)
@@ -228,7 +187,7 @@ impl Journal {
             .map_err(|_| storage())?;
         sqlx::query("INSERT INTO audit(operation_id,event,occurred_at) VALUES(?,?,?)")
             .bind(id)
-            .bind(state)
+            .bind(state.as_str())
             .bind(now)
             .execute(&mut *tx)
             .await
@@ -241,62 +200,47 @@ impl Journal {
         id: &str,
         preview_digest: &str,
         decision: &str,
-    ) -> Result<Operation, ApiError> {
+    ) -> Result<Operation, CoreError> {
         let operation = self.get(id).await?;
-        if operation.preview.preview_digest != preview_digest {
-            self.audit(Some(id), "approval_digest_mismatch").await?;
-            return Err(conflict());
-        }
-        if operation.preview.expires_at <= chrono::Utc::now().timestamp()
-            && ["previewed", "approved"].contains(&operation.state.as_str())
-        {
-            self.transition(id, &["previewed", "approved"], "expired")
-                .await?;
-            return Err(ApiError(StatusCode::CONFLICT, "approval_expired"));
-        }
-        let state = match decision {
-            "approve" => "approved",
-            "reject" => "rejected",
-            _ => return Err(ApiError::invalid()),
+        let event = match operation.approval_event(
+            preview_digest,
+            decision,
+            chrono::Utc::now().timestamp(),
+        ) {
+            Ok(event) => event,
+            Err(error) => {
+                if error.1 == "operation_conflict" {
+                    self.audit(Some(id), "approval_digest_mismatch").await?;
+                }
+                return Err(error);
+            }
         };
-        if operation.state == state {
-            return Ok(operation);
+        if matches!(event, OperationEvent::Expire) {
+            self.transition(id, event).await?;
+            return Err(CoreError(ErrorKind::Conflict, "approval_expired"));
         }
-        self.transition(id, &["previewed"], state).await
+        self.transition(id, event).await
     }
-    pub async fn begin_apply(&self, id: &str) -> Result<Operation, ApiError> {
+    pub async fn begin_apply(&self, id: &str) -> Result<Operation, CoreError> {
         let operation = self.get(id).await?;
-        if operation.preview.expires_at <= chrono::Utc::now().timestamp()
-            && operation.state == "approved"
-        {
-            self.transition(id, &["approved"], "expired").await?;
-            return Err(ApiError(StatusCode::CONFLICT, "approval_expired"));
+        let event = operation.apply_event(chrono::Utc::now().timestamp());
+        if matches!(event, OperationEvent::Expire) {
+            self.transition(id, event).await?;
+            return Err(CoreError(ErrorKind::Conflict, "approval_expired"));
         }
-        self.transition(id, &["approved"], "applying").await
+        self.transition(id, event).await
     }
-    pub async fn finish(&self, id: &str, state: &str) -> Result<Operation, ApiError> {
-        if ![
-            "applied",
-            "known_failure",
-            "uncertain",
-            "conflict",
-            "reconciliation",
-        ]
-        .contains(&state)
-        {
-            return Err(ApiError::invalid());
-        }
-        self.transition(id, &["applying", "uncertain", "reconciliation"], state)
-            .await
+    pub async fn finish(&self, id: &str, outcome: Outcome) -> Result<Operation, CoreError> {
+        self.transition(id, OperationEvent::Finish(outcome)).await
     }
     pub async fn history(
         &self,
         operation: Option<&str>,
         limit: usize,
         cursor: usize,
-    ) -> Result<Value, ApiError> {
+    ) -> Result<Value, CoreError> {
         if limit == 0 || limit > 100 || cursor > 1_000_000 {
-            return Err(ApiError::invalid());
+            return Err(CoreError::invalid());
         }
         if let Some(id) = operation {
             let o = self.get(id).await?;
@@ -304,7 +248,7 @@ impl Journal {
             let more = audit.len() > limit;
             let entries:Vec<_>=audit.into_iter().take(limit).map(|r|json!({"sequence":r.get::<i64,_>("sequence"),"event":r.get::<String,_>("event"),"occurred_at":r.get::<i64,_>("occurred_at")})).collect();
             return Ok(
-                json!({"operation":o.preview.public(&o.state),"events":entries,"next_cursor":if more{Some((cursor+limit).to_string())}else{None}}),
+                json!({"operation":o.preview.public(o.state.as_str()),"events":entries,"next_cursor":if more{Some((cursor+limit).to_string())}else{None}}),
             );
         }
         let rows=sqlx::query("SELECT preview,state FROM operations ORDER BY updated_at DESC,operation_id LIMIT ? OFFSET ?").bind((limit+1)as i64).bind(cursor as i64).fetch_all(&self.pool).await.map_err(|_|storage())?;
@@ -312,10 +256,68 @@ impl Journal {
         let mut records = Vec::new();
         for row in rows.into_iter().take(limit) {
             let p: Preview = serde_json::from_str(row.get("preview")).map_err(|_| storage())?;
-            records.push(p.public(row.get("state")))
+            let state: OperationState = row.get::<&str, _>("state").parse()?;
+            records.push(p.public(state.as_str()))
         }
         Ok(
             json!({"operations":records,"next_cursor":if more{Some((cursor+limit).to_string())}else{None}}),
         )
+    }
+}
+
+impl crate::application::ports::OperationStore for Journal {
+    fn audit<'a>(
+        &'a self,
+        id: Option<&'a str>,
+        event: &'a str,
+    ) -> crate::application::ports::PortFuture<'a, Result<(), CoreError>> {
+        Box::pin(self.audit(id, event))
+    }
+    fn find<'a>(
+        &'a self,
+        id: &'a str,
+    ) -> crate::application::ports::PortFuture<'a, Result<Option<Operation>, CoreError>> {
+        Box::pin(self.find(id))
+    }
+    fn get<'a>(
+        &'a self,
+        id: &'a str,
+    ) -> crate::application::ports::PortFuture<'a, Result<Operation, CoreError>> {
+        Box::pin(self.get(id))
+    }
+    fn create(
+        &self,
+        p: Preview,
+    ) -> crate::application::ports::PortFuture<'_, Result<Preview, CoreError>> {
+        Box::pin(self.create(p))
+    }
+    fn approve<'a>(
+        &'a self,
+        id: &'a str,
+        digest: &'a str,
+        decision: &'a str,
+    ) -> crate::application::ports::PortFuture<'a, Result<Operation, CoreError>> {
+        Box::pin(self.approve(id, digest, decision))
+    }
+    fn begin_apply<'a>(
+        &'a self,
+        id: &'a str,
+    ) -> crate::application::ports::PortFuture<'a, Result<Operation, CoreError>> {
+        Box::pin(self.begin_apply(id))
+    }
+    fn finish<'a>(
+        &'a self,
+        id: &'a str,
+        outcome: Outcome,
+    ) -> crate::application::ports::PortFuture<'a, Result<Operation, CoreError>> {
+        Box::pin(self.finish(id, outcome))
+    }
+    fn history<'a>(
+        &'a self,
+        id: Option<&'a str>,
+        limit: usize,
+        cursor: usize,
+    ) -> crate::application::ports::PortFuture<'a, Result<Value, CoreError>> {
+        Box::pin(self.history(id, limit, cursor))
     }
 }

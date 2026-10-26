@@ -15,6 +15,7 @@ edition="2021"
 name="secretary_core"
 [dependencies]
 axum="0.8"
+tower={version="0.5",features=["util"]}
 serde={version="1",features=["derive"]}
 serde_json="1"
 chrono="0.4"
@@ -24,14 +25,15 @@ uuid={version="1",features=["v4"]}
 tokio={version="1",features=["full"]}
 ''')
 lines=[]
-for name in ('error','registry','projection','journal','write_model'):
-    lines.append('#[path='+json.dumps(str(src/'src'/f'{name}.rs'))+'] pub mod '+name+';')
-lines.append('pub use error::ApiError; pub use registry::Registry;')
+for name in ('domain','application','presentation'):
+    lines.append('#[path='+json.dumps(str(src/'src'/name/'mod.rs'))+'] pub mod '+name+';')
+lines.append('pub mod infrastructure { #[path='+json.dumps(str(src/'src/infrastructure/journal.rs'))+'] pub mod journal; }')
+lines.append('pub use domain::{error::CoreError,registry::Registry,registry,projection,write_model}; pub use infrastructure::journal; pub use application::writes; pub use presentation::http::{router,AppState};')
 (target/'src/lib.rs').write_text('\n'.join(lines))
-for name in ('adapter','write_adapter','write_journal'):
+for name in ('adapter','write_adapter','write_journal','command_bus'):
     (target/'tests'/f'{name}.rs').write_text((src/'tests'/f'{name}.rs').read_text())
 common=(src/'tests/common/mod.rs').read_text().replace('"../../../../config/spreadsheets.example.json"',json.dumps(str(repo/'config/spreadsheets.example.json')))
 (target/'tests/common/mod.rs').write_text(common)
 PY
-cargo test --offline --manifest-path "$harness/Cargo.toml"
-echo "Adapter-only evidence; production Reqwest/OAuth and public HTTP tests require full cargo test. Harness: $harness"
+CARGO_TARGET_DIR="${TMPDIR:-/tmp}/secretary-adapter-target" cargo test --offline --manifest-path "$harness/Cargo.toml"
+echo "Domain/application/presentation/journal evidence; production Reqwest/OAuth and socket tests require full cargo test. Harness: $harness"
