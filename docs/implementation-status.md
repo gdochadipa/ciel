@@ -18,7 +18,7 @@ Initial implementation agents ran at medium reasoning effort. The owner subseque
 | Check | Result and limit |
 | --- | --- |
 | Actual-source Rust domain/application/presentation/journal harness | 16 passed. Covers mappings, identity rules, approvals, expiry/rejection, restart/exclusive journal ownership, typed source-port commands and real in-process Axum authentication/dispatch. Excludes production Google/OAuth and socket transport. |
-| Public bridge tests | Eight passed, three real HTTP tests skipped by default because this sandbox cannot bind loopback. Native Gateway fixtures establish adapter behavior only. |
+| Public bridge tests | Fourteen passed, three real HTTP tests skipped by default because this sandbox cannot bind loopback. Native Gateway fixtures establish adapter behavior only. |
 | Acceptance configuration checks | Three additional checks pass. These are not Core/provider acceptance evidence. |
 | Standalone bridge and acceptance runner bundles | Pass syntax/bundling checks; do not prove installed SDK type compatibility or activation. |
 | Rust formatting; JSON contract/config/reference checks; script syntax | Pass. |
@@ -55,3 +55,8 @@ Once dependency locks and the actual runtime are available, run `bash scripts/ve
 T009 resolves both P2 findings from the authorized low-effort review: the bridge and manifest default to the Core listener on 8787; native reminders are retained after cancellation/completion so history and idempotent creation can reconcile them. Eight bridge checks and three acceptance configuration checks pass; three HTTP tests remain skipped.
 
 T010 applies the owner's DDD/hexagonal direction to Rust: domain rules and a typed operation FSM, an application command bus and ports, Google/SQLite infrastructure adapters, and HTTP presentation. Credentials and HTTP status mapping stay in presentation. Existing HTTP/JSON/journal formats are preserved. Uncertain operations cannot be downgraded to known failure without evidence or replayed. The harness now compiles the real application and router using cached dependencies; 16 checks pass, including in-process HTTP requests. Clippy with warnings denied passes for this cached-source graph. This evidence still excludes actual Reqwest/OAuth, sockets, installed SDK activation and live resources.
+
+
+## Continued plugin work
+
+T011 strengthens native reminders: bounded paged discovery across disabled/retained jobs, duplicate/invalid/overflow rejection, required native revisions on updates, trusted invocation checks immediately before mutation, and refusal to reactivate jobs with changed native payloads/delivery routes. Reminder tool descriptions now explain retry, cancellation and delivery semantics. Fourteen public bridge checks and three acceptance-configuration checks pass; three socket HTTP tests remain skipped. Native Gateway fixtures prove local adapter behavior only. Pagination snapshots, creation convergence, installed SDK activation and live channel behavior remain qualification gaps; no live jobs were touched.

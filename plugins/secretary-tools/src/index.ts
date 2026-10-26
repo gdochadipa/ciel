@@ -2,6 +2,16 @@
 import { definePluginEntry, type OpenClawPluginApi, type OpenClawPluginToolContext, type AnyAgentTool } from 'openclaw/plugin-sdk/plugin-entry';
 import {createSecretary, coreTools, type Options} from './bridge.js';
 const reminderTools=['create','list','get','reschedule','pause','resume','cancel','history'].map(action=>`reminders_${action}`);
+const reminderDescriptions:Record<string,string>={
+ reminders_create:'Create a reminder using a stable reminder_id and an exact timestamp with offset or a five-field cron schedule. Clarify ambiguous dates first. Reuse the ID to reconcile a retry; a changed request conflicts. Execution does not prove message delivery.',
+ reminders_list:'List owner-scoped native reminders, including disabled and retained completed jobs. A scheduler discovery error means the list is incomplete; do not infer that a reminder is missing.',
+ reminders_get:'Read the current native job for a secretary reminder_id.',
+ reminders_reschedule:'Change only the schedule of an owner reminder using its current native revision. After an error, read its current state before deciding to retry.',
+ reminders_pause:'Disable an owner reminder while retaining its native job and history. After an error, inspect current state before retrying.',
+ reminders_resume:'Explicitly re-enable an owner reminder. A changed native payload or outbound route requires reconciliation and cannot be enabled by this tool.',
+ reminders_cancel:'Cancel an owner reminder by disabling and retaining the native job for history. Creation retries do not resume canceled jobs.',
+ reminders_history:'Read up to 100 recent native executions. Preserve separate execution and delivery statuses; unknown or accepted delivery is not proof of receipt.',
+};
 export default definePluginEntry({
  id:'secretary-tools', name:'Personal Secretary tools', description:'Bounded owner-only Core and native scheduler bridge',
  register(api: OpenClawPluginApi) {
@@ -11,7 +21,7 @@ export default definePluginEntry({
   const bridge=createSecretary(options);
   const names=[...coreTools,...reminderTools,'memory_capabilities'];
   api.registerTool((context: OpenClawPluginToolContext): AnyAgentTool[] => names.map(name=>({
-   name,label:name,description:name==='memory_capabilities'?'Native memory mutations are unavailable.':'Owner-only secretary operation; input cannot set actor, credentials, host or outbound recipient.',
+   name,label:name,description:reminderDescriptions[name]??(name==='memory_capabilities'?'Native memory mutations are unavailable.':'Owner-only secretary operation; input cannot set actor, credentials, host or outbound recipient.'),
    parameters: schemas[name]??{type:'object',additionalProperties:false,properties:{}},
    async execute(_toolCallId,params) {
     try {

@@ -40,7 +40,7 @@ test('owner creates and reconciles a declared native reminder and sees separate 
  await expect(bridge.execute('reminders_create',{...input,schedule:{kind:'at',at:'next month'}},owner)).rejects.toThrow('EXACT_SCHEDULE_REQUIRED');
 });
 test('native reminder lifecycle uses native IDs and revision-shaped patches', async () => {
- const job={id:'job-42',declarationKey:'secretary:+628123:deposit',schedule:{kind:'at',at:'2027-01-01T00:00:00.000Z'},enabled:true};
+ const job={id:'job-42',sessionTarget:'main',payload:{kind:'systemEvent',text:'Sample reminder'},configRevision:'fixture-revision',declarationKey:'secretary:+628123:deposit',schedule:{kind:'at',at:'2027-01-01T00:00:00.000Z'},enabled:true};
  const gateway={isAvailable:()=>true,async request(method:string,params:any):Promise<any> {
   if(method==='cron.list') return {jobs:[job,{id:'outsider',declarationKey:'secretary:+other:private'}]};
   expect(params.id).toBe('job-42');
@@ -108,7 +108,7 @@ test('canceled reminders retain history and stay canceled across bridge restarts
  const entries=[{jobId:'native-retained',status:'ok',delivered:false,deliveryStatus:'not-delivered'}];
  const gateway={isAvailable:()=>true,async request(method:string,params:any):Promise<any> {
   if(method==='cron.list') return {jobs:structuredClone(jobs)};
-  if(method==='cron.add') {const job={...structuredClone(params),id:'native-retained',enabled:true};jobs.push(job);return {created:true,job};}
+  if(method==='cron.add') {const job={...structuredClone(params),id:'native-retained',configRevision:'fixture-revision',enabled:true};jobs.push(job);return {created:true,job};}
   const job=jobs.find(j=>j.id===params.id);
   if(method==='cron.update') {Object.assign(job,params.patch);return structuredClone(job);}
   if(method==='cron.remove') {jobs.splice(jobs.indexOf(job),1);return {ok:true,removed:true};}
@@ -143,4 +143,99 @@ test('one-time reminders retain their native identity and completed history with
  const restarted=createSecretary(options);
  expect(await restarted.execute('reminders_history',{reminder_id:'one-time'},owner)).toEqual({entries});
  expect(await restarted.execute('reminders_create',input,owner)).toMatchObject({reconciled:true,job:{id:'one-time-job',enabled:false}});
+});
+
+test('reminders beyond the first scheduler page reconcile without being recreated', async () => {
+ const target={id:'later-job',declarationKey:'secretary:+628123:later',configRevision:'rev-later',enabled:false,sessionTarget:'main',schedule:{kind:'cron',expr:'0 9 * * *',tz:'Asia/Makassar'},payload:{kind:'systemEvent',text:'Retained reminder'}};
+ const gateway={isAvailable:()=>true,async request(method:string,params:any):Promise<any> {
+  if(method==='cron.list') return params.offset===200?{jobs:[target],hasMore:false,nextOffset:null}:{jobs:Array.from({length:200},(_,i)=>({id:`other-${i}`,declarationKey:`other:${i}`})),hasMore:true,nextOffset:200};
+  if(method==='cron.add') throw Error('must not duplicate an existing reminder');
+  throw Error('unexpected RPC');
+ }};
+ const bridge=createSecretary({coreToken:'synthetic',owner:'+628123',gateway,schedulerQualified:true});
+ expect(await bridge.execute('reminders_create',{reminder_id:'later',text:'Retained reminder',schedule:{kind:'cron',expr:'0 9 * * *'}},owner)).toMatchObject({reconciled:true,job:{id:'later-job',enabled:false}});
+ expect(await bridge.execute('reminders_list',{},owner)).toEqual({jobs:[target]});
+});
+
+test('reminder updates use the observed revision and preserve a concurrent native edit', async () => {
+ let race=false;
+ const job:any={id:'revision-job',sessionTarget:'main',payload:{kind:'systemEvent',text:'Sample reminder'},declarationKey:'secretary:+628123:revision',configRevision:'v1',enabled:true,schedule:{kind:'cron',expr:'0 9 * * *',tz:'Asia/Makassar'}};
+ const gateway={isAvailable:()=>true,async request(method:string,params:any):Promise<any> {
+  if(method==='cron.list') {const snapshot=structuredClone(job);if(race){race=false;job.configRevision='owner-edit';job.schedule.expr='0 10 * * *';}return {jobs:[snapshot]};}
+  if(method==='cron.get') return structuredClone(job);
+  if(method==='cron.update') {
+   if(params.expectedConfigRevision!==job.configRevision) throw Error('revision conflict');
+   Object.assign(job,params.patch,{configRevision:'v2'});return structuredClone(job);
+  }
+  throw Error('unexpected RPC');
+ }};
+ const bridge=createSecretary({coreToken:'synthetic',owner:'+628123',gateway,schedulerQualified:true});
+ expect(await bridge.execute('reminders_pause',{reminder_id:'revision'},owner)).toMatchObject({enabled:false});
+ race=true;
+ await expect(bridge.execute('reminders_reschedule',{reminder_id:'revision',schedule:{kind:'cron',expr:'0 11 * * *'}},owner)).rejects.toThrow('revision conflict');
+ expect(await bridge.execute('reminders_get',{reminder_id:'revision'},owner)).toMatchObject({job:{schedule:{expr:'0 10 * * *'},configRevision:'owner-edit'}});
+});
+
+test('unversioned native jobs remain readable but cannot be changed', async () => {
+ let modified=false;
+ const job={id:'legacy-job',declarationKey:'secretary:+628123:legacy',enabled:true};
+ const gateway={isAvailable:()=>true,async request(method:string):Promise<any> {
+  if(method==='cron.list') return {jobs:[job]};
+  if(method==='cron.get') return job;
+  modified=true;return {};
+ }};
+ const bridge=createSecretary({coreToken:'synthetic',owner:'+628123',gateway,schedulerQualified:true});
+ expect(await bridge.execute('reminders_get',{reminder_id:'legacy'},owner)).toEqual({job});
+ await expect(bridge.execute('reminders_pause',{reminder_id:'legacy'},owner)).rejects.toThrow('REMINDER_REVISION_REQUIRED');
+ expect(modified).toBe(false);
+});
+
+test('expired invocations cannot create or change reminders after scheduler discovery', async () => {
+ for(const action of ['create','pause']) {
+  let active=true,modified=false;
+  const gateway={isAvailable:()=>true,async request(method:string):Promise<any> {
+   if(method==='cron.list') {active=false;return {jobs:action==='create'?[]:[{id:'stale-job',declarationKey:'secretary:+628123:stale',configRevision:'v1'}]};}
+   modified=true;return {id:'stale-job'};
+  }};
+  const bridge=createSecretary({coreToken:'synthetic',owner:'+628123',gateway,schedulerQualified:true});
+  const identity={...owner,assertInvocationCurrent(){if(!active)throw Error('INVOCATION_EXPIRED');}};
+  const input=action==='create'?{reminder_id:'stale',text:'Sample reminder',schedule:{kind:'cron',expr:'0 9 * * *'}}:{reminder_id:'stale'};
+  await expect(bridge.execute(`reminders_${action}`,input,identity)).rejects.toThrow('INVOCATION_EXPIRED');
+  expect(modified).toBe(false);
+ }
+});
+
+test('incomplete or unstable scheduler discovery cannot authorize a new reminder', async () => {
+ const scenarios=[
+  {error:'INVALID_GATEWAY_RESPONSE',page:(offset:number)=>({jobs:[{id:'bad-offset'}],hasMore:true,nextOffset:offset})},
+  {error:'SCHEDULER_SNAPSHOT_CHANGED',page:(offset:number)=>({jobs:[{id:'repeated-job'}],hasMore:offset===0,nextOffset:offset===0?200:null})},
+  {error:'SCHEDULER_LIST_TOO_LARGE',page:(offset:number)=>({jobs:[{id:`job-${offset}`}],hasMore:true,nextOffset:offset+1})},
+ ];
+ for(const scenario of scenarios) {
+  let modified=false;
+  const gateway={isAvailable:()=>true,async request(method:string,params:any):Promise<any> {
+   if(method==='cron.list') return scenario.page(params.offset??0);
+   modified=true;return {};
+  }};
+  const bridge=createSecretary({coreToken:'synthetic',owner:'+628123',gateway,schedulerQualified:true});
+  await expect(bridge.execute('reminders_create',{reminder_id:'must-wait',text:'Sample reminder',schedule:{kind:'cron',expr:'0 9 * * *'}},owner)).rejects.toThrow(scenario.error);
+  expect(modified).toBe(false);
+ }
+});
+
+test('changed native payloads or delivery routes cannot be reactivated through secretary tools', async () => {
+ for(const changed of [
+  {sessionTarget:'isolated',payload:{kind:'agentTurn',message:'Changed workflow'}},
+  {delivery:{mode:'announce',channel:'whatsapp',to:'+other'}},
+ ]) {
+  let modified=false;
+  const job={id:'changed-job',declarationKey:'secretary:+628123:changed',configRevision:'v1',sessionTarget:'main',payload:{kind:'systemEvent',text:'Original reminder'},enabled:false,...changed};
+  const gateway={isAvailable:()=>true,async request(method:string):Promise<any> {
+   if(method==='cron.list') return {jobs:[job]};
+   modified=true;return {...job,enabled:true};
+  }};
+  const bridge=createSecretary({coreToken:'synthetic',owner:'+628123',gateway,schedulerQualified:true});
+  await expect(bridge.execute('reminders_resume',{reminder_id:'changed'},owner)).rejects.toThrow('REMINDER_CONFLICT');
+  expect(modified).toBe(false);
+ }
 });

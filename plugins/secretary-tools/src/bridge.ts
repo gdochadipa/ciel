@@ -10,6 +10,10 @@ export class SecretaryError extends Error { constructor(public code: string) { s
 const fail = (code: string): never => { throw new SecretaryError(code); };
 function object(value: unknown): Record<string, unknown> { if (!value || typeof value !== 'object' || Array.isArray(value)) fail('INVALID_INPUT'); return value as Record<string,unknown>; }
 function shape(value: unknown, required: string[], optional: string[] = []) { const input = object(value); if (required.some(k => !(k in input)) || Object.keys(input).some(k => ![...required,...optional].includes(k))) fail('INVALID_INPUT'); return input; }
+function isReminderJob(job: Record<string,unknown>): boolean {
+ const payload=job.payload;
+ return job.sessionTarget==='main' && job.delivery===undefined && !!payload && typeof payload==='object' && !Array.isArray(payload) && (payload as Record<string,unknown>).kind==='systemEvent';
+}
 export const DEFAULT_CORE_URL = 'http://127.0.0.1:8787';
 const canceledReminderDescription = 'Secretary: canceled; retained for history';
 export function createSecretary(options: Options) {
@@ -35,7 +39,7 @@ export function createSecretary(options: Options) {
   authorize(identity);
   if(name==='memory_capabilities') {shape(value,[]);return {available:false,reason:'Native memory CRUD, history and automatic-save opt-out require qualification'};}
   if (name.startsWith('memory_')) fail('MEMORY_UNAVAILABLE');
-  if (name.startsWith('reminders_')) return reminder(name, value);
+  if (name.startsWith('reminders_')) return reminder(name, value, identity);
   if (!fields[name]) fail('UNKNOWN_TOOL');
   const input = shape(value,...fields[name]);
   for (const [key,val] of Object.entries(input)) {
@@ -53,7 +57,7 @@ export function createSecretary(options: Options) {
   }
   return result;
  }
- async function reminder(name: string, value: unknown): Promise<unknown> {
+ async function reminder(name: string, value: unknown, identity: Identity): Promise<unknown> {
   const gateway=options.gateway;
   if(!options.schedulerQualified || !gateway?.isAvailable()) fail('SCHEDULER_UNAVAILABLE');
   const action=name.slice('reminders_'.length);
@@ -66,28 +70,51 @@ export function createSecretary(options: Options) {
   const schedule=input.schedule===undefined?undefined:exactSchedule(input.schedule);
   if(action==='create' && (typeof input.text!=='string' || !input.text.trim() || input.text.length>2000)) fail('INVALID_INPUT');
   // No arbitrary delivery target: main-session events wake the owner agent only.
-  const result=object(await gateway.request('cron.list',{includeDisabled:true}));
-  if(!Array.isArray(result.jobs)) fail('INVALID_GATEWAY_RESPONSE');
-  const jobs=result.jobs.filter((job:any)=>typeof job.declarationKey==='string' && job.declarationKey.startsWith(prefix));
+  const allJobs:Record<string,unknown>[]=[];
+  const seenIds=new Set<string>();
+  let offset=0, responseBytes=0;
+  for(let page=0;;page++) {
+   if(page>=10) fail('SCHEDULER_LIST_TOO_LARGE');
+   authorize(identity);
+   const result=object(await gateway.request('cron.list',{includeDisabled:true,limit:200,offset,sortBy:'name',sortDir:'asc'}));
+   responseBytes+=new TextEncoder().encode(JSON.stringify(result)).length;
+   if(responseBytes>(options.maxResponseBytes??2097152)) fail('SCHEDULER_LIST_TOO_LARGE');
+   if(!Array.isArray(result.jobs) || result.jobs.length>200 || (result.hasMore!==undefined && typeof result.hasMore!=='boolean')) fail('INVALID_GATEWAY_RESPONSE');
+   for(const value of result.jobs) {
+    const job=object(value);
+    if(typeof job.id!=='string' || !job.id) fail('INVALID_GATEWAY_RESPONSE');
+    if(seenIds.has(job.id)) fail('SCHEDULER_SNAPSHOT_CHANGED');
+    seenIds.add(job.id);allJobs.push(job);
+   }
+   if(result.hasMore===false || (result.hasMore===undefined && result.jobs.length<200)) break;
+   const nextOffset=result.nextOffset??(result.hasMore===undefined?offset+200:undefined);
+   if(!Number.isSafeInteger(nextOffset) || Number(nextOffset)<=offset || result.jobs.length===0) fail('INVALID_GATEWAY_RESPONSE');
+   offset=Number(nextOffset);
+  }
+  const jobs=allJobs.filter(job=>typeof job.declarationKey==='string' && job.declarationKey.startsWith(prefix));
   if(action==='list') return {jobs};
   const matches=jobs.filter((job:any)=>job.declarationKey===key);
   if(matches.length>1) fail('REMINDER_RECONCILIATION_REQUIRED');
   const existing=matches[0] as Record<string,unknown>|undefined;
   if(action==='create') {
    if(existing) {
-    if(existing.sessionTarget!=='main' || existing.delivery!==undefined || object(existing.payload).kind!=='systemEvent') fail('REMINDER_CONFLICT');
+    if(!isReminderJob(existing)) fail('REMINDER_CONFLICT');
     if(JSON.stringify(existing.schedule)!==JSON.stringify(schedule) || object(existing.payload).text!==input.text) fail('REMINDER_CONFLICT');
     return {reconciled:true,job:existing};
    }
+   authorize(identity);
    const added=object(await gateway.request('cron.add',{name:`Secretary ${input.reminder_id}`,declarationKey:key,schedule,sessionTarget:'main',wakeMode:'now',payload:{kind:'systemEvent',text:input.text},deleteAfterRun:false}));
    return {reconciled:false,job:added.job??added,delivery:'unconfirmed'};
   }
   if(!existing || typeof existing.id!=='string') fail('REMINDER_NOT_FOUND');
   if(action==='get') return {job:await gateway.request('cron.get',{id:existing.id})};
   if(action==='history') return gateway.request('cron.runs',{id:existing.id,limit:100});
+  if(['resume','reschedule'].includes(action) && !isReminderJob(existing)) fail('REMINDER_CONFLICT');
+  if(typeof existing.configRevision!=='string' || !existing.configRevision.trim() || existing.configRevision.length>128) fail('REMINDER_REVISION_REQUIRED');
+  authorize(identity);
   // Cancellation retains the native identity and run history; an explicit resume can reactivate it.
-  if(action==='cancel') return gateway.request('cron.update',{id:existing.id,patch:{enabled:false,deleteAfterRun:false,description:canceledReminderDescription}});
-  return gateway.request('cron.update',{id:existing.id,patch:action==='reschedule'?{schedule}:{enabled:action==='resume',...(action==='resume' && existing.description===canceledReminderDescription?{description:''}:{})}});
+  if(action==='cancel') return gateway.request('cron.update',{id:existing.id,expectedConfigRevision:existing.configRevision,patch:{enabled:false,deleteAfterRun:false,description:canceledReminderDescription}});
+  return gateway.request('cron.update',{id:existing.id,expectedConfigRevision:existing.configRevision,patch:action==='reschedule'?{schedule}:{enabled:action==='resume',...(action==='resume' && existing.description===canceledReminderDescription?{description:''}:{})}});
  }
  async function prepareApproval(name: string, value: unknown, identity: Identity) {
   authorize(identity);
