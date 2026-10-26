@@ -12,6 +12,8 @@ The eight `sheets_*` tools and `reports_wedding` call authenticated Core `/v1/to
 
 `memory_capabilities` reports unavailable. Mutation/search lifecycle APIs, provenance/history and automatic-save opt-out have not been verified. Do not substitute a separate memory database or infer that casual conversation authorizes saving; defer memory tools until a bounded native adapter is qualified.
 
+The [pinned native memory assessment](../../docs/native-memory-assessment.md) records available read interfaces and the remaining lifecycle gaps. The dedicated-runtime template disables documented automatic-saving paths and denies general write/shell tools; it does not qualify native memory mutations or change a live host.
+
 ## Checks
 
 Run `bun test plugins/secretary-tools/test` from repo root for owner/policy/native RPC adapter tests and approval checks using synthetic Core responses at the fetch boundary. These approval checks do not execute Core or the host SDK. Run `SECRETARY_HTTP_TESTS=1 bun test plugins/secretary-tools/test` in an environment permitting loopback bind for actual HTTP stand-in tests, including immutable preview approval. This sandbox prohibits bind (`PermissionError: Operation not permitted`; Bun reports EADDRINUSE), so HTTP tests are opt-in and unverified here. Gateway test doubles are only external RPC boundary contracts, not live host evidence.
@@ -28,6 +30,8 @@ Scheduler discovery requests at most 200 jobs per page, ten pages total and 2 Mi
 Pause/resume/reschedule/cancel require a nonempty native `configRevision` and forward it as `expectedConfigRevision`. Missing revisions leave the job readable but disable edits. No retry occurs after a rejected or uncertain update; read current native state before deciding on a new request. Resume/reschedule refuse jobs whose native payload/session/delivery no longer match the secretary's main-session system-event profile. Pause/cancel can still stop such a job. Trusted invocation guards run during discovery and immediately before mutations so an expired tool context cannot continue after an awaited lookup.
 
 The pinned [v2026.10.7 protocol schema](https://github.com/openclaw/openclaw/blob/v2026.10.7/packages/gateway-protocol/src/schema/cron.ts) verifies request pagination fields, job revision fields and the update revision parameter. External Gateway fixtures test adapter behavior through the public tool interface; they do not establish installed SDK compatibility, native persistence or actual WhatsApp delivery. Google-only Postman simulations are unchanged by this native RPC slice. No host/runtime is mocked and reported as activated.
+
+Gateway availability is awaited before scheduler access, matching the pinned [runtime type](https://github.com/openclaw/openclaw/blob/v2026.10.7/src/plugins/runtime/types.ts). An asynchronous false result cannot authorize RPC; invocation authority is checked again after availability resolves. Local fixtures cover both available/unavailable results and revocation while awaiting availability.
 
 
 ## Discovery and packaging

@@ -2,7 +2,9 @@
   "channels": {
     "whatsapp": {
       "dmPolicy": "allowlist",
-      "allowFrom": ["+15555550123"],
+      "allowFrom": [
+        "+15555550123"
+      ],
       "groupPolicy": "disabled",
       "selfChatMode": false
     }
@@ -11,7 +13,81 @@
     "plugin": {
       "enabled": true,
       "mode": "targets",
-      "targets": [{ "channel": "whatsapp", "to": "+15555550123" }]
+      "targets": [
+        {
+          "channel": "whatsapp",
+          "to": "+15555550123"
+        }
+      ]
     }
+  },
+  "agents": {
+    "defaults": {
+      "compaction": {
+        "memoryFlush": {
+          "enabled": false
+        }
+      }
+    }
+  },
+  "memory": {
+    "search": {
+      "sources": [
+        "memory"
+      ],
+      "rememberAcrossConversations": false
+    }
+  },
+  "plugins": {
+    "entries": {
+      "memory-core": {
+        "config": {
+          "dreaming": {
+            "enabled": false
+          }
+        }
+      }
+    }
+  },
+  "hooks": {
+    "internal": {
+      "enabled": false,
+      "entries": {
+        "session-memory": {
+          "enabled": false
+        }
+      }
+    }
+  },
+  "tools": {
+    "allow": [
+      "session_status",
+      "memory_search",
+      "memory_get",
+      "sheets_list",
+      "sheets_describe",
+      "sheets_read",
+      "sheets_search",
+      "sheets_preview_change",
+      "sheets_append",
+      "sheets_update",
+      "sheets_get_history",
+      "reports_wedding",
+      "reminders_create",
+      "reminders_list",
+      "reminders_get",
+      "reminders_reschedule",
+      "reminders_pause",
+      "reminders_resume",
+      "reminders_cancel",
+      "reminders_history",
+      "memory_capabilities"
+    ],
+    "deny": [
+      "group:fs",
+      "group:runtime",
+      "group:automation",
+      "message"
+    ]
   }
 }

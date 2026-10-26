@@ -239,3 +239,22 @@ test('changed native payloads or delivery routes cannot be reactivated through s
   expect(modified).toBe(false);
  }
 });
+
+test('native asynchronous Gateway availability denies access before issuing scheduler RPC',async()=>{
+ let called=false;
+ const gateway={async isAvailable(){return false;},async request():Promise<never>{called=true;throw Error('must not call unavailable Gateway');}};
+ const bridge=createSecretary({coreToken:'synthetic',owner:'+628123',gateway,schedulerQualified:true});
+ await expect(bridge.execute('reminders_list',{},owner)).rejects.toThrow('SCHEDULER_UNAVAILABLE');
+ expect(called).toBe(false);
+});
+
+test('available asynchronous Gateway preserves invocation checks before scheduler access',async()=>{
+ let current=true,requests=0;
+ const gateway={async isAvailable(){return true;},async request<T>():Promise<T>{requests++;return {jobs:[]} as T;}};
+ const bridge=createSecretary({coreToken:'synthetic',owner:'+628123',gateway,schedulerQualified:true});
+ const identity={...owner,assertInvocationCurrent(){if(!current)throw Error('INVOCATION_EXPIRED');}};
+ expect(await bridge.execute('reminders_list',{},identity)).toEqual({jobs:[]});
+ gateway.isAvailable=async()=>{current=false;return true;};
+ await expect(bridge.execute('reminders_list',{},identity)).rejects.toThrow('INVOCATION_EXPIRED');
+ expect(requests).toBe(1);
+});

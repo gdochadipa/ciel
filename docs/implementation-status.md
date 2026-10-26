@@ -18,7 +18,7 @@ Initial implementation agents ran at medium reasoning effort. The owner subseque
 | Check | Result and limit |
 | --- | --- |
 | Actual-source Rust domain/application/presentation/journal harness | 16 passed. Covers mappings, identity rules, approvals, expiry/rejection, restart/exclusive journal ownership, typed source-port commands and real in-process Axum authentication/dispatch. Excludes production Google/OAuth and socket transport. |
-| Public bridge tests | Fourteen existing bridge and six new approval checks pass; three real HTTP tests skip because this sandbox cannot bind loopback. New approval checks use synthetic Core responses at the fetch boundary, not actual Core/host execution. Native Gateway fixtures establish adapter behavior only. |
+| Public bridge tests | Sixteen bridge and six approval checks pass; three real HTTP tests skip because this sandbox cannot bind loopback. New approval checks use synthetic Core responses at the fetch boundary, not actual Core/host execution. Native Gateway fixtures establish adapter behavior only. |
 | Acceptance configuration checks | Three additional checks pass. These are not Core/provider acceptance evidence. |
 | Plugin metadata and package selection | Three checks pass: 18 tool ownership/activation declarations, rejection of metadata/file-allowlist drift, and an actual offline npm file-selection test. Actual local-package dry-run selects exactly four files. No SDK activation or archive publication. |
 | Standalone bridge and acceptance runner bundles | Pass syntax/bundling checks; do not prove installed SDK type compatibility or activation. |
@@ -77,3 +77,12 @@ T013 fixes the local approval presentation gap: the dialog description contains 
 Environment probes again found no OpenClaw CLI, Node 20.20.2 active, no installed Node 24, registry DNS failures, loopback EPERM, uncached jsonwebtoken and plugin build exit 127. T007 still requires trusted owner routing, complete untruncated display and callback-error blocking on the real host. Capability defaults remain off.
 
 T008 remains unresolved. Current [memory SDK documentation](https://docs.openclaw.ai/plugins/sdk-overview/memory-and-context) describes shared search/retrieval/health and provider-owned mutation tools; it does not establish a generic companion-plugin save/update/archive/history interface. It documents disabling pre-compaction flush through configuration, which alone does not prove all automatic saving is disabled. This is current documentation, not pinned 2026.10.7 runtime evidence. No memory store or unverified mutation adapter was added.
+
+
+## Pinned Gateway and memory policy continuation
+
+T014 fixes a pinned host-interface mismatch found while assessing memory: Gateway availability returns a promise, which the bridge previously treated as a synchronous boolean. Scheduler access now awaits an exact true result and rechecks invocation authority. Two new public RPC-boundary regressions pass. Current TypeScript evidence is 28 checks passed, three socket checks skipped; metadata and SDK-external entry bundling pass. Rust source was unchanged; earlier cached-source results were not rerun in this slice.
+
+T008 now has a [pinned-source assessment](native-memory-assessment.md) and a dedicated ticket. The dedicated-runtime template disables documented automatic memory paths and restricts ordinary tools to secretary operations, native search/get and session status. Static JSON/allowlist checks pass; real schema validation, effective policies, enabled provider/hooks/jobs and explicit-only behavior remain unverified. Native read methods exist in pinned documentation, but exact RPC schemas still need inspection; no guessed adapter or new provider was introduced. Save/update/archive/history remain unavailable.
+
+Fresh environment probes still find the same CLI/Node/DNS/socket blockers. Live capability defaults and production resources were unchanged, and the workbook checksum matches.

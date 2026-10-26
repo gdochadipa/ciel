@@ -1,5 +1,5 @@
 export type Identity = { requesterSenderId?: string; senderIsOwner?: boolean; assertInvocationCurrent?: () => void };
-export type Gateway = { isAvailable(): boolean; request<T = unknown>(method: string, params?: unknown): Promise<T> };
+export type Gateway = { isAvailable(): boolean | Promise<boolean>; request<T = unknown>(method: string, params?: Record<string,unknown>): Promise<T> };
 type ApprovalDecision = 'allow-once' | 'allow-always' | 'deny' | 'timeout' | 'cancelled';
 export type Options = { coreUrl?: string; coreToken: string; owner: string; timeoutMs?: number; maxResponseBytes?: number; approvalToken?: string; approvalTransportQualified?: boolean; gateway?: Gateway; schedulerQualified?: boolean };
 export const coreTools = ['sheets_list','sheets_describe','sheets_read','sheets_search','sheets_preview_change','sheets_append','sheets_update','sheets_get_history','reports_wedding'] as const;
@@ -62,7 +62,7 @@ export function createSecretary(options: Options) {
  }
  async function reminder(name: string, value: unknown, identity: Identity): Promise<unknown> {
   const gateway=options.gateway;
-  if(!options.schedulerQualified || !gateway?.isAvailable()) fail('SCHEDULER_UNAVAILABLE');
+  if(!options.schedulerQualified || !gateway || await gateway.isAvailable()!==true) fail('SCHEDULER_UNAVAILABLE');
   const action=name.slice('reminders_'.length);
   const allowed: Record<string,[string[],string[]]>={create:[['reminder_id','text','schedule'],[]],list:[[],[]],get:[['reminder_id'],[]],reschedule:[['reminder_id','schedule'],[]],pause:[['reminder_id'],[]],resume:[['reminder_id'],[]],cancel:[['reminder_id'],[]],history:[['reminder_id'],[]]};
   if(!allowed[action]) fail('UNKNOWN_TOOL');
