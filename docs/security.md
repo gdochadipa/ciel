@@ -10,4 +10,4 @@ Store runtime environment and service-account files outside the repository with 
 
 Native memory currently has no qualified save/update/archive/history adapter here. Keep memory mutations unavailable and separately disable automatic flush/dreaming/capture before claiming explicit-save-only behavior. Source financial facts come from Sheets rather than conversation memory. Retain only necessary private data and define operational retention before activation.
 
-Production activation requires T007's actual runtime, Google, approval, scheduling and WhatsApp evidence. Local builds and HTTP stand-ins establish local behavior only. Code review is deferred by explicit user instruction; no security review or production certification is claimed.
+Production activation requires T007's actual runtime, Google, approval, scheduling and WhatsApp evidence. Local builds and HTTP stand-ins establish local behavior only. The subsequent low-effort code review and regression fixes do not establish a security audit or production certification.

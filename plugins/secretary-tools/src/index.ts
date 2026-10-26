@@ -7,7 +7,7 @@ export default definePluginEntry({
  register(api: OpenClawPluginApi) {
   // Credentials are operator environment configuration, never tool arguments.
   const config=api.pluginConfig as {coreUrl?:string;owner?:string;approvalTransportQualified?:boolean;schedulerQualified?:boolean};
-  const options:Options={coreUrl:config.coreUrl??'http://127.0.0.1:8123',owner:config.owner??'',coreToken:process.env.SECRETARY_CORE_TOKEN??'',approvalToken:process.env.SECRETARY_APPROVAL_TOKEN,approvalTransportQualified:config.approvalTransportQualified===true,schedulerQualified:config.schedulerQualified===true,gateway:api.runtime.gateway};
+  const options:Options={coreUrl:config.coreUrl,owner:config.owner??'',coreToken:process.env.SECRETARY_CORE_TOKEN??'',approvalToken:process.env.SECRETARY_APPROVAL_TOKEN,approvalTransportQualified:config.approvalTransportQualified===true,schedulerQualified:config.schedulerQualified===true,gateway:api.runtime.gateway};
   const bridge=createSecretary(options);
   const names=[...coreTools,...reminderTools,'memory_capabilities'];
   api.registerTool((context: OpenClawPluginToolContext): AnyAgentTool[] => names.map(name=>({

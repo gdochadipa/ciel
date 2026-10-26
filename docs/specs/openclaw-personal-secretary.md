@@ -106,7 +106,7 @@ These definitions are provisional because no existing domain glossary was found.
 
 The supplied VPS, Ubuntu version, OpenClaw v2026.10.7 installation, OAuth authentication, working Google access, loopback Gateway, disabled elevated/browser tools, and security-audit result are owner-reported facts. None has been inspected in this session. Phase 0 must record observed versions, configurations, capabilities, and timestamps without exposing secrets.
 
-Workbook mappings, write permissions, record identity, approval transport, audit storage, and runtime compatibility must be resolved before activating the affected production capabilities. Local implementation is now authorized by the user's subsequent instruction. Approval of the testing boundary alone does not authorize deployment. Code review is deferred at the user's explicit request; tests and validation still apply.
+Workbook mappings, write permissions, record identity, approval transport, audit storage, and runtime compatibility must be resolved before activating the affected production capabilities. Local implementation is now authorized by the user's subsequent instruction. Approval of the testing boundary alone does not authorize deployment. Code review was initially deferred; the owner subsequently authorized low-effort review and local fixes. Tests and validation still apply.
 
 ### 2. Workbook discovery and data quality assessment
 
@@ -340,7 +340,7 @@ The owner confirmed the primary seam: test observable tool-to-core behavior at t
 - The owner explicitly accepted the proposed testing boundaries. This specification is still awaiting architecture review.
 - Current official Google Sheets and OpenClaw documentation was consulted; references appear beside the supported claims. This is documentation evidence only, not target-host compatibility evidence.
 - Postman's API engineering, discovery, and documentation guidance informed the contract decisions. The Orbit discovery request failed at DNS resolution, so no discovery brief or provider compatibility result was obtained through it. Official provider documentation supplied the referenced facts instead. No Postman workspace was initialized or published.
-- Before local implementation was authorized, only planning documents were created. Subsequent implementation and verification evidence lives in the local tickets. Google records, scheduler jobs, live channel configuration, credentials, and production resources remain untouched; no production deployment is claimed. Code review is explicitly deferred.
+- Before local implementation was authorized, only planning documents were created. Subsequent implementation and verification evidence lives in the local tickets. Google records, scheduler jobs, live channel configuration, credentials, and production resources remain untouched; no production deployment is claimed. Subsequent low-effort review and fixes are recorded in T009.
 
 ### Companion assessment and remaining discovery
 

@@ -2,5 +2,5 @@
  "id":"secretary-tools",
  "name":"Personal Secretary tools",
  "description":"Owner-only bounded Core bridge and native reminders",
- "configSchema":{"type":"object","additionalProperties":false,"required":["owner"],"properties":{"coreUrl":{"type":"string","default":"http://127.0.0.1:8123"},"owner":{"type":"string"},"approvalTransportQualified":{"type":"boolean","default":false},"schedulerQualified":{"type":"boolean","default":false}}}
+ "configSchema":{"type":"object","additionalProperties":false,"required":["owner"],"properties":{"coreUrl":{"type":"string","default":"http://127.0.0.1:8787"},"owner":{"type":"string"},"approvalTransportQualified":{"type":"boolean","default":false},"schedulerQualified":{"type":"boolean","default":false}}}
 }

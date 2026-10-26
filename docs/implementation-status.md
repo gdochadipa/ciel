@@ -11,14 +11,14 @@ Delivery: source copied to the original workspace; integration Git repository re
 - TypeScript OpenClaw plugin entry and bounded Core client, trusted-owner checks, native approval-hook adapter and native cron lifecycle adapter. Native execution and delivery evidence remain distinct. SDK/runtime activation is unverified and capability flags default to disabled.
 - Five domain Skills, OpenAPI, sanitized fixtures, Google-only Postman simulations, a real bridge-to-Core acceptance runner, CI configuration, protected systemd template, preflight and coherent SQLite backup tooling.
 
-Implementation agents ran at medium reasoning effort. Code review was skipped at the user's request. Tests and integration checks are not represented as code review.
+Initial implementation agents ran at medium reasoning effort. The owner subsequently authorized a low-effort code review of 70cd886..27bcb4f. Both P2 findings now have local fixes and regression tests; see T009. Tests and integration checks remain distinct from review.
 
 ## Evidence actually obtained
 
 | Check | Result and limit |
 | --- | --- |
 | Actual-source Rust read/structured-write/journal harness | 11 passed. Covers mapping preservation, shared costs/unknowns, schema/identity rules, preview/approval expiry/rejection, restart recovery and exclusive journal ownership. Excludes production HTTP/OAuth modules. |
-| Public bridge tests | Five passed, three real HTTP tests skipped by default because this sandbox cannot bind loopback. Native Gateway fixtures establish adapter behavior only. |
+| Public bridge tests | Eight passed, three real HTTP tests skipped by default because this sandbox cannot bind loopback. Native Gateway fixtures establish adapter behavior only. |
 | Acceptance configuration checks | Three additional checks pass. These are not Core/provider acceptance evidence. |
 | Standalone bridge and acceptance runner bundles | Pass syntax/bundling checks; do not prove installed SDK type compatibility or activation. |
 | Rust formatting; JSON contract/config/reference checks; script syntax | Pass. |

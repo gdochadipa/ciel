@@ -1,6 +1,6 @@
 export type Identity = { requesterSenderId?: string; senderIsOwner?: boolean; assertInvocationCurrent?: () => void };
 export type Gateway = { isAvailable(): boolean; request<T = unknown>(method: string, params?: unknown): Promise<T> };
-export type Options = { coreUrl: string; coreToken: string; owner: string; timeoutMs?: number; maxResponseBytes?: number; approvalToken?: string; approvalTransportQualified?: boolean; gateway?: Gateway; schedulerQualified?: boolean };
+export type Options = { coreUrl?: string; coreToken: string; owner: string; timeoutMs?: number; maxResponseBytes?: number; approvalToken?: string; approvalTransportQualified?: boolean; gateway?: Gateway; schedulerQualified?: boolean };
 export const coreTools = ['sheets_list','sheets_describe','sheets_read','sheets_search','sheets_preview_change','sheets_append','sheets_update','sheets_get_history','reports_wedding'] as const;
 const fields: Record<string, [string[], string[]]> = {
  sheets_list:[[],[]], sheets_describe:[['spreadsheet'],[]], sheets_read:[['spreadsheet','view'],['limit','cursor']], sheets_search:[['spreadsheet','view','query'],['limit','cursor']],
@@ -10,9 +10,11 @@ export class SecretaryError extends Error { constructor(public code: string) { s
 const fail = (code: string): never => { throw new SecretaryError(code); };
 function object(value: unknown): Record<string, unknown> { if (!value || typeof value !== 'object' || Array.isArray(value)) fail('INVALID_INPUT'); return value as Record<string,unknown>; }
 function shape(value: unknown, required: string[], optional: string[] = []) { const input = object(value); if (required.some(k => !(k in input)) || Object.keys(input).some(k => ![...required,...optional].includes(k))) fail('INVALID_INPUT'); return input; }
+export const DEFAULT_CORE_URL = 'http://127.0.0.1:8787';
+const canceledReminderDescription = 'Secretary: canceled; retained for history';
 export function createSecretary(options: Options) {
  const previews = new Map<string, Record<string,unknown>>();
- const url = new URL(options.coreUrl);
+ const url = new URL(options.coreUrl ?? DEFAULT_CORE_URL);
  if (url.protocol !== 'http:' || !['127.0.0.1','[::1]'].includes(url.hostname) || url.username || url.password || url.search || url.hash || url.pathname !== '/') fail('INVALID_CORE_DESTINATION');
  if (!options.coreToken || !options.owner) fail('INVALID_CONFIGURATION');
  const authorize = (identity: Identity) => { if (identity.senderIsOwner !== true || identity.requesterSenderId !== options.owner) fail('OWNER_REQUIRED'); identity.assertInvocationCurrent?.(); };
@@ -77,14 +79,15 @@ export function createSecretary(options: Options) {
     if(JSON.stringify(existing.schedule)!==JSON.stringify(schedule) || object(existing.payload).text!==input.text) fail('REMINDER_CONFLICT');
     return {reconciled:true,job:existing};
    }
-   const added=object(await gateway.request('cron.add',{name:`Secretary ${input.reminder_id}`,declarationKey:key,schedule,sessionTarget:'main',wakeMode:'now',payload:{kind:'systemEvent',text:input.text},deleteAfterRun:schedule?.kind==='at'}));
+   const added=object(await gateway.request('cron.add',{name:`Secretary ${input.reminder_id}`,declarationKey:key,schedule,sessionTarget:'main',wakeMode:'now',payload:{kind:'systemEvent',text:input.text},deleteAfterRun:false}));
    return {reconciled:false,job:added.job??added,delivery:'unconfirmed'};
   }
   if(!existing || typeof existing.id!=='string') fail('REMINDER_NOT_FOUND');
   if(action==='get') return {job:await gateway.request('cron.get',{id:existing.id})};
   if(action==='history') return gateway.request('cron.runs',{id:existing.id,limit:100});
-  if(action==='cancel') return gateway.request('cron.remove',{id:existing.id});
-  return gateway.request('cron.update',{id:existing.id,patch:action==='reschedule'?{schedule}:{enabled:action==='resume'}});
+  // Cancellation retains the native identity and run history; an explicit resume can reactivate it.
+  if(action==='cancel') return gateway.request('cron.update',{id:existing.id,patch:{enabled:false,deleteAfterRun:false,description:canceledReminderDescription}});
+  return gateway.request('cron.update',{id:existing.id,patch:action==='reschedule'?{schedule}:{enabled:action==='resume',...(action==='resume' && existing.description===canceledReminderDescription?{description:''}:{})}});
  }
  async function prepareApproval(name: string, value: unknown, identity: Identity) {
   authorize(identity);

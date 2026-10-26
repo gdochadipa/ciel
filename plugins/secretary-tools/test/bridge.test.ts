@@ -55,7 +55,7 @@ test('native reminder lifecycle uses native IDs and revision-shaped patches', as
  expect(await bridge.execute('reminders_pause',{reminder_id:'deposit'},owner)).toMatchObject({enabled:false});
  expect(await bridge.execute('reminders_resume',{reminder_id:'deposit'},owner)).toMatchObject({enabled:true});
  expect(await bridge.execute('reminders_reschedule',{reminder_id:'deposit',schedule:{kind:'at',at:'2027-02-01T08:00:00+08:00'}},owner)).toMatchObject({schedule:{at:'2027-02-01T00:00:00.000Z'}});
- expect(await bridge.execute('reminders_cancel',{reminder_id:'deposit'},owner)).toEqual({ok:true,removed:true});
+ expect(await bridge.execute('reminders_cancel',{reminder_id:'deposit'},owner)).toMatchObject({id:'job-42',enabled:false,deleteAfterRun:false,description:'Secretary: canceled; retained for history'});
  await expect(bridge.execute('reminders_get',{reminder_id:'private'},owner)).rejects.toThrow('REMINDER_NOT_FOUND');
 });
 test('unqualified approval transport never issues a permission callback', async () => {
@@ -94,4 +94,53 @@ test('oversized requests and previews without Core evidence never cross the boun
  try {
   expect(await createSecretary(options).execute('sheets_describe',{spreadsheet:'denied'},owner)).toEqual({ok:false,error:{code:'spreadsheet_not_registered',message:'Core rejected the request',retryable:false}});
  } finally {server.stop(true);}
+});
+
+test('owner-only configuration defaults to the Core listener without requiring a URL', async () => {
+ const bridge=createSecretary({coreToken:'synthetic-secret',owner:'+628123'});
+ expect(await bridge.execute('memory_capabilities',{},owner)).toMatchObject({available:false});
+ const manifest=await Bun.file(new URL('../openclaw.plugin.json',import.meta.url)).json();
+ expect(manifest.configSchema.properties.coreUrl.default).toBe('http://127.0.0.1:8787');
+});
+
+test('canceled reminders retain history and stay canceled across bridge restarts and create retries', async () => {
+ const jobs:any[]=[];
+ const entries=[{jobId:'native-retained',status:'ok',delivered:false,deliveryStatus:'not-delivered'}];
+ const gateway={isAvailable:()=>true,async request(method:string,params:any):Promise<any> {
+  if(method==='cron.list') return {jobs:structuredClone(jobs)};
+  if(method==='cron.add') {const job={...structuredClone(params),id:'native-retained',enabled:true};jobs.push(job);return {created:true,job};}
+  const job=jobs.find(j=>j.id===params.id);
+  if(method==='cron.update') {Object.assign(job,params.patch);return structuredClone(job);}
+  if(method==='cron.remove') {jobs.splice(jobs.indexOf(job),1);return {ok:true,removed:true};}
+  if(method==='cron.runs') return {entries};
+  throw Error('unexpected RPC');
+ }};
+ const options={coreToken:'synthetic-secret',owner:'+628123',gateway,schedulerQualified:true};
+ const input={reminder_id:'retained',text:'Check payment',schedule:{kind:'at',at:'2027-01-01T00:00:00Z'}};
+ const bridge=createSecretary(options);
+ await bridge.execute('reminders_create',input,owner);
+ await bridge.execute('reminders_cancel',{reminder_id:'retained'},owner);
+ const restarted=createSecretary(options);
+ expect(await restarted.execute('reminders_history',{reminder_id:'retained'},owner)).toEqual({entries});
+ expect(await restarted.execute('reminders_create',input,owner)).toMatchObject({reconciled:true,job:{id:'native-retained',enabled:false}});
+});
+
+test('one-time reminders retain their native identity and completed history without reactivation', async () => {
+ let job:any;
+ const entries=[{jobId:'one-time-job',status:'ok',delivered:true,deliveryStatus:'delivered'}];
+ const gateway={isAvailable:()=>true,async request(method:string,params:any):Promise<any> {
+  if(method==='cron.list') return {jobs:job?[structuredClone(job)]:[]};
+  if(method==='cron.add') {job={...structuredClone(params),id:'one-time-job',enabled:true};return {created:true,job:structuredClone(job)};}
+  if(method==='cron.runs') return {entries};
+  throw Error('unexpected RPC');
+ }};
+ const options={coreToken:'synthetic-secret',owner:'+628123',gateway,schedulerQualified:true};
+ const input={reminder_id:'one-time',text:'Check venue payment',schedule:{kind:'at',at:'2027-01-01T00:00:00Z'}};
+ const bridge=createSecretary(options);
+ expect(await bridge.execute('reminders_create',input,owner)).toMatchObject({job:{deleteAfterRun:false}});
+ // Native completion snapshot: retained one-time jobs are disabled by the scheduler.
+ job.enabled=false;job.state={lastRunStatus:'ok',lastDelivered:true};
+ const restarted=createSecretary(options);
+ expect(await restarted.execute('reminders_history',{reminder_id:'one-time'},owner)).toEqual({entries});
+ expect(await restarted.execute('reminders_create',input,owner)).toMatchObject({reconciled:true,job:{id:'one-time-job',enabled:false}});
 });

@@ -8,4 +8,4 @@ Native scheduler integration uses supported `cron.*` Gateway RPC through `api.ru
 
 The native memory lifecycle is unresolved. Ordinary Markdown search/get does not establish bounded save/update/archive/history with explicit consent or prevent automatic persistence. Do not silently replace native memory with a separate personal database.
 
-[Interface notes](../contracts/interface-notes.md) define the implementation boundary. [Specification](specs/openclaw-personal-secretary.md) and [workbook assessment](spreadsheet-assessment.md) retain source decisions. The local ticket graph records completed checks and unresolved T007 live activation evidence. Code review is deferred by the user.
+[Interface notes](../contracts/interface-notes.md) define the implementation boundary. [Specification](specs/openclaw-personal-secretary.md) and [workbook assessment](spreadsheet-assessment.md) retain source decisions. The local ticket graph records completed checks and unresolved T007 live activation evidence. The subsequent low-effort review and its two local fixes are recorded in T009.
