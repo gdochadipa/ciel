@@ -1,22 +1,23 @@
 # secretary-error local simulation context
 
-Created 2026-10-25 from the Google Sheets read subset documented in `postman/README.md`.
+Created 2026-10-25 from the bounded Google Sheets contract and synthetic handlers linked in `postman/README.md`.
 
 ## Purpose
 
-Exercises persistent provider 503 condition. Google is the sole member; actual Core and bridge are outside the simulation.
+Persistent provider failure. Google is the sole member; bridge, Rust Core and its SQLite journal run for real outside the simulation.
 
 ## Execution
 
-Run `bash scripts/acceptance.sh error`. The runner creates private temporary logs, waits for the simulation listening event, starts real Core, then invokes public bridge tools. See the script for exact disposable environment. Stop only spawned processes via its cleanup trap.
+Run `bash scripts/acceptance.sh error` in the qualified environment from `docs/local-verification.md`. The launcher waits for the listening event, derives the actual Google address, starts Core, invokes public tools and stops only its spawned processes. Inspect private `sim.ndjson` alongside the caller result.
 
 ## Assumptions
 
-- Socket-capable host and cached Rust dependencies/lockfile are required; otherwise no service path can run. (observed 2026-10-25, read attempt)
-- Synthetic fixture proves only the modeled Sheets read shape; live auth, full Google semantics, native Gateway and WhatsApp delivery remain separate. (reasoned 2026-10-25, `postman/README.md`)
+- Socket-capable Linux and cached locked dependencies are needed; the qualified container supplies both. (observed 2026-10-26, T017)
+- Keep container `TMPDIR=/tmp`; use `SECRETARY_ACCEPTANCE_LOG_ROOT=/runs` for persistent private logs. Host-mounted scratch broke Postman dataset startup. (observed 2026-10-26, T017)
+- Synthetic contract behavior does not establish live Google authentication/semantics, host approval routing, native Gateway persistence or WhatsApp delivery. (reasoned 2026-10-26, bounded mock handlers)
 
 ## Observations
 
 <!-- begin:observations -->
-<!-- @todo: execute this scenario in a socket-capable environment and record which members served traffic. -->
+2026-10-26: Google member handler stayed silent because the injected persistent error intercepted requests; actual bridge/Core returned provider_unavailable as asserted.
 <!-- end:observations -->

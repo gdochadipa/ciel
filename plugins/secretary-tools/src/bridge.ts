@@ -10,7 +10,7 @@ const fields: Record<string, [string[], string[]]> = {
  sheets_preview_change:[['operation_id','spreadsheet','view','action','fields'],['record_id']], sheets_append:[['operation_id'],[]], sheets_update:[['operation_id'],[]], sheets_get_history:[[],['operation_id','limit','cursor']], reports_wedding:[['spreadsheet'],[]],
 };
 export class SecretaryError extends Error { constructor(public code: string) { super(code); } }
-const fail = (code: string): never => { throw new SecretaryError(code); };
+function fail(code: string): never { throw new SecretaryError(code); }
 function object(value: unknown): Record<string, unknown> { if (!value || typeof value !== 'object' || Array.isArray(value)) fail('INVALID_INPUT'); return value as Record<string,unknown>; }
 function shape(value: unknown, required: string[], optional: string[] = []) { const input = object(value); if (required.some(k => !(k in input)) || Object.keys(input).some(k => ![...required,...optional].includes(k))) fail('INVALID_INPUT'); return input; }
 function isReminderJob(job: Record<string,unknown>): boolean {

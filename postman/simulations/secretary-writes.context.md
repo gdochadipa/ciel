@@ -1,29 +1,23 @@
 # secretary-writes local simulation context
 
-Created 2026-10-26 against T004 public registry/provider contract and the official Google Sheets values append/batchUpdate references linked in postman/README.md.
+Created 2026-10-26 from the bounded Google Sheets contract and synthetic handlers linked in `postman/README.md`.
 
 ## Purpose
 
-Stateful Google-only dependency for real Core previews, operator approvals, append/update, replay protection, stale source conflicts and accepted-write/lost-response reconciliation. Core, bridge, SQLite journal and operator routes run for real outside the simulation.
+Stateful approved writes and uncertain-outcome reconciliation. Google is the sole member; bridge, Rust Core and its SQLite journal run for real outside the simulation.
 
 ## Execution
 
-Run `bash scripts/acceptance.sh writes`. The launcher selects the seven-view synthetic registry, a fresh disposable state directory and distinct synthetic Core/operator tokens. Restart simulation for independent runs; the runner resets only local fixture state using explicit fixture controls.
-
-The first valid append approval now uses the real bridge approval callback against Core, checks that its description includes the entire captured preview and rejects callback replay. Later operator calls still exercise conflicts and reconciliation. This runner change has been bundled but not executed; it supplies no actual host approval UI/routing evidence.
+Run `bash scripts/acceptance.sh writes` in the qualified environment from `docs/local-verification.md`. The launcher waits for the listening event, derives the actual Google address, starts Core, invokes public tools and stops only its spawned processes. Inspect private `sim.ndjson` alongside the caller result.
 
 ## Assumptions
 
-- Existing AI_Tasks/AI_Payments sheets have exact headers. Append models bounded owned tables, not general Google table inference. (reasoned 2026-10-26, handler)
-- Local Postman async pm.state persistence and native socket response loss require an actual run. Namespaced keys avoid collisions. Generated CLI sample confirms get/set syntax. (observed source 2026-10-26)
-- Fixture reset/lose-next-response controls are test setup, not Google API endpoints. No live host approval transport or delivery proof. (reasoned 2026-10-26, runner)
+- Socket-capable Linux and cached locked dependencies are needed; the qualified container supplies both. (observed 2026-10-26, T017)
+- Keep container `TMPDIR=/tmp`; use `SECRETARY_ACCEPTANCE_LOG_ROOT=/runs` for persistent private logs. Host-mounted scratch broke Postman dataset startup. (observed 2026-10-26, T017)
+- Synthetic contract behavior does not establish live Google authentication/semantics, host approval routing, native Gateway persistence or WhatsApp delivery. (reasoned 2026-10-26, bounded mock handlers)
 
 ## Observations
 
 <!-- begin:observations -->
-<!-- @todo: execute on socket-capable host and record Google traffic and real Core outcomes. -->
+2026-10-26: Google served stateful reads, append and updates; actual bridge/Core approval, replay, conflict and accepted-write/lost-response reconciliation passed with one payment.
 <!-- end:observations -->
-
-## What didn't work
-
-- 2026-10-26: earlier read simulation failed `listen EPERM: operation not permitted 127.0.0.1`; stateful extension remains unexecuted, no network success claimed.

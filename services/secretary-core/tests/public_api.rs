@@ -159,6 +159,12 @@ async fn public_tools_preserve_unknowns_paginate_and_reject_arbitrary_ranges() {
         call(&url, "sheets_append", json!({"approved":true}))
             .await
             .status(),
+        400
+    );
+    assert_eq!(
+        call(&url, "sheets_append", json!({"operation_id":"sample-op"}))
+            .await
+            .status(),
         403
     );
     for h in handles {

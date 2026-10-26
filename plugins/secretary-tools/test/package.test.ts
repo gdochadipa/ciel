@@ -60,7 +60,12 @@ test('package file selection excludes source, operator configuration and credent
    env:{...process.env,NPM_CONFIG_CACHE:join(root,'cache'),NPM_CONFIG_USERCONFIG:join(root,'user.npmrc'),NPM_CONFIG_GLOBALCONFIG:join(root,'global.npmrc')},
   });
   expect(packed.status).toBe(0);
-  const paths=JSON.parse(packed.stdout)[0].files.map((file:{path:string})=>file.path).sort();
+  const receipt=JSON.parse(packed.stdout);
+  // npm 12 returns a package-keyed receipt; earlier npm versions return an array.
+  const selections=Array.isArray(receipt)?receipt:Object.values(receipt);
+  expect(selections).toHaveLength(1);
+  expect(selections[0].name).toBe(pkg.name);
+  const paths=selections[0].files.map((file:{path:string})=>file.path).sort();
   expect(paths).toEqual(['README.md','dist/index.js','openclaw.plugin.json','package.json']);
  } finally {await rm(root,{recursive:true,force:true});}
 });

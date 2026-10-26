@@ -15,7 +15,9 @@ jobs:
           bun-version: '1.2.21'
       - uses: actions/setup-node@v4
         with:
-          node-version: '24.16.0'
+          node-version: '24.22.1'
+      - name: Install locked source-test dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
       - name: Check metadata, adapters and package file selection
         env:
           SECRETARY_HTTP_TESTS: '1'
@@ -42,7 +44,7 @@ jobs:
           bun-version: '1.2.21'
       - uses: actions/setup-node@v4
         with:
-          node-version: '24.16.0'
+          node-version: '24.22.1'
       - name: Fetch locked Rust dependencies
         run: cargo fetch --locked
       - name: Install locked JavaScript dependencies

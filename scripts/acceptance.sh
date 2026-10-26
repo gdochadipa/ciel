@@ -3,13 +3,14 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 scenario="${1:-read}"
 case "$scenario" in read|error|slow|drift|retry|writes) ;; *) echo 'Use read, error, slow, drift, retry or writes' >&2; exit 2;; esac
-log_dir="$(mktemp -d "${TMPDIR:-/tmp}/secretary-acceptance.XXXXXX")"
+log_dir="$(mktemp -d "${SECRETARY_ACCEPTANCE_LOG_ROOT:-${TMPDIR:-/tmp}}/secretary-acceptance.XXXXXX")"
 sim_pid=''; core_pid=''
 cleanup() {
  if [ -n "$core_pid" ]; then kill "$core_pid" 2>/dev/null || true; fi
  if [ -n "$sim_pid" ]; then kill "$sim_pid" 2>/dev/null || true; fi
 }
 trap cleanup EXIT INT TERM
+: > "$log_dir/sim.ndjson"
 postman simulation run "postman/simulations/secretary-${scenario}.sim.yaml" --port 4900 --output ndjson --no-history > "$log_dir/sim.ndjson" 2> "$log_dir/sim.err" &
 sim_pid=$!
 ready=false

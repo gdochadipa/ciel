@@ -73,3 +73,7 @@ stateDiagram-v2
 An uncertain/reconciling operation cannot enter `applying` again or become `known_failure` merely because evidence is absent. Terminal states cannot be rewritten into a new attempt. Idempotent approval decisions remain supported. Startup moves interrupted applying operations to reconciliation without resending them. This is a durable operation FSM, not an event-sourced workflow engine.
 
 T010 records actual validation and its limits. In-process Axum requests exercise the real presentation and command handlers with an external source-port fixture and real SQLite; they do not establish real HTTP transport, OAuth or Google compatibility.
+
+## SDK authoring and local qualification
+
+The plugin entry uses the actual OpenClaw 2026.10.7 `defineToolPlugin` public interface, static TypeBox tool/config schemas and invocation context factories. Bridge instances are created lazily per host API; metadata loading does not read credentials. Extending the original entry register function preserves SDK authoring metadata while attaching the native approval hook. Strict SDK type checking, host build/validate/pack, the full Rust dependency graph and real bridge/Core HTTP with Google-only simulation passed in T017. Live host activation, scheduler persistence, approval routing and delivery remain T007. See [local verification](local-verification.md).

@@ -1,87 +1,45 @@
 # OpenClaw Secretary — Progress and continuation
 
-Updated: 2026-10-26 · Timezone: Asia/Makassar
+Updated: 2026-10-26 · Asia/Makassar
 
 ## Current position
 
-Local implementation exists, but the MVP is **not fully accepted or ready for production**. The latest increment is T016 — pending-response authority checks and isolated Linux HTTP evidence. Its implementation commit can be found with `git log -- .scratch/secretary-mvp/T016.md` in the integration repository. The plugin owns 17 spreadsheet/report/reminder tools; T008 is outside plugin implementation scope. Native memory lifecycle support is a host responsibility, not a missing custom plugin feature. Validation below includes this continuation session.
+T017 completes local qualification against the actual OpenClaw 2026.10.7 SDK and full Rust dependency graph. **Live activation remains T007 and is not accepted.** The plugin owns 17 spreadsheet/report/reminder tools; personal memory is delegated to OpenClaw. No custom memory database or lifecycle is required.
 
-Latest storage follow-up: the owner prioritized low CPU/token use. The local template now requests native FTS-only retrieval (`provider: "none"`, no embedding fallback) and three primary-memory results by default. Markdown remains native readable source notes; OpenClaw owns its SQLite index/provenance, and Core keeps a separate protected operation journal. JSON is configuration/interchange. Static template checks pass; these defaults are not measured runtime savings, a hard token cap or memory lifecycle acceptance. See the memory diagram in docs/architecture.md.
+The full verification script passed in qualified Linux: 21 Rust tests, 31 plugin tests and three acceptance-configuration tests with no skips, strict SDK type checking, actual host build/validation and package generation. All six Postman scenarios passed through the real bridge and Rust Core with Google as the only simulated dependency. Cargo/Bun locks were generated from actual registries and frozen installs validated. See [T017](.scratch/secretary-mvp/T017.md) and [implementation status](docs/implementation-status.md) for evidence and boundaries.
 
-The current focus is the **OpenClaw secretary plugin**. Recent work fixed the review findings, introduced the requested Rust architecture, improved reminder reliability, and added static tool ownership/package checks. Live capabilities remain disabled. No source workbook, live Google records, scheduler jobs, WhatsApp messages or production configuration were changed.
+The real SDK requires Node `>=24.22.1 <25 || >=26.12.1`, correcting the previous 24.16 assumption. Verification used Node 24.22.1, Bun 1.2.21, Rust 1.95.0, TypeScript 7.0.2 and Postman 1.75.0. The entry now uses actual `defineToolPlugin` authoring metadata/context factories, lazy bridge construction and preserved native approval-hook registration.
 
 ## Read these first
 
-| Artifact | Purpose |
-| --- | --- |
-| [Implementation status](docs/implementation-status.md) | Current behavior, actual verification evidence and release blockers. |
-| [Local ticket graph](.scratch/secretary-mvp/index.md) | Dependencies and acceptance status; implemented does not mean accepted. |
-| [Plugin README](plugins/secretary-tools/README.md) | Tool behavior, native reminder restrictions and build/package commands. |
-| [Architecture](docs/architecture.md) | Required Rust DDD/hexagonal layers, command bus, ports and operation FSM. |
-| [Specification](docs/specs/openclaw-personal-secretary.md) | Intended MVP, authorization rules and confirmed test seams. |
-| [Workbook assessment](docs/spreadsheet-assessment.md) | Existing data relationships and preservation requirements. |
-| [Security](docs/security.md) and [deployment](docs/deployment.md) | Capability qualification and operating procedures. |
-| [API contract](contracts/openapi.yaml) | Public Core requests and response envelopes. |
+- [Implementation status](docs/implementation-status.md): current behavior, executed evidence and remaining release gates.
+- [Local verification](docs/local-verification.md): digest-pinned Docker toolchain, sanitized checkout, frozen installs and offline verification/simulations.
+- [Local ticket graph](.scratch/secretary-mvp/index.md), [plugin README](plugins/secretary-tools/README.md), [architecture](docs/architecture.md).
+- [Specification](docs/specs/openclaw-personal-secretary.md), [security](docs/security.md), [deployment](docs/deployment.md), [Core contract](contracts/openapi.yaml).
 
-Latest follow-ups: [T009 review fixes](.scratch/secretary-mvp/T009.md), [T010 Rust architecture](.scratch/secretary-mvp/T010.md), [T011 reminder reliability](.scratch/secretary-mvp/T011.md), [T012 discovery and packaging](.scratch/secretary-mvp/T012.md), [T013 approval presentation](.scratch/secretary-mvp/T013.md), [T014 pinned Gateway and memory safety](.scratch/secretary-mvp/T014.md), [T015 scope and verification](.scratch/secretary-mvp/T015.md), [T016 response authority and HTTP](.scratch/secretary-mvp/T016.md).
+## Next unresolved work
 
-## Last verified checks
+1. T007: qualify the actual target VPS and plugin activation, disposable Google service-account OAuth/read/write preservation, trusted owner-only approvals with complete preview rendering and callback failure blocking.
+2. Qualify native Gateway declaration convergence, concurrent edits, restart persistence, history and owner-only WhatsApp delivery/outbound policy. Native offset pagination is not a transactional snapshot.
+3. Test supported native scheduler backup/restore plus Core journal recovery on disposable resources; qualify model entitlement and hosted CI.
+4. Verify native OpenClaw memory privacy/permissions separately. Keep low-resource FTS-only retrieval defaults and the three-result primary-memory default; neither is a measured saving or hard token ceiling. Markdown is native source, OpenClaw owns its SQLite index, JSON is configuration/interchange, and Core's separate SQLite journal is operation state.
 
-- **34 TypeScript checks passed with no skips in isolated Linux:** 22 bridge (including four real HTTP stand-in tests), six fetch-boundary approval, three packaging and three acceptance-configuration checks. Container Bun 1.3.13 / Node 22.22.2 differ from the pinned source-CI/host requirements. Native Bun 1.2.21 passes 30 checks and skips four HTTP tests because host loopback remains blocked. Neither profile executes Rust Core/Google/OAuth or the installed SDK.
-- **16 cached-source Rust checks passed in the preceding session**, including real in-process Axum dispatch; Clippy passed for that cached-source graph. Rust source was unchanged and was not retested in this TypeScript/config slice.
-- Metadata checks, SDK-external bundles and offline npm package file-selection checks passed.
-- Full Rust/Google/OAuth build, actual SDK validation, real bridge-to-Rust-Core acceptance, live delivery and hosted CI have **not** passed here. See the evidence table in the implementation status for exact limits.
+`approvalTransportQualified` and `schedulerQualified` remain false, and production writes stay disabled. Local continuation does not authorize production deployment, live mutations, real jobs or WhatsApp sends. No production resource or user configuration changed.
 
-## Next work, in order
+## Decisions to preserve
 
-1. Recheck environment availability before adding more workarounds: actual OpenClaw **2026.10.7**, Node **24.16+**, npm/crates.io access, and local socket permission. This continuation rechecked: no OpenClaw CLI, active Node 20.20.2 (installed versions stop at 22.23.3), npm/crates.io DNS failures, and native Node loopback `EPERM`. A cached isolated Docker runtime did run the source/HTTP stand-in checks; see T016.
-2. When dependencies can actually resolve, generate and validate real Bun/Cargo locks. Compile against the real SDK and production Rust dependencies. Do not fabricate SDK declarations, lockfiles, CLI behavior or test success.
-3. Resolve real host build/validation errors, then run Rust HTTP tests and Google-only Postman read/write simulations through the real bridge/Core. The four bridge HTTP stand-in tests have now passed in isolated Linux; this is not Rust/provider acceptance. Existing simulations and context notes are under `postman/`.
-4. T013 now includes the full captured preview in the dialog description and rejects action mismatch/Core refusal. Qualify trusted owner approval routing, complete rendering without truncation, callback-error blocking, denial/expiry/replay behavior, native scheduler persistence and owner-only WhatsApp delivery evidence on disposable resources. T007 remains the production gate; do not enable capabilities or deploy merely because metadata/bundling passes.
-5. Personal memory is delegated to OpenClaw. Do not resume custom memory adapter work from the historical T008 assessment. Preserve the low-resource native defaults and verify native host permissions/privacy separately; the plugin owns no preference store and registers no memory tools. No host writes or automatic saving were enabled by this scope change.
+Use local Markdown tickets; no remote or hosted runner is configured. Preserve Rust DDD/hexagonal layers, typed command bus and durable operation FSM. Test through public tool/Core seams with bounded provider fixtures; distinguish fixture, real HTTP, simulated provider and live-host evidence. The earlier authorized low-effort review fixes remain in T009; no comprehensive new security audit is claimed. Preserve existing workbook and legacy views; never commit credentials or personal workbook contents.
 
-Native offset pagination is not a transactional snapshot, and declaration convergence still needs actual host checks. Those limitations and other remaining gaps are recorded in T011/T012 and the implementation status.
+## Workspace and history
 
-## Session decisions to preserve
+Working source: `/Users/ochadipa/my_project/openclaw_project/personal_ai_oc`.
 
-- Continue local implementation using **local Markdown tickets**; no GitHub repository or remote was configured.
-- Preserve Rust **DDD + hexagonal architecture** with domain/application/infrastructure/presentation separation, typed in-process command dispatch, and an explicit durable operation FSM.
-- The user requested medium effort for implementation agents and subsequently low effort for reviews. Code review was initially deferred, then explicitly authorized; both findings from that review were fixed. Later increments have local checks, not a claimed comprehensive security review.
-- Test at the previously agreed public tool/Core seam, with focused adapter checks for preservation, conflict/retry and delivery behavior. Distinguish native Gateway fixtures, in-process requests, real HTTP and live-provider evidence.
-- Preserve the existing workbook and legacy views. Do not commit credentials or the workbook. No production deployment or live mutation has been authorized by the local continuation requests.
+Actual integration history: `/private/tmp/openclaw-secretary-implementation.on4Zt7`, branch `integration/secretary-mvp`. The source root has no usable Git metadata. Inspect both locations and preserve new edits before syncing. Tracked-file synchronization hashes are recorded in `/private/tmp/openclaw-secretary-sync.json`; do not initialize replacement history or discard the existing branch.
 
-## Workspace and Git history
+Qualified disposable environment: `/private/tmp/secretary-qualified-3xjcv7r_` (project/cache/home/runs). Tool image: `secretary-verification:2026.10.7`; see the committed verification Dockerfile. Native macOS Node20/DNS/socket limits persist; the qualified Docker environment removes local test blockers without changing the user profile. Raw logs and generated packages are local artifacts, not tracked source.
 
-Workspace:
+Workbook `docs/Persiapan Nikah.xlsx` is unchanged: SHA-256 `b24351dbda4c69a7cbf5f14d9b18d7fbbc983deff406e8dad3607f6bcd196de3`.
 
-```text
-/Users/ochadipa/my_project/openclaw_project/personal_ai_oc
-```
+## Continue
 
-The workspace's root Git metadata was not writable in this session. The actual integration repository/history is at:
-
-```text
-/private/tmp/openclaw-secretary-implementation.on4Zt7
-```
-
-Branch: `integration/secretary-mvp`. Source has been synchronized back to the workspace. Inspect both locations before choosing where to edit; preserve any new workspace edits. Synchronization hashes were recorded at `/private/tmp/openclaw-secretary-sync.json`. Do not initialize a replacement repository or discard the retained history without checking the current environment.
-
-The original workbook is `docs/Persiapan Nikah.xlsx`; its recorded unchanged SHA-256 is in the implementation status.
-
-## Useful local commands
-
-From the workspace root:
-
-```sh
-bun run check:plugin
-bun run test
-bun test scripts/acceptance.test.ts
-bun run --cwd plugins/secretary-tools bundle
-bash services/secretary-core/scripts/check-adapter-offline.sh
-```
-
-The `bundle` command keeps SDK imports external and does not prove host compatibility. In a qualified environment, use the full build/validation and acceptance commands documented in the plugin README, deployment guide and Postman context notes.
-
-## Start the next conversation
-
-> Read PROGRESS.md and docs/implementation-status.md, inspect the existing integration branch and workspace changes, then continue the OpenClaw secretary plugin from the next unresolved acceptance gate. Preserve the Rust DDD/hexagonal command-bus/FSM architecture and keep live capabilities disabled until qualified.
+Read this file and implementation status, inspect workspace/integration changes, and continue from T007's unresolved acceptance gate. Do not repeat fake/dependency-substitute workarounds or resume custom plugin memory work. Reproduce local checks using the qualified Docker workflow when code changes warrant them; do not mistake package validation for live activation.

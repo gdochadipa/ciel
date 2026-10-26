@@ -1,5 +1,7 @@
 // Host imports deliberately isolated: bridge tests require no substituted SDK.
-import { definePluginEntry, type OpenClawPluginApi, type OpenClawPluginToolContext, type AnyAgentTool } from 'openclaw/plugin-sdk/plugin-entry';
+import type {OpenClawPluginApi,AnyAgentTool} from 'openclaw/plugin-sdk/plugin-entry';
+import {defineToolPlugin} from 'openclaw/plugin-sdk/tool-plugin';
+import {Type} from 'typebox';
 import {createSecretary, reminderTools, secretaryToolNames, type Options} from './bridge.js';
 const reminderDescriptions:Record<string,string>={
  reminders_create:'Create a reminder using a stable reminder_id and an exact timestamp with offset or a five-field cron schedule. Clarify ambiguous dates first. Reuse the ID to reconcile a retry; a changed request conflicts. Execution does not prove message delivery.',
@@ -11,34 +13,6 @@ const reminderDescriptions:Record<string,string>={
  reminders_cancel:'Cancel an owner reminder by disabling and retaining the native job for history. Creation retries do not resume canceled jobs.',
  reminders_history:'Read up to 100 recent native executions. Preserve separate execution and delivery statuses; unknown or accepted delivery is not proof of receipt.',
 };
-export default definePluginEntry({
- id:'secretary-tools', name:'Personal Secretary tools', description:'Bounded owner-only Core and native scheduler bridge',
- register(api: OpenClawPluginApi) {
-  // Credentials are operator environment configuration, never tool arguments.
-  const config=api.pluginConfig as {coreUrl?:string;owner?:string;approvalTransportQualified?:boolean;schedulerQualified?:boolean};
-  const options:Options={coreUrl:config.coreUrl,owner:config.owner??'',coreToken:process.env.SECRETARY_CORE_TOKEN??'',approvalToken:process.env.SECRETARY_APPROVAL_TOKEN,approvalTransportQualified:config.approvalTransportQualified===true,schedulerQualified:config.schedulerQualified===true,gateway:api.runtime.gateway};
-  const bridge=createSecretary(options);
-  const names=secretaryToolNames;
-  api.registerTool((context: OpenClawPluginToolContext): AnyAgentTool[] => names.map(name=>({
-   name,label:name,description:reminderDescriptions[name]??'Owner-only secretary operation; input cannot set actor, credentials, host or outbound recipient.',
-   parameters: schemas[name]??{type:'object',additionalProperties:false,properties:{}},
-   async execute(_toolCallId,params) {
-    try {
-     const value=await bridge.execute(name,params,context);
-     return {content:[{type:'text',text:JSON.stringify(value)}],details:value};
-    } catch(error) {const code=error instanceof Error && /^[A-Z_]+$/.test(error.message)?error.message:'SECRETARY_UNAVAILABLE';return {content:[{type:'text',text:JSON.stringify({ok:false,error:{code}})}],details:{ok:false,error:{code}}};}
-   }
-  })),{names});
-  api.on('before_tool_call',async(event,context)=>{
-   if(!['sheets_append','sheets_update'].includes(event.toolName)) return;
-   const requester=context.requester;
-   try {
-    const requireApproval=await bridge.prepareApproval(event.toolName,event.params,{requesterSenderId:requester?.senderId,senderIsOwner:requester?.senderIsOwner});
-    return {requireApproval};
-   } catch {return {block:true,blockReason:'Owner approval transport and an unexpired immutable preview are required'};}
-  });
- }
-});
 const string={type:'string',minLength:1,maxLength:8192};
 const specs:Record<string,[string[],Record<string,unknown>]>={
  sheets_list:[[],{}],sheets_describe:[['spreadsheet'],{spreadsheet:string}],sheets_read:[['spreadsheet','view'],{spreadsheet:string,view:string,limit:{type:'integer',minimum:1,maximum:100},cursor:string}],sheets_search:[['spreadsheet','view','query'],{spreadsheet:string,view:string,query:string,limit:{type:'integer',minimum:1,maximum:100},cursor:string}],
@@ -49,3 +23,52 @@ for(const name of reminderTools) {
  specs[name]=[required,Object.fromEntries(required.map(key=>[key,key==='schedule'?{oneOf:[{type:'object',required:['kind','at'],properties:{kind:{const:'at'},at:string},additionalProperties:false},{type:'object',required:['kind','expr'],properties:{kind:{const:'cron'},expr:string,tz:string},additionalProperties:false}]}:string]))];
 }
 const schemas=Object.fromEntries(Object.entries(specs).map(([name,[required,properties]])=>[name,{type:'object',additionalProperties:false,required,properties}]));
+
+// Authoring metadata is constructed without reading credentials or connecting to a host.
+const bridges=new WeakMap<OpenClawPluginApi,ReturnType<typeof createSecretary>>();
+function bridgeFor(api:OpenClawPluginApi) {
+ let bridge=bridges.get(api);
+ if(!bridge) {
+  const config=api.pluginConfig??{};
+  const options:Options={coreUrl:typeof config.coreUrl==='string'?config.coreUrl:undefined,owner:typeof config.owner==='string'?config.owner:'',coreToken:process.env.SECRETARY_CORE_TOKEN??'',approvalToken:process.env.SECRETARY_APPROVAL_TOKEN,approvalTransportQualified:config.approvalTransportQualified===true,schedulerQualified:config.schedulerQualified===true,gateway:api.runtime.gateway};
+  bridge=createSecretary(options);bridges.set(api,bridge);
+ }
+ return bridge;
+}
+const entry=defineToolPlugin({
+ id:'secretary-tools',name:'Personal Secretary tools',description:'Bounded owner-only Core and native scheduler bridge',
+ configSchema:Type.Object({
+  owner:Type.String({minLength:1}),
+  coreUrl:Type.Optional(Type.String({default:'http://127.0.0.1:8787'})),
+  approvalTransportQualified:Type.Optional(Type.Boolean({default:false})),
+  schedulerQualified:Type.Optional(Type.Boolean({default:false})),
+ },{additionalProperties:false}),
+ tools:tool=>secretaryToolNames.map(name=>tool({
+  name,label:name,description:reminderDescriptions[name]??'Owner-only secretary operation; input cannot set actor, credentials, host or outbound recipient.',
+  parameters:Type.Unsafe(schemas[name]),
+  factory:({api,toolContext}):AnyAgentTool=>({
+   name,label:name,description:reminderDescriptions[name]??'Owner-only secretary operation; input cannot set actor, credentials, host or outbound recipient.',
+   parameters:Type.Unsafe(schemas[name]),
+   async execute(_toolCallId,params) {
+    try {
+     const value=await bridgeFor(api).execute(name,params,toolContext);
+     return {content:[{type:'text',text:JSON.stringify(value)}],details:value};
+    } catch(error) {const code=error instanceof Error && /^[A-Z_]+$/.test(error.message)?error.message:'SECRETARY_UNAVAILABLE';return {content:[{type:'text',text:JSON.stringify({ok:false,error:{code}})}],details:{ok:false,error:{code}}};}
+   }
+  }),
+ })),
+});
+// Preserve the SDK entry and its authoring metadata while adding the native approval hook.
+const registerTools=entry.register!;
+entry.register=(api)=>{
+ registerTools(api);
+ api.on('before_tool_call',async(event,context)=>{
+  if(!['sheets_append','sheets_update'].includes(event.toolName))return;
+  const requester=context.requester;
+  try {
+   const requireApproval=await bridgeFor(api).prepareApproval(event.toolName,event.params,{requesterSenderId:requester?.senderId,senderIsOwner:requester?.senderIsOwner});
+   return {requireApproval};
+  } catch {return {block:true,blockReason:'Owner approval transport and an unexpired immutable preview are required'};}
+ });
+};
+export default entry;

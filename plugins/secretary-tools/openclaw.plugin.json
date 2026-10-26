@@ -1,21 +1,20 @@
 {
   "id": "secretary-tools",
   "name": "Personal Secretary tools",
-  "description": "Owner-only bounded Core bridge and native reminders",
+  "description": "Bounded owner-only Core and native scheduler bridge",
   "configSchema": {
     "type": "object",
-    "additionalProperties": false,
     "required": [
       "owner"
     ],
     "properties": {
-      "coreUrl": {
-        "type": "string",
-        "default": "http://127.0.0.1:8787"
-      },
       "owner": {
         "type": "string",
         "minLength": 1
+      },
+      "coreUrl": {
+        "type": "string",
+        "default": "http://127.0.0.1:8787"
       },
       "approvalTransportQualified": {
         "type": "boolean",
@@ -25,12 +24,16 @@
         "type": "boolean",
         "default": false
       }
-    }
+    },
+    "additionalProperties": false
   },
   "version": "0.1.0",
   "categories": [
     "other"
   ],
+  "activation": {
+    "onStartup": true
+  },
   "contracts": {
     "tools": [
       "sheets_list",
@@ -51,8 +54,5 @@
       "reminders_cancel",
       "reminders_history"
     ]
-  },
-  "activation": {
-    "onStartup": true
   }
 }

@@ -6,12 +6,16 @@
     "plugins/secretary-tools"
   ],
   "engines": {
-    "node": ">=24.16.0"
+    "node": ">=24.22.1 <25 || >=26.12.1"
   },
   "scripts": {
     "build": "bun run --cwd plugins/secretary-tools build",
     "test": "bun run --cwd plugins/secretary-tools test",
     "validate": "bun run --cwd plugins/secretary-tools validate",
-    "check:plugin": "bun run --cwd plugins/secretary-tools check:package"
-  }
+    "check:plugin": "bun run --cwd plugins/secretary-tools check:package",
+    "check:types": "bun run --cwd plugins/secretary-tools check:types"
+  },
+  "trustedDependencies": [
+    "openclaw"
+  ]
 }

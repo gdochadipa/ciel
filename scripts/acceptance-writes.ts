@@ -49,7 +49,10 @@ export async function runWriteAcceptance(coreUrl:string,providerUrl:string) {
  await providerCall('/v4/spreadsheets/demo-spreadsheet/values:batchUpdate',{valueInputOption:'RAW',data:[{range:"'AI_Tasks'!C2",majorDimension:'ROWS',values:[['External synthetic edit']]}]});
  assert.equal((await tool('sheets_update',{operation_id:stale.operation_id})).data.state,'conflict');
  tasks=await tool('sheets_read',{spreadsheet:'wedding-demo',view:'tasks'});assert.equal(tasks.data.records[0].fields.title,'External synthetic edit');assert.equal(tasks.data.records[0].fields.status,'done');
- const payment={operation_id:'acceptance-lost',spreadsheet:'wedding-demo',view:'payments',action:'append',fields:{amount:100,currency:'IDR',payment_date:'2027-01-01',cost_group:'synthetic-group',note:'Synthetic response-loss exercise'}};
+ const costs=await tool('sheets_read',{spreadsheet:'wedding-demo',view:'wedding_costs',limit:1});
+ assert.equal(costs.ok,true);
+ const costGroup=costs.data.records[0].fields.cost_group;assert.equal(typeof costGroup,'string');
+ const payment={operation_id:'acceptance-lost',spreadsheet:'wedding-demo',view:'payments',action:'append',fields:{amount:100,currency:'IDR',payment_date:'2027-01-01',cost_group:costGroup,note:'Synthetic response-loss exercise'}};
  const paymentPreview=await tool('sheets_preview_change',payment);assert.equal(paymentPreview.ok,true);
  await operator(payment.operation_id,'approval',{decision:'approve',preview_digest:paymentPreview.data.preview_digest});
  await providerCall('/__fixture/lose-next-response',{});
