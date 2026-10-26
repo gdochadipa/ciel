@@ -6,6 +6,8 @@ Updated: 2026-10-26 · Timezone: Asia/Makassar
 
 Local implementation exists, but the MVP is **not fully accepted or ready for production**. The latest increment is T014 — pinned Gateway availability fix and native-memory safety defaults. Its implementation commit can be found with `git log -- .scratch/secretary-mvp/T014.md` in the integration repository. T008 now has a pinned-source assessment; memory save/update/archive/history are still unavailable. Validation below includes this continuation session.
 
+Latest storage follow-up: the owner prioritized low CPU/token use. The local template now requests native FTS-only retrieval (`provider: "none"`, no embedding fallback) and three primary-memory results by default. Markdown remains native readable source notes; OpenClaw owns its SQLite index/provenance, and Core keeps a separate protected operation journal. JSON is configuration/interchange. Static template checks pass; these defaults are not measured runtime savings, a hard token cap or memory lifecycle acceptance. See the memory diagram in docs/architecture.md.
+
 The current focus is the **OpenClaw secretary plugin**. Recent work fixed the review findings, introduced the requested Rust architecture, improved reminder reliability, and added static tool ownership/package checks. Live capabilities remain disabled. No source workbook, live Google records, scheduler jobs, WhatsApp messages or production configuration were changed.
 
 ## Read these first

@@ -8,6 +8,27 @@ Native scheduler integration uses supported `cron.*` Gateway RPC through `api.ru
 
 The native memory lifecycle is unresolved. Ordinary Markdown search/get does not establish bounded save/update/archive/history with explicit consent or prevent automatic persistence. Do not silently replace native memory with a separate personal database.
 
+For the owner's low-CPU/low-token priority, the local template uses the existing native Memory Core facility with `memory.search.provider: "none"`, no embedding fallback, and three primary-memory search results by default. Markdown remains the readable personal-note source; native SQLite holds its search index and provider-owned metadata. JSON remains configuration/interchange. Core's separate protected SQLite journal stores operation intent, approval and audit state, not a second personal knowledge store. [Pinned builtin memory engine](https://github.com/openclaw/openclaw/blob/v2026.10.7/docs/concepts/memory-builtin.md), [pinned memory configuration](https://github.com/openclaw/openclaw/blob/v2026.10.7/docs/reference/memory-config.md).
+
+This reduces retrieval work by avoiding embedding generation; actual CPU/token savings are unmeasured. Keep automatically loaded USER.md/MEMORY.md compact and retrieve bounded relevant excerpts. The three-result setting is a default, not a hard token limit: per-call overrides and wiki/combined searches have different rules. Keyword matching also has weaker paraphrase recall than semantic retrieval. Existing memory mutation and host qualification gates remain unchanged.
+
+```mermaid
+flowchart TD
+    Owner[Owner] --> Agent[OpenClaw secretary agent]
+    Agent -->|Recall| Native[Native memory-core tools]
+    Native -->|Read notes| Notes[Markdown personal notes]
+    Notes -->|Indexed by OpenClaw| Index[(Native SQLite FTS5 and provenance)]
+    Native <-->|Search| Index
+    Native -->|Relevant excerpts| Agent
+    Agent -->|Spreadsheet operations| Plugin[Our secretary-tools plugin]
+    Plugin --> Core[Rust Core]
+    Core --> Journal[(Protected SQLite operation journal)]
+    Core --> Sheets[Google Sheets planning records]
+    Plugin -.-> Pending[Personal-memory mutations unavailable]
+```
+
+The two SQLite stores have different responsibilities and permissions. Native memory state belongs to OpenClaw; the secretary does not edit its tables directly. Core's journal belongs to controlled business operations. Personal notes cannot authorize spreadsheet writes. Native memory recall is available only when the actual provider and run policy admit it; the diagram is the intended integration, not evidence of an activated host.
+
 [Interface notes](../contracts/interface-notes.md) define the implementation boundary. [Specification](specs/openclaw-personal-secretary.md) and [workbook assessment](spreadsheet-assessment.md) retain source decisions. The local ticket graph records completed checks and unresolved T007 live activation evidence. The subsequent low-effort review and its two local fixes are recorded in T009.
 
 ## Rust layers and command dispatch

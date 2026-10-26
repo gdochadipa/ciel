@@ -32,6 +32,11 @@
   },
   "memory": {
     "search": {
+      "provider": "none",
+      "fallback": "none",
+      "query": {
+        "maxResults": 3
+      },
       "sources": [
         "memory"
       ],
