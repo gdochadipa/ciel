@@ -27,7 +27,11 @@ export async function runWriteAcceptance(coreUrl:string,providerUrl:string) {
  await assert.rejects(tool('sheets_append',{operation_id:change.operation_id,approved:true}),/INVALID_INPUT/);
  assert.equal((await operator(change.operation_id,'approval',{decision:'approve',preview_digest:preview.data.preview_digest},syntheticToken)).ok,false,'Business bearer must not authorize operator endpoint');
  assert.equal((await operator(change.operation_id,'approval',{decision:'approve',preview_digest:'wrong-digest'})).ok,false);
- assert.equal((await operator(change.operation_id,'approval',{decision:'approve',preview_digest:preview.data.preview_digest})).data.state,'approved');
+ const approval=(await bridge.prepareApproval('sheets_append',{operation_id:change.operation_id},owner))!;
+ assert(approval.description.includes(JSON.stringify(preview.data,null,2)),'Approval must carry the complete captured Core preview');
+ assert.deepEqual(approval.allowedDecisions,['allow-once','deny']);
+ await approval.onResolution('allow-once');
+ await assert.rejects(approval.onResolution('allow-once'),/APPROVAL_ALREADY_RESOLVED/);
  const committed=await tool('sheets_append',{operation_id:change.operation_id});assert.equal(committed.data.state,'applied');
  assert.equal((await tool('sheets_append',{operation_id:change.operation_id})).data.state,'applied');
  let tasks=await tool('sheets_read',{spreadsheet:'wedding-demo',view:'tasks'});assert.equal(tasks.data.records.length,1);

@@ -4,7 +4,7 @@ Updated: 2026-10-26 · Timezone: Asia/Makassar
 
 ## Current position
 
-Local implementation exists, but the MVP is **not fully accepted or ready for production**. The latest implementation commit is `b7155ab` — plugin tool discovery and package validation. This progress file adds documentation only; the validation results below come from the preceding implementation sessions.
+Local implementation exists, but the MVP is **not fully accepted or ready for production**. The latest increment is T013 — complete immutable approval presentation, action binding and Core refusal propagation. Its implementation commit can be found with `git log -- .scratch/secretary-mvp/T013.md` in the integration repository. Validation below includes this continuation session.
 
 The current focus is the **OpenClaw secretary plugin**. Recent work fixed the review findings, introduced the requested Rust architecture, improved reminder reliability, and added static tool ownership/package checks. Live capabilities remain disabled. No source workbook, live Google records, scheduler jobs, WhatsApp messages or production configuration were changed.
 
@@ -21,21 +21,21 @@ The current focus is the **OpenClaw secretary plugin**. Recent work fixed the re
 | [Security](docs/security.md) and [deployment](docs/deployment.md) | Capability qualification and operating procedures. |
 | [API contract](contracts/openapi.yaml) | Public Core requests and response envelopes. |
 
-Latest follow-ups: [T009 review fixes](.scratch/secretary-mvp/T009.md), [T010 Rust architecture](.scratch/secretary-mvp/T010.md), [T011 reminder reliability](.scratch/secretary-mvp/T011.md), [T012 discovery and packaging](.scratch/secretary-mvp/T012.md).
+Latest follow-ups: [T009 review fixes](.scratch/secretary-mvp/T009.md), [T010 Rust architecture](.scratch/secretary-mvp/T010.md), [T011 reminder reliability](.scratch/secretary-mvp/T011.md), [T012 discovery and packaging](.scratch/secretary-mvp/T012.md), [T013 approval presentation](.scratch/secretary-mvp/T013.md).
 
 ## Last verified checks
 
-- **20 TypeScript checks passed:** 14 bridge, 3 packaging, 3 acceptance-configuration checks. Three socket HTTP tests remain skipped.
-- **16 cached-source Rust checks passed**, including real in-process Axum dispatch; Clippy passed for that cached-source graph.
+- **26 TypeScript checks passed:** 14 existing bridge, 6 fetch-boundary approval, 3 packaging, 3 acceptance-configuration checks. The new approval checks use synthetic Core responses and do not run Core or the host. Three socket HTTP tests remain skipped.
+- **16 cached-source Rust checks passed again**, including real in-process Axum dispatch; Clippy passed for that cached-source graph.
 - Metadata checks, SDK-external bundles and offline npm package file-selection checks passed.
 - Full Rust/Google/OAuth build, actual SDK validation, socket acceptance, live delivery and hosted CI have **not** passed here. See the evidence table in the implementation status for exact limits.
 
 ## Next work, in order
 
-1. Recheck environment availability before adding more workarounds: actual OpenClaw **2026.10.7**, Node **24.16+**, npm/crates.io access, and local socket permission. The last session had no OpenClaw CLI, active Node 20.20.2, DNS failures, and loopback `EPERM`.
+1. Recheck environment availability before adding more workarounds: actual OpenClaw **2026.10.7**, Node **24.16+**, npm/crates.io access, and local socket permission. This continuation rechecked: no OpenClaw CLI, active Node 20.20.2 (installed versions stop at 22.23.3), npm/crates.io DNS failures, and Node loopback `EPERM`.
 2. When dependencies can actually resolve, generate and validate real Bun/Cargo locks. Compile against the real SDK and production Rust dependencies. Do not fabricate SDK declarations, lockfiles, CLI behavior or test success.
 3. Resolve real host build/validation errors, then run the retained HTTP tests and Google-only Postman read/write simulations through the real bridge/Core. Existing simulations and context notes are under `postman/`.
-4. Qualify trusted owner approval routing, full immutable-preview presentation, denial/expiry/replay behavior, native scheduler persistence and owner-only WhatsApp delivery evidence on disposable resources. T007 remains the production gate; do not enable capabilities or deploy merely because metadata/bundling passes.
+4. T013 now includes the full captured preview in the dialog description and rejects action mismatch/Core refusal. Qualify trusted owner approval routing, complete rendering without truncation, callback-error blocking, denial/expiry/replay behavior, native scheduler persistence and owner-only WhatsApp delivery evidence on disposable resources. T007 remains the production gate; do not enable capabilities or deploy merely because metadata/bundling passes.
 5. Address the explicit native-memory lifecycle gap in T008 using verified supported interfaces. Do not silently introduce another personal-memory database or enable automatic saving.
 
 Native offset pagination is not a transactional snapshot, and declaration convergence still needs actual host checks. Those limitations and other remaining gaps are recorded in T011/T012 and the implementation status.

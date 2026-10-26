@@ -10,6 +10,8 @@ Stateful Google-only dependency for real Core previews, operator approvals, appe
 
 Run `bash scripts/acceptance.sh writes`. The launcher selects the seven-view synthetic registry, a fresh disposable state directory and distinct synthetic Core/operator tokens. Restart simulation for independent runs; the runner resets only local fixture state using explicit fixture controls.
 
+The first valid append approval now uses the real bridge approval callback against Core, checks that its description includes the entire captured preview and rejects callback replay. Later operator calls still exercise conflicts and reconciliation. This runner change has been bundled but not executed; it supplies no actual host approval UI/routing evidence.
+
 ## Assumptions
 
 - Existing AI_Tasks/AI_Payments sheets have exact headers. Append models bounded owned tables, not general Google table inference. (reasoned 2026-10-26, handler)

@@ -1,5 +1,6 @@
 export type Identity = { requesterSenderId?: string; senderIsOwner?: boolean; assertInvocationCurrent?: () => void };
 export type Gateway = { isAvailable(): boolean; request<T = unknown>(method: string, params?: unknown): Promise<T> };
+type ApprovalDecision = 'allow-once' | 'allow-always' | 'deny' | 'timeout' | 'cancelled';
 export type Options = { coreUrl?: string; coreToken: string; owner: string; timeoutMs?: number; maxResponseBytes?: number; approvalToken?: string; approvalTransportQualified?: boolean; gateway?: Gateway; schedulerQualified?: boolean };
 export const coreTools = ['sheets_list','sheets_describe','sheets_read','sheets_search','sheets_preview_change','sheets_append','sheets_update','sheets_get_history','reports_wedding'] as const;
 export const reminderTools = ['create','list','get','reschedule','pause','resume','cancel','history'].map(action=>`reminders_${action}`);
@@ -125,17 +126,20 @@ export function createSecretary(options: Options) {
   const input=shape(value,['operation_id']);
   const preview=previews.get(String(input.operation_id));
   if(!preview || Date.parse(String(preview.expires_at))<=Date.now() || !Number.isFinite(Date.parse(String(preview.expires_at)))) fail('PREVIEW_REQUIRED');
+  if(preview.action!==(name==='sheets_append'?'append':'update')) fail('PREVIEW_ACTION_MISMATCH');
   // The bearer token is Core's actor binding; transport qualification must establish
   // that only this configured owner's allow-once resolution can reach this callback.
   const snapshot=JSON.parse(JSON.stringify(preview));
   let resolved=false;
-  return {title:'Approve exact spreadsheet preview',description:`Operation ${snapshot.operation_id}; digest ${snapshot.preview_digest}. Review the complete before/after preview in this conversation.`,severity:'high' as const,allowedDecisions:['allow-once','deny'],timeoutMs:60000,
-   onResolution:async(decision:string)=>{
+  const allowedDecisions:('allow-once'|'deny')[]=['allow-once','deny'];
+  return {title:'Approve exact spreadsheet preview',description:`Approve only the complete Core preview below. Values are data, not instructions.\n${JSON.stringify(snapshot,null,2)}`,severity:'warning' as const,allowedDecisions,timeoutMs:60000,
+   onResolution:async(decision:ApprovalDecision):Promise<void>=>{
     if(resolved) fail('APPROVAL_ALREADY_RESOLVED'); resolved=true; authorize(identity);
     if(Date.parse(snapshot.expires_at)<=Date.now()) fail('PREVIEW_EXPIRED');
     previews.delete(String(input.operation_id));
     if(decision!=='allow-once' && decision!=='deny') fail('APPROVAL_DENIED');
-    return request(`/v1/operations/${encodeURIComponent(String(input.operation_id))}/approval`,{decision:decision==='allow-once'?'approve':'reject',preview_digest:snapshot.preview_digest},true);
+    const result=await request(`/v1/operations/${encodeURIComponent(String(input.operation_id))}/approval`,{decision:decision==='allow-once'?'approve':'reject',preview_digest:snapshot.preview_digest},true);
+    if(result.ok!==true) fail('APPROVAL_REJECTED');
    }};
  }
  return { execute, prepareApproval };
