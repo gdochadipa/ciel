@@ -20,7 +20,26 @@ function isReminderJob(job: Record<string,unknown>): boolean {
 export const DEFAULT_CORE_URL = 'http://127.0.0.1:8787';
 const canceledReminderDescription = 'Secretary: canceled; retained for history';
 export function createSecretary(options: Options) {
- const previews = new Map<string, Record<string,unknown>>();
+ const previews = new Map<string,{preview:Record<string,unknown>;expiresAt:number;bytes:number}>();
+ let previewBytes=0;
+ const forgetPreview=(id:string)=>{
+  const previous=previews.get(id);
+  if(previous) {previewBytes-=previous.bytes;previews.delete(id);}
+ };
+ const prunePreviews=()=>{
+  const now=Date.now();
+  for(const [id,entry] of previews)if(entry.expiresAt<=now)forgetPreview(id);
+ };
+ const rememberPreview=(id:string,preview:Record<string,unknown>)=>{
+  prunePreviews();forgetPreview(id);
+  const expiresAt=Date.parse(String(preview.expires_at));
+  if(!Number.isFinite(expiresAt)||expiresAt<=Date.now())return;
+  const encoded=JSON.stringify(preview),bytes=new TextEncoder().encode(encoded).length;
+  // Bound transient approval state without a timer or a second persistent store.
+  if(bytes>4194304)return;
+  while(previews.size>=64||previewBytes+bytes>4194304)forgetPreview(previews.keys().next().value!);
+  previews.set(id,{preview:JSON.parse(encoded),expiresAt,bytes});previewBytes+=bytes;
+ };
  const url = new URL(options.coreUrl ?? DEFAULT_CORE_URL);
  if (url.protocol !== 'http:' || !['127.0.0.1','[::1]'].includes(url.hostname) || url.username || url.password || url.search || url.hash || url.pathname !== '/') fail('INVALID_CORE_DESTINATION');
  if (!options.coreToken || !options.owner) fail('INVALID_CONFIGURATION');
@@ -56,7 +75,7 @@ export function createSecretary(options: Options) {
   if(name==='sheets_preview_change' && result.ok===true) {
    const preview=object(result.data);
    if(preview.operation_id!==input.operation_id || typeof preview.preview_digest!=='string' || typeof preview.actor!=='string' || typeof preview.expires_at!=='string') fail('INVALID_CORE_RESPONSE');
-   previews.set(String(input.operation_id),JSON.parse(JSON.stringify(preview)));
+   rememberPreview(String(input.operation_id),preview);
   }
   return result;
  }
@@ -130,7 +149,8 @@ export function createSecretary(options: Options) {
   if(!['sheets_append','sheets_update'].includes(name)) return undefined;
   if(!options.approvalTransportQualified || !options.approvalToken) fail('WRITES_DISABLED');
   const input=shape(value,['operation_id']);
-  const preview=previews.get(String(input.operation_id));
+  prunePreviews();
+  const preview=previews.get(String(input.operation_id))?.preview;
   if(!preview || Date.parse(String(preview.expires_at))<=Date.now() || !Number.isFinite(Date.parse(String(preview.expires_at)))) fail('PREVIEW_REQUIRED');
   if(preview.action!==(name==='sheets_append'?'append':'update')) fail('PREVIEW_ACTION_MISMATCH');
   // The bearer token is Core's actor binding; transport qualification must establish
@@ -142,7 +162,7 @@ export function createSecretary(options: Options) {
    onResolution:async(decision:ApprovalDecision):Promise<void>=>{
     if(resolved) fail('APPROVAL_ALREADY_RESOLVED'); resolved=true; authorize(identity);
     if(Date.parse(snapshot.expires_at)<=Date.now()) fail('PREVIEW_EXPIRED');
-    previews.delete(String(input.operation_id));
+    forgetPreview(String(input.operation_id));
     if(decision!=='allow-once' && decision!=='deny') fail('APPROVAL_DENIED');
     const result=await request(`/v1/operations/${encodeURIComponent(String(input.operation_id))}/approval`,{decision:decision==='allow-once'?'approve':'reject',preview_digest:snapshot.preview_digest},identity,true);
     if(result.ok!==true) fail('APPROVAL_REJECTED');

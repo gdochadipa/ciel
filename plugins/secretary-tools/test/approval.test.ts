@@ -102,9 +102,64 @@ test('expiry and revoked invocation authority prevent operator traffic after a d
   await expect(expired.onResolution('allow-once')).rejects.toThrow('APPROVAL_ALREADY_RESOLVED');
   await expect(bridge.prepareApproval('sheets_update',{operation_id:'approval-1'},identity)).rejects.toThrow('PREVIEW_REQUIRED');
   clock.mockReturnValue(Date.parse('2098-12-31T23:59:00Z'));
+  await bridge.execute('sheets_preview_change',change,identity);
   const revoked=(await bridge.prepareApproval('sheets_update',{operation_id:'approval-1'},identity))!;
   current=false;
   await expect(revoked.onResolution('allow-once')).rejects.toThrow('INVOCATION_EXPIRED');
-  expect(transport).toHaveBeenCalledTimes(1);
+  expect(transport).toHaveBeenCalledTimes(2);
  } finally {clock.mockRestore();transport.mockRestore();}
+});
+
+test('a long-lived bridge retains at most 64 previews and refreshes an explicitly fetched preview',async()=>{
+ const transport=spyOn(globalThis,'fetch').mockImplementation(async(_input,init)=>{
+  const input=JSON.parse(String(init?.body));
+  return Response.json({ok:true,data:{...preview,operation_id:input.operation_id}});
+ });
+ try {
+  const bridge=createSecretary(options);
+  for(let i=0;i<64;i++)await bridge.execute('sheets_preview_change',{...change,operation_id:`bounded-${i}`},owner);
+  await bridge.execute('sheets_preview_change',{...change,operation_id:'bounded-0'},owner);
+  await bridge.execute('sheets_preview_change',{...change,operation_id:'bounded-64'},owner);
+  await expect(bridge.prepareApproval('sheets_update',{operation_id:'bounded-1'},owner)).rejects.toThrow('PREVIEW_REQUIRED');
+  expect((await bridge.prepareApproval('sheets_update',{operation_id:'bounded-0'},owner))!.description).toContain('bounded-0');
+  expect((await bridge.prepareApproval('sheets_update',{operation_id:'bounded-64'},owner))!.description).toContain('bounded-64');
+  expect(transport).toHaveBeenCalledTimes(66);
+ } finally {transport.mockRestore();}
+});
+
+test('expired previews are reclaimed before an unexpired preview is displaced',async()=>{
+ const start=Date.parse('2098-01-01T00:00:00Z');
+ const clock=spyOn(Date,'now').mockReturnValue(start);
+ const transport=spyOn(globalThis,'fetch').mockImplementation(async(_input,init)=>{
+  const input=JSON.parse(String(init?.body));
+  return Response.json({ok:true,data:{...preview,operation_id:input.operation_id,expires_at:new Date(start+(input.operation_id==='valid-first'||input.operation_id==='fresh'?60000:1000)).toISOString()}});
+ });
+ try {
+  const bridge=createSecretary(options);
+  await bridge.execute('sheets_preview_change',{...change,operation_id:'valid-first'},owner);
+  for(let i=0;i<63;i++)await bridge.execute('sheets_preview_change',{...change,operation_id:`short-${i}`},owner);
+  clock.mockReturnValue(start+2000);
+  await bridge.execute('sheets_preview_change',{...change,operation_id:'fresh'},owner);
+  expect((await bridge.prepareApproval('sheets_update',{operation_id:'valid-first'},owner))!.description).toContain('valid-first');
+  await expect(bridge.prepareApproval('sheets_update',{operation_id:'short-0'},owner)).rejects.toThrow('PREVIEW_REQUIRED');
+ } finally {clock.mockRestore();transport.mockRestore();}
+});
+
+test('large previews share a four MiB serialized cache budget without corrupting an open approval',async()=>{
+ const transport=spyOn(globalThis,'fetch').mockImplementation(async(_input,init)=>{
+  const input=JSON.parse(String(init?.body));
+  if(!input.operation_id)return Response.json({ok:true,data:{state:'approved'}});
+  return Response.json({ok:true,data:{...preview,operation_id:input.operation_id,after:{note:'x'.repeat(900000)}}});
+ });
+ try {
+  const bridge=createSecretary(options);
+  await bridge.execute('sheets_preview_change',{...change,operation_id:'large-0'},owner);
+  const opened=(await bridge.prepareApproval('sheets_update',{operation_id:'large-0'},owner))!;
+  for(let i=1;i<5;i++)await bridge.execute('sheets_preview_change',{...change,operation_id:`large-${i}`},owner);
+  await expect(bridge.prepareApproval('sheets_update',{operation_id:'large-0'},owner)).rejects.toThrow('PREVIEW_REQUIRED');
+  expect((await bridge.prepareApproval('sheets_update',{operation_id:'large-4'},owner))!.description).toContain('large-4');
+  await opened.onResolution('allow-once');
+  await expect(opened.onResolution('allow-once')).rejects.toThrow('APPROVAL_ALREADY_RESOLVED');
+  expect(transport).toHaveBeenCalledTimes(6);
+ } finally {transport.mockRestore();}
 });

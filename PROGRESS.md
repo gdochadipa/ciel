@@ -4,7 +4,7 @@ Updated: 2026-10-26 · Asia/Makassar
 
 ## Current position
 
-T019 adds built-entry factory/hook integration after T018 operator/recovery checks and T017 local qualification against the actual OpenClaw 2026.10.7 SDK and full Rust dependency graph. **Live activation remains T007 and is not accepted.** The plugin owns 17 spreadsheet/report/reminder tools; personal memory is delegated to OpenClaw. No custom memory database or lifecycle is required.
+T020 bounds transient preview state after T019 built-entry factory/hook integration, T018 operator/recovery checks and T017 local qualification against the actual OpenClaw 2026.10.7 SDK and full Rust dependency graph. **Live activation remains T007 and is not accepted.** The plugin owns 17 spreadsheet/report/reminder tools; personal memory is delegated to OpenClaw. No custom memory database or lifecycle is required.
 
 The full verification script passed in qualified Linux: 21 Rust tests, 31 plugin tests and three acceptance-configuration tests with no skips, strict SDK type checking, actual host build/validation and package generation. All six Postman scenarios passed through the real bridge and Rust Core with Google as the only simulated dependency. Cargo/Bun locks were generated from actual registries and frozen installs validated. See [T017](.scratch/secretary-mvp/T017.md) and [implementation status](docs/implementation-status.md) for evidence and boundaries.
 
@@ -13,6 +13,8 @@ The real SDK requires Node `>=24.22.1 <25 || >=26.12.1`, correcting the previous
 Operator/recovery increment: [T018](.scratch/secretary-mvp/T018.md) fixes temporary SQLite sidecars left by the backup script, verifies standalone snapshots and restores an actual Core WAL journal without authorizing interrupted-write replay. Ten operator CLI tests and all 22 Rust tests pass; formatting and Clippy pass. The plugin/SDK/provider code is unchanged from T017, so its 34 TypeScript and six simulation results were not rerun. Owner preference: continue local preparation first. [T007](.scratch/secretary-mvp/T007.md) now lists the exact live evidence still needed.
 
 Latest entry follow-up: [T019](.scratch/secretary-mvp/T019.md) executes the actual built bundle and installed SDK registrations through real Core/Google-only HTTP. Registered factory preview → registered hook approval → append passes, with API-instance preview isolation and exactly one matching record. The write launcher rebuilds first. The host registry is a fixture; actual host policy/UI and requester provenance remain T007. The 31 plugin and three acceptance-configuration checks passed again; Rust/Python were unchanged from T018 and not rerun.
+
+Latest resource follow-up: [T020](.scratch/secretary-mvp/T020.md) limits cached approval previews to 64 entries/4 MiB serialized UTF-8 JSON per host API, prunes expired entries on preview/approval activity and evicts oldest captured entries when needed. No cleanup timer or personal-memory store was added. Eviction requires re-fetching a preview before a new approval dialog; existing dialogs retain their one-shot immutable snapshot. Three focused regressions plus the previous tests pass (34 plugin + three acceptance-configuration checks). Actual SDK type/build/validate and stateful Google-only write/entry acceptance pass again. Rust/Python are unchanged from T018. A refreshed local archive was packed successfully (35576 bytes; SHA-256 `44e765ed105760675b849541d43b9a73e651ef57f8816d5d8010ae4b1f29ba8d`), without activation.
 
 ## Read these first
 
