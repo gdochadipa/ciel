@@ -22,6 +22,8 @@ pub struct Document {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Spreadsheet {
+    #[serde(default)]
+    pub create_tabs: bool,
     pub alias: String,
     pub id: String,
     pub readable: bool,
@@ -192,6 +194,7 @@ impl Registry {
                     .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
                 || !ids.insert(&s.id)
                 || !aliases.insert(&s.alias)
+                || s.create_tabs && !s.readable
                 || s.views.is_empty()
                 || s.views.len() > 10
             {

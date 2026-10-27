@@ -6,7 +6,7 @@ import {getToolPluginMetadata} from 'openclaw/plugin-sdk/tool-plugin';
 import type {AnyAgentTool,OpenClawPluginApi} from 'openclaw/plugin-sdk/plugin-entry';
 import {acceptanceConfiguration,syntheticOwner,syntheticToken} from './acceptance';
 
-export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'='sheets') {
+export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'tabs'='sheets') {
  const base=acceptanceConfiguration(coreUrl,'writes');
  const saved={core:process.env.SECRETARY_CORE_TOKEN,approval:process.env.SECRETARY_APPROVAL_TOKEN};
  delete process.env.SECRETARY_CORE_TOKEN;delete process.env.SECRETARY_APPROVAL_TOKEN;
@@ -17,7 +17,7 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'='sh
   const manifest=await Bun.file(new URL('../plugins/secretary-tools/openclaw.plugin.json',import.meta.url)).json();
   assert(metadata,'Actual SDK must recognize metadata after the plugin extends register');
   assert.deepEqual(metadata.tools.map(tool=>tool.name).sort(),manifest.contracts.tools.toSorted());
-  assert.equal(metadata.tools.length,23);
+  assert.equal(metadata.tools.length,25);
   let runtimeAllowed=false;
   function registry() {
    const tools=new Map<string,Function>();
@@ -36,7 +36,7 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'='sh
     on(name:string,handler:Function) {assert.equal(name,'before_tool_call');assert(!hook);hook=handler;},
    };
    entry.register(api as unknown as OpenClawPluginApi);
-   assert.equal(tools.size,23);assert(hook);
+   assert.equal(tools.size,25);assert(hook);
    assert.deepEqual([...tools.keys()].sort(),manifest.contracts.tools.toSorted());
    return {
     tool(name:string,context:Record<string,unknown>):AnyAgentTool {
@@ -53,8 +53,8 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'='sh
   let current=true;
   const owner={requesterSenderId:syntheticOwner,senderIsOwner:true,assertInvocationCurrent(){assert(current,'INVOCATION_EXPIRED');}};
   const list=first.tool('sheets_list',owner);
-  const commitName=kind==='docs'?'docs_apply':'sheets_append';
-  const previewTool=first.tool(kind==='docs'?'docs_preview_change':'sheets_preview_change',owner);
+  const commitName=kind==='tabs'?'sheets_create_tab':kind==='docs'?'docs_apply':'sheets_append';
+  const previewTool=first.tool(kind==='tabs'?'sheets_preview_create_tab':kind==='docs'?'docs_preview_change':'sheets_preview_change',owner);
   const append=first.tool(commitName,owner);
   // Both registration and concrete factory construction succeeded without secrets/runtime.
   runtimeAllowed=true;
@@ -70,7 +70,7 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'='sh
   current=false;
   assert.equal((await execute(list,{})).error.code,'INVOCATION_EXPIRED');
   current=true;
-  const change=kind==='docs'?{operation_id:'acceptance-sdk-docs-entry',document:'notes',tab_id:'t.0',action:'append_text',fields:{text:' SDK appended'}}:{operation_id:'acceptance-sdk-entry',spreadsheet:'wedding-demo',view:'tasks',action:'append',fields:{title:'Synthetic SDK entry task',status:'todo'}};
+  const change=kind==='tabs'?{operation_id:'acceptance-sdk-tab-entry',spreadsheet:'operations',title:'SDK plan',rows:10,columns:2,headers:['Task','Owner']}:kind==='docs'?{operation_id:'acceptance-sdk-docs-entry',document:'notes',tab_id:'t.0',action:'append_text',fields:{text:' SDK appended'}}:{operation_id:'acceptance-sdk-entry',spreadsheet:'wedding-demo',view:'tasks',action:'append',fields:{title:'Synthetic SDK entry task',status:'todo'}};
   const preview=await execute(previewTool,change);assert.equal(preview.ok,true);
   const immutable=structuredClone(preview.data);
   if(kind==='docs')preview.data.after.text='Model-altered text';else preview.data.after.title='Model-altered text';preview.data.preview_digest='model-altered';
@@ -92,6 +92,9 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'='sh
   if(kind==='docs'){
    const read=await execute(first.tool('docs_read',owner),{document:'notes',tab_id:'t.0'});
    assert.equal(read.data.text.split(' SDK appended').length-1,1);
+  }else if(kind==='tabs'){
+   const history=await execute(first.tool('operations_get_history',owner),{operation_id:change.operation_id});
+   assert.equal(history.data.operation.after.registration,'unregistered');
   }else{
   const read=await execute(first.tool('sheets_read',owner),{spreadsheet:'wedding-demo',view:'tasks'});
   assert.equal(read.data.records.filter((row:any)=>row.source.record_id===immutable.record_id).length,1);

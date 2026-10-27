@@ -64,13 +64,18 @@
                               "writable": {
                                 "type": "boolean",
                                 "description": "True only when writes globally enabled and at least one explicit structured schema is registered."
+                              },
+                              "create_tabs": {
+                                "type": "boolean",
+                                "description": "True only when global writes and explicit registered create_tabs permission are enabled. Independent from structured-row writable. No resulting tab access is granted."
                               }
                             },
                             "required": [
                               "spreadsheet",
                               "id",
                               "readable",
-                              "writable"
+                              "writable",
+                              "create_tabs"
                             ],
                             "additionalProperties": false
                           }
@@ -228,6 +233,10 @@
                         "writable": {
                           "type": "boolean",
                           "description": "True only when writes globally enabled and at least one explicit structured schema is registered."
+                        },
+                        "create_tabs": {
+                          "type": "boolean",
+                          "description": "True only when global writes and explicit registered create_tabs permission are enabled. Independent from structured-row writable. No resulting tab access is granted."
                         }
                       },
                       "required": [
@@ -235,7 +244,8 @@
                         "id",
                         "mapping_version",
                         "views",
-                        "writable"
+                        "writable",
+                        "create_tabs"
                       ],
                       "additionalProperties": false
                     }
@@ -2732,6 +2742,312 @@
           }
         }
       }
+    },
+    "/v1/tools/sheets_preview_create_tab": {
+      "post": {
+        "operationId": "sheets_preview_create_tab",
+        "description": "Preview creation of a bounded GRID tab inside an already registered readable spreadsheet with create_tabs=true and global writes enabled. Max 10000 cells; headers are optional literal strings (max 256 UTF-8 bytes each), at most columns. Title cannot have surrounding whitespace, controls or []:*?/\\. Allocates an explicit sheet ID once, rejects current or registered title/ID collisions, persists owner-bound intent. Result remains unregistered/readable=false/writable=false.",
+        "security": [
+          {
+            "CoreBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "operation_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "spreadsheet": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "rows": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                  },
+                  "columns": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 26
+                  },
+                  "headers": {
+                    "type": "array",
+                    "maxItems": 26,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 256
+                    }
+                  }
+                },
+                "required": [
+                  "operation_id",
+                  "spreadsheet",
+                  "title",
+                  "rows",
+                  "columns"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TabPreview"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid core token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Writes disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown tool or spreadsheet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Schema drift or stale pagination cursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request exceeds 64 KiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bounded provider read failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Journal unavailable; fail closed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tools/sheets_create_tab": {
+      "post": {
+        "operationId": "sheets_create_tab",
+        "description": "Consume the approved tab preview once. Recheck registry/target and title/ID collisions; send addSheet and optional updateCells together in one batch. Never create a spreadsheet file. An ambiguous response is uncertain; reconcile metadata/header observations only, never resend. Successful observation establishes resulting state, not attribution of an identical collaborator operation.",
+        "security": [
+          {
+            "CoreBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "operation_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  }
+                },
+                "required": [
+                  "operation_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TabPreview"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid core token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Writes disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown tool or spreadsheet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Schema drift or stale pagination cursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request exceeds 64 KiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bounded provider read failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Journal unavailable; fail closed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3115,8 +3431,95 @@
           },
           {
             "$ref": "#/components/schemas/DocPreview"
+          },
+          {
+            "$ref": "#/components/schemas/TabPreview"
           }
         ]
+      },
+      "TabPreview": {
+        "type": "object",
+        "properties": {
+          "operation_id": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "spreadsheet": {
+            "type": "string"
+          },
+          "view": {
+            "type": "string"
+          },
+          "action": {
+            "const": "create_tab"
+          },
+          "record_id": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "object"
+          },
+          "before": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "after": {
+            "type": "object"
+          },
+          "mapping_version": {
+            "type": "string"
+          },
+          "source_revision": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "preview_digest": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "previewed",
+              "approved",
+              "rejected",
+              "expired",
+              "conflict",
+              "applying",
+              "applied",
+              "known_failure",
+              "uncertain",
+              "reconciliation"
+            ]
+          },
+          "resource_kind": {
+            "const": "sheets_tab"
+          }
+        },
+        "required": [
+          "operation_id",
+          "actor",
+          "spreadsheet",
+          "view",
+          "action",
+          "record_id",
+          "fields",
+          "before",
+          "after",
+          "mapping_version",
+          "source_revision",
+          "expires_at",
+          "preview_digest",
+          "state",
+          "resource_kind"
+        ],
+        "additionalProperties": false,
+        "description": "record_id is the once-allocated sheet ID; view is the requested title. after includes spreadsheet_id, sheet_id, title, rows, columns, literal headers and unregistered/readable=false/writable=false. No resulting tab registry access is granted."
       }
     }
   }

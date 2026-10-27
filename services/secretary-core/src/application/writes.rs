@@ -58,6 +58,8 @@ impl Writes {
         }
         let _guard = self.writer.lock().await;
         match command {
+            MutationCommand::TabPreview(c) => self.tab_preview(state, c).await,
+            MutationCommand::TabCreate(c) => self.tab_create(state, &c.operation_id).await,
             MutationCommand::DocsPreview(c) => self.docs_preview(state, c).await,
             MutationCommand::DocsApply(p) => self.docs_apply(state, &p.operation_id).await,
             MutationCommand::Preview(c) => {
@@ -235,6 +237,8 @@ impl Writes {
         }
         let outcome = if op.preview.resource_kind == ResourceKind::GoogleDocs {
             self.observe_document(state, &op.preview).await
+        } else if op.preview.resource_kind == ResourceKind::SheetsTab {
+            self.observe_tab(state, &op.preview).await
         } else {
             self.observe(state, &op.preview).await
         };

@@ -60,7 +60,23 @@ export async function runWorkspaceAcceptance(coreUrl:string,docsUrl:string) {
  assert.equal((await operator(lost.operation_id,'reconcile',{})).data.state,'applied');
  assert.equal((await fixture('/__fixture/stats')).applies,3);
  const history=await tool('operations_get_history',{operation_id:lost.operation_id});assert.equal(history.data.operation.state,'applied');assert.equal(history.data.operation.document,'notes');
- const {runEntryAcceptance}=await import('./acceptance-entry');await runEntryAcceptance(coreUrl,'docs');
+ // Same real bridge/Core/journal for bounded new tabs. Only Google is simulated.
+ const sheetsFixture=docsUrl.replace('/google-docs/v1','/google');
+ async function sheetFixture(path:string,post=false){const r=await fetch(sheetsFixture+path,{method:post?'POST':'GET'});assert(r.ok);return r.json() as any;}
+ const tab={operation_id:'tab-create-one',spreadsheet:'operations',title:'Team plan',rows:20,columns:3,headers:['Task','=literal']};
+ const tabPreview=await tool('sheets_preview_create_tab',tab);assert.equal(tabPreview.ok,true);assert.equal(tabPreview.data.after.registration,'unregistered');assert.equal(tabPreview.data.after.readable,false);assert.equal(tabPreview.data.after.writable,false);
+ assert.deepEqual((await tool('sheets_preview_create_tab',tab)).data,tabPreview.data);
+ assert.equal((await tool('sheets_create_tab',{operation_id:tab.operation_id})).ok,false);
+ const tabApproval=(await bridge.prepareApproval('sheets_create_tab',{operation_id:tab.operation_id},owner))!;assert(tabApproval.description.includes(JSON.stringify(tabPreview.data,null,2)));await tabApproval.onResolution('allow-once');
+ assert.equal((await tool('sheets_create_tab',{operation_id:tab.operation_id})).data.state,'applied');assert.equal((await tool('sheets_create_tab',{operation_id:tab.operation_id})).data.state,'applied');
+ assert.equal((await sheetFixture('/__fixture/stats')).creates,1);
+ assert.equal((await tool('sheets_describe',{spreadsheet:'operations'})).data.views.length,1);
+ assert.equal((await tool('sheets_preview_create_tab',{...tab,operation_id:'tab-collision'})).error.code,'tab_collision');
+ const lostTab={...tab,operation_id:'tab-lost',title:'Second plan',headers:[]};const lostTabPreview=await tool('sheets_preview_create_tab',lostTab);assert.equal(lostTabPreview.ok,true);
+ await operator(lostTab.operation_id,'approval',{decision:'approve',preview_digest:lostTabPreview.data.preview_digest});await sheetFixture('/__fixture/lose-next-response',true);
+ assert.equal((await tool('sheets_create_tab',{operation_id:lostTab.operation_id})).data.state,'uncertain');assert.equal((await tool('sheets_create_tab',{operation_id:lostTab.operation_id})).ok,false);
+ assert.equal((await operator(lostTab.operation_id,'reconcile',{})).data.state,'applied');assert.equal((await sheetFixture('/__fixture/stats')).creates,2);
+ const {runEntryAcceptance}=await import('./acceptance-entry');await runEntryAcceptance(coreUrl,'docs');await runEntryAcceptance(coreUrl,'tabs');
  assert.equal((await fixture('/__fixture/stats')).applies,4);
- console.log(JSON.stringify({acceptance:'passed',scenario:'workspace',scope:'generic Sheets + controlled Docs through actual SDK/bridge/Core; only Google simulated, no live Docs authorization'}));
+ console.log(JSON.stringify({acceptance:'passed',scenario:'workspace',scope:'generic Sheets + tab creation + controlled Docs through actual SDK/bridge/Core; only Google simulated, no live Docs authorization'}));
 }

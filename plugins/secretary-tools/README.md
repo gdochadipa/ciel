@@ -1,6 +1,6 @@
 # Secretary OpenClaw bridge
 
-Owner-only plugin for registered Google Sheets, Google Docs and native reminders, targeting the actual **OpenClaw 2026.10.7** SDK. The 23 tools use one loopback Rust Core for deterministic reads and controlled writes. Wedding-specific views/reports are optional domain profiles; general resource access uses `config/workspace.example.json`.
+Owner-only plugin for registered Google Sheets, Google Docs and native reminders, targeting the actual **OpenClaw 2026.10.7** SDK. The 25 tools use one loopback Rust Core for deterministic reads and controlled writes. Wedding-specific views/reports are optional domain profiles; general resource access uses `config/workspace.example.json`.
 
 ## Resource capabilities
 
@@ -44,3 +44,5 @@ From this package: `bun run check:types`, `bundle`, `build`, `validate`, `pack`.
 [Local verification](../../docs/local-verification.md) documents isolated reproduction. `bash scripts/verify.sh` checks Rust/operator/plugin/SDK behavior; `bash scripts/acceptance-all.sh` runs seven Google-only scenarios. `workspace` exercises real generic Sheets and Docs handlers, stateful Google revisions/lost responses and actual SDK registrations against a host registry fixture. Core is never a simulation member. These checks do not qualify live Docs scopes/permissions, actual approval UI, native Gateway or channels.
 
 Current implementation/evidence is recorded in [T023](../../.scratch/secretary-mvp/T023.md) and [implementation status](../../docs/implementation-status.md). Production writes and capability flags remain off; no live document, spreadsheet, job, message or host configuration was changed.
+
+Tab creation (T025): `sheets_preview_create_tab` takes `{operation_id,spreadsheet,title,rows,columns,headers?}` for an existing registered spreadsheet with explicit `create_tabs: true`. `sheets_create_tab` consumes its approved operation ID. Initial size is <=1000 rows, <=26 columns, <=10000 cells; optional headers are literal text. The complete preview binds the generated sheet ID, title, dimensions and access policy. The new tab remains unregistered/readable=false/writable=false; an operator must explicitly register bounded access afterward. Never create a new operation ID to work around uncertainty: inspect shared history and use operator reconciliation, which observes without another send. Committed flags stay disabled. See [capability bounds](../../docs/specs/workspace-capabilities.md).

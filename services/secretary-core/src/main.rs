@@ -31,10 +31,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if !registry.spreadsheets.iter().any(|s| s.readable) {
                 GoogleAccess::None
             } else if enabled
-                && registry
-                    .spreadsheets
-                    .iter()
-                    .any(|s| s.readable && s.views.iter().any(|v| v.structured()))
+                && registry.spreadsheets.iter().any(|s| {
+                    s.readable && (s.create_tabs || s.views.iter().any(|v| v.structured()))
+                })
             {
                 GoogleAccess::Write
             } else {

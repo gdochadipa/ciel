@@ -8,6 +8,7 @@ pub enum ResourceKind {
     #[default]
     Sheets,
     GoogleDocs,
+    SheetsTab,
 }
 impl ResourceKind {
     fn is_sheets(&self) -> bool {
@@ -34,6 +35,11 @@ pub struct Preview {
 }
 impl Preview {
     pub fn request_digest(&self) -> String {
+        if self.resource_kind == ResourceKind::SheetsTab {
+            return digest(
+                &json!({"resource_kind":"sheets_tab","operation_id":self.operation_id,"actor":self.actor,"spreadsheet":self.spreadsheet,"fields":self.fields}),
+            );
+        }
         if self.resource_kind == ResourceKind::GoogleDocs {
             return digest(
                 &json!({"resource_kind":"google_docs","operation_id":self.operation_id,"actor":self.actor,"document":self.spreadsheet,"tab_id":self.view,"action":self.action,"fields":self.fields}),

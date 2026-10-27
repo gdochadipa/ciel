@@ -23,6 +23,8 @@ pub enum Command {
 }
 /// Requests served by the mutation coordinator, including read-only operation history.
 pub enum MutationCommand {
+    TabPreview(crate::domain::tabs::CreateTab),
+    TabCreate(Commit),
     DocsPreview(crate::domain::documents::DocChange),
     DocsApply(Commit),
     Preview(Change),

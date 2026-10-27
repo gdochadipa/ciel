@@ -28,3 +28,6 @@ Implementation tests should use public tool routes and external HTTP stand-ins. 
 
 
 Rust implementation: HTTP presentation decodes these tool names into typed application commands. The in-process command bus coordinates domain rules through source/journal ports. Concrete Google/SQLite adapters implement those ports; error categories become HTTP statuses only in presentation. The command-bus refactor does not alter this public contract or grant tool-callable operator authorization.
+
+- `sheets_preview_create_tab`: `{operation_id,spreadsheet,title,rows,columns,headers?}`; existing registered spreadsheet only, explicit `create_tabs` permission (default false), global writes required. Title 1–100 characters; rows 1–1000, columns 1–26, total <=10000 cells. Headers <=columns, <=256 UTF-8 bytes each, literal text. Generated sheet ID is persisted in the immutable `sheets_tab` preview (`record_id` and `after.sheet_id`). Full bounds/access/recovery policy is in Workspace capabilities.
+- `sheets_create_tab`: `{operation_id}`; same trusted approval hook and shared journal/FSM. One atomic addSheet + optional header batch. No retry after ambiguity; operator reconcile observes only. Result remains unregistered and unreadable/unwritable until separate operator registration; no automatic view or registry mutation.

@@ -91,7 +91,9 @@
       "docs_read",
       "docs_preview_change",
       "docs_apply",
-      "operations_get_history"
+      "operations_get_history",
+      "sheets_preview_create_tab",
+      "sheets_create_tab"
     ],
     "deny": [
       "group:fs",

@@ -242,6 +242,55 @@ impl GoogleClient {
             _ => WriteOutcome::Uncertain,
         }
     }
+    async fn tab_get(
+        &self,
+        s: &Spreadsheet,
+        p: Option<&crate::domain::operation::Preview>,
+    ) -> Result<Value, CoreError> {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            let token = self.token().await?;
+            let mut query = vec![("includeGridData", "false".to_owned()), ("fields", "spreadsheetId,sheets(properties(sheetId,title,sheetType,gridProperties(rowCount,columnCount)))".to_owned())];
+            if let Some(p) = p {
+                query = vec![("includeGridData", "true".to_owned()), ("fields", "spreadsheetId,sheets(properties(sheetId,title),data(startRow,startColumn,rowData(values(userEnteredValue))))".to_owned()), ("ranges", format!("'{}'!A1:{}1", p.view.replace('\'', "''"), (b'A' + p.after["columns"].as_u64().ok_or_else(CoreError::invalid)? as u8 - 1) as char))];
+            }
+            let response = self.client.get(format!("{}/spreadsheets/{}", self.base, s.id)).bearer_auth(token).query(&query).send().await.map_err(|_| CoreError::upstream())?;
+            if !response.status().is_success() { return Err(CoreError::upstream()); }
+            bounded(response).await
+        }).await.map_err(|_| CoreError::upstream())?
+    }
+    async fn create_tab(
+        &self,
+        s: &Spreadsheet,
+        p: &crate::domain::operation::Preview,
+    ) -> WriteOutcome {
+        let result = tokio::time::timeout(Duration::from_secs(10), async {
+            let token = self.token().await?;
+            let response = self
+                .client
+                .post(format!("{}/spreadsheets/{}:batchUpdate", self.base, s.id))
+                .bearer_auth(token)
+                .json(&crate::domain::tabs::requests(p))
+                .send()
+                .await
+                .map_err(|_| CoreError::upstream())?;
+            let status = response.status();
+            Ok::<_, CoreError>(if status.is_success() {
+                if bounded(response).await.is_ok() {
+                    WriteOutcome::Accepted
+                } else {
+                    WriteOutcome::Uncertain
+                }
+            } else if matches!(status.as_u16(), 400 | 401 | 403 | 404 | 422) {
+                WriteOutcome::Rejected
+            } else {
+                WriteOutcome::Uncertain
+            })
+        })
+        .await;
+        result
+            .unwrap_or(Ok(WriteOutcome::Uncertain))
+            .unwrap_or(WriteOutcome::Uncertain)
+    }
     pub async fn read(&self, s: &Spreadsheet) -> Result<Value, CoreError> {
         // Bound whole operation, including OAuth and retries, independently of socket timeout.
         tokio::time::timeout(Duration::from_secs(10), self.read_inner(s))
@@ -388,6 +437,63 @@ fn raw(value: &Value) -> Value {
 }
 
 impl crate::application::ports::WorkspacePort for GoogleClient {
+    fn tab_catalog<'a>(
+        &'a self,
+        s: &'a Spreadsheet,
+    ) -> crate::application::ports::PortFuture<'a, Result<Value, CoreError>> {
+        Box::pin(self.tab_get(s, None))
+    }
+    fn tab_headers<'a>(
+        &'a self,
+        s: &'a Spreadsheet,
+        p: &'a crate::domain::operation::Preview,
+    ) -> crate::application::ports::PortFuture<'a, Result<Value, CoreError>> {
+        Box::pin(async move {
+            let book = self.tab_get(s, Some(p)).await?;
+            if book["spreadsheetId"] != s.id {
+                return Err(CoreError::drift());
+            }
+            let sheets = book["sheets"].as_array().ok_or_else(CoreError::drift)?;
+            if sheets.len() != 1
+                || sheets[0]["properties"]["sheetId"] != p.after["sheet_id"]
+                || sheets[0]["properties"]["title"] != p.view
+            {
+                return Err(CoreError::drift());
+            }
+            let cells = crate::domain::projection::cells(&sheets[0]);
+            let mut headers = Vec::new();
+            for col in 0..p.after["columns"].as_u64().ok_or_else(CoreError::invalid)? {
+                let coord = format!("{}1", (b'A' + col as u8) as char);
+                // Inspect entered values: an equivalent formula is not an approved literal header.
+                let value = cells.get(&coord).and_then(|v| v.get("userEnteredValue"));
+                headers.push(match value {
+                    None | Some(Value::Null) => json!(""),
+                    Some(v)
+                        if v.as_object().is_some_and(|o| o.len() == 1)
+                            && v["stringValue"].is_string() =>
+                    {
+                        v["stringValue"].clone()
+                    }
+                    _ => return Err(CoreError::drift()),
+                });
+            }
+            let expected = p.after["headers"]
+                .as_array()
+                .ok_or_else(CoreError::invalid)?;
+            if headers.iter().skip(expected.len()).any(|v| v != "") {
+                return Err(CoreError::drift());
+            }
+            headers.truncate(expected.len());
+            Ok(Value::Array(headers))
+        })
+    }
+    fn create_tab<'a>(
+        &'a self,
+        s: &'a Spreadsheet,
+        p: &'a crate::domain::operation::Preview,
+    ) -> crate::application::ports::PortFuture<'a, WriteOutcome> {
+        Box::pin(self.create_tab(s, p))
+    }
     fn read_document<'a>(
         &'a self,
         document: &'a crate::domain::registry::Document,

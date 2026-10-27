@@ -91,6 +91,10 @@ fn decode_tool(name: &str, input: Value) -> Result<Command, CoreError> {
         "sheets_read" => Command::Read(parse(input)?),
         "sheets_search" => Command::Search(parse(input)?),
         "reports_wedding" => Command::Report(parse(input)?),
+        "sheets_preview_create_tab" => {
+            Command::Mutation(MutationCommand::TabPreview(parse(input)?))
+        }
+        "sheets_create_tab" => Command::Mutation(MutationCommand::TabCreate(parse(input)?)),
         "sheets_preview_change" => Command::Mutation(MutationCommand::Preview(parse(input)?)),
         "sheets_append" => Command::Mutation(MutationCommand::Append(parse(input)?)),
         "sheets_update" => Command::Mutation(MutationCommand::Update(parse(input)?)),

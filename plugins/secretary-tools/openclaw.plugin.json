@@ -58,7 +58,9 @@
       "reminders_pause",
       "reminders_resume",
       "reminders_cancel",
-      "reminders_history"
+      "reminders_history",
+      "sheets_preview_create_tab",
+      "sheets_create_tab"
     ]
   }
 }

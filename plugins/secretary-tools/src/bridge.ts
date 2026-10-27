@@ -3,11 +3,12 @@ export type Gateway = { isAvailable(): boolean | Promise<boolean>; request<T = u
 type ApprovalDecision = 'allow-once' | 'allow-always' | 'deny' | 'timeout' | 'cancelled';
 export type Options = { coreUrl?: string; coreToken: string; owner: string; timeoutMs?: number; maxResponseBytes?: number; approvalToken?: string; approvalTransportQualified?: boolean; gateway?: Gateway; schedulerQualified?: boolean };
 export const docsTools=['docs_list','docs_describe','docs_read','docs_preview_change','docs_apply','operations_get_history'] as const;
-export const coreTools = [...docsTools,'sheets_list','sheets_describe','sheets_read','sheets_search','sheets_preview_change','sheets_append','sheets_update','sheets_get_history','reports_wedding'] as const;
+export const coreTools = [...docsTools,'sheets_preview_create_tab','sheets_create_tab','sheets_list','sheets_describe','sheets_read','sheets_search','sheets_preview_change','sheets_append','sheets_update','sheets_get_history','reports_wedding'] as const;
 export const reminderTools = ['create','list','get','reschedule','pause','resume','cancel','history'].map(action=>`reminders_${action}`);
 export const secretaryToolNames = [...coreTools,...reminderTools];
 const fields: Record<string, [string[], string[]]> = {
  docs_list:[[],[]],docs_describe:[['document'],[]],docs_read:[['document','tab_id'],['limit','cursor']],docs_preview_change:[['operation_id','document','tab_id','action','fields'],[]],docs_apply:[['operation_id'],[]],operations_get_history:[[],['operation_id','limit','cursor']],
+ sheets_preview_create_tab:[['operation_id','spreadsheet','title','rows','columns'],['headers']],sheets_create_tab:[['operation_id'],[]],
  sheets_list:[[],[]], sheets_describe:[['spreadsheet'],[]], sheets_read:[['spreadsheet','view'],['limit','cursor']], sheets_search:[['spreadsheet','view','query'],['limit','cursor']],
  sheets_preview_change:[['operation_id','spreadsheet','view','action','fields'],['record_id']], sheets_append:[['operation_id'],[]], sheets_update:[['operation_id'],[]], sheets_get_history:[[],['operation_id','limit','cursor']], reports_wedding:[['spreadsheet'],[]],
 };
@@ -67,17 +68,24 @@ export function createSecretary(options: Options) {
   if (!fields[name]) fail('UNKNOWN_TOOL');
   const input = shape(value,...fields[name]);
   for (const [key,val] of Object.entries(input)) {
+   if (key==='rows' || key==='columns') {if(!Number.isInteger(val) || Number(val)<1 || Number(val)>(key==='rows'?1000:26)) fail('INVALID_INPUT');continue;}
+   if(key==='headers') {if(!Array.isArray(val) || val.length>Number(input.columns) || val.some(h=>typeof h!=='string' || new TextEncoder().encode(h).length>256 || /[\x00-\x1f\x7f-\x9f]/.test(h))) fail('INVALID_INPUT');continue;}
    if (key==='fields') {object(val);continue;}
    if (key==='limit') {if(!Number.isInteger(val) || Number(val)<1 || Number(val)>(name==='docs_read'?10000:100)) fail('INVALID_INPUT');continue;}
    if(typeof val !=='string' || !val.trim() || val.length>8192) fail('INVALID_INPUT');
   }
+  if(name==='sheets_preview_create_tab' && (Number(input.rows)*Number(input.columns)>10000 || String(input.title).trim()!==input.title || [...String(input.title)].length>100 || /[\x00-\x1f\x7f-\x9f\[\]:*?/\\]/.test(String(input.title)))) fail('INVALID_INPUT');
   if((name==='sheets_preview_change' && !['append','update'].includes(String(input.action))) || (name==='docs_preview_change' && !['append_text','replace_text'].includes(String(input.action)))) fail('INVALID_INPUT');
-  if(['sheets_append','sheets_update','docs_apply'].includes(name) && (!options.approvalTransportQualified || !options.approvalToken)) fail('WRITES_DISABLED');
+  if(['sheets_append','sheets_update','docs_apply','sheets_create_tab'].includes(name) && (!options.approvalTransportQualified || !options.approvalToken)) fail('WRITES_DISABLED');
   const result=await request(`/v1/tools/${name}`,input,identity);
-  if(['sheets_preview_change','docs_preview_change'].includes(name) && result.ok===true) {
+  if(['sheets_preview_change','docs_preview_change','sheets_preview_create_tab'].includes(name) && result.ok===true) {
    const preview=object(result.data);
    if(preview.operation_id!==input.operation_id || typeof preview.preview_digest!=='string' || typeof preview.actor!=='string' || typeof preview.expires_at!=='string') fail('INVALID_CORE_RESPONSE');
    if(name==='docs_preview_change' && (preview.resource_kind!=='google_docs' || preview.document!==input.document || preview.tab_id!==input.tab_id || preview.action!==input.action || preview.actor!==options.owner)) fail('INVALID_CORE_RESPONSE');
+   if(name==='sheets_preview_create_tab') {
+    const expected={title:input.title,rows:input.rows,columns:input.columns,headers:input.headers??[]};
+    if(preview.resource_kind!=='sheets_tab' || preview.spreadsheet!==input.spreadsheet || preview.action!=='create_tab' || preview.actor!==options.owner || JSON.stringify(Object.entries(object(preview.fields)).sort())!==JSON.stringify(Object.entries(expected).sort())) fail('INVALID_CORE_RESPONSE');
+   }
    rememberPreview(String(input.operation_id),preview);
   }
   return result;
@@ -149,13 +157,13 @@ export function createSecretary(options: Options) {
  }
  async function prepareApproval(name: string, value: unknown, identity: Identity) {
   authorize(identity);
-  if(!['sheets_append','sheets_update','docs_apply'].includes(name)) return undefined;
+  if(!['sheets_append','sheets_update','docs_apply','sheets_create_tab'].includes(name)) return undefined;
   if(!options.approvalTransportQualified || !options.approvalToken) fail('WRITES_DISABLED');
   const input=shape(value,['operation_id']);
   prunePreviews();
   const preview=previews.get(String(input.operation_id))?.preview;
   if(!preview || Date.parse(String(preview.expires_at))<=Date.now() || !Number.isFinite(Date.parse(String(preview.expires_at)))) fail('PREVIEW_REQUIRED');
-  if(name==='docs_apply' ? preview.resource_kind!=='google_docs' || !['append_text','replace_text'].includes(String(preview.action)) : preview.resource_kind==='google_docs' || preview.action!==(name==='sheets_append'?'append':'update')) fail('PREVIEW_ACTION_MISMATCH');
+  if(name==='sheets_create_tab' ? preview.resource_kind!=='sheets_tab' || preview.action!=='create_tab' : name==='docs_apply' ? preview.resource_kind!=='google_docs' || !['append_text','replace_text'].includes(String(preview.action)) : preview.resource_kind==='google_docs' || preview.action!==(name==='sheets_append'?'append':'update')) fail('PREVIEW_ACTION_MISMATCH');
   // The bearer token is Core's actor binding; transport qualification must establish
   // that only this configured owner's allow-once resolution can reach this callback.
   const snapshot=JSON.parse(JSON.stringify(preview));

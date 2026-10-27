@@ -205,3 +205,34 @@ test('unqualified Docs apply and injected provider controls fail before traffic'
   expect(transport).not.toHaveBeenCalled();
  }finally{transport.mockRestore();}
 });
+
+test('tab creation binds literal headers and target to a separate one-shot approval',async()=>{
+ const tab={operation_id:'tab-approval',spreadsheet:'operations',title:'Plan',rows:20,columns:3,headers:['Task','=literal']};
+ const p={operation_id:tab.operation_id,spreadsheet:tab.spreadsheet,view:tab.title,fields:{title:tab.title,rows:20,columns:3,headers:tab.headers},resource_kind:'sheets_tab',action:'create_tab',actor:owner.requesterSenderId,after:{sheet_id:88,registration:'unregistered',readable:false,writable:false},expires_at:'2099-01-01T00:00:00Z',preview_digest:'tab-digest'};
+ const requests:Request[]=[];
+ const transport=spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{requests.push(new Request(input,init));return Response.json({ok:true,data:requests.length===1?p:{state:'approved'}});});
+ try{
+  const bridge=createSecretary(options);
+  await bridge.execute('sheets_preview_create_tab',tab,owner);
+  await expect(bridge.prepareApproval('sheets_append',{operation_id:tab.operation_id},owner)).rejects.toThrow('PREVIEW_ACTION_MISMATCH');
+  const approval=(await bridge.prepareApproval('sheets_create_tab',{operation_id:tab.operation_id},owner))!;
+  expect(approval.description).toContain(JSON.stringify(p,null,2));await approval.onResolution('allow-once');
+  expect(await requests[1].json()).toEqual({decision:'approve',preview_digest:'tab-digest'});
+  await expect(approval.onResolution('allow-once')).rejects.toThrow('APPROVAL_ALREADY_RESOLVED');
+  await expect(createSecretary({...options,approvalTransportQualified:false}).execute('sheets_create_tab',{operation_id:tab.operation_id},owner)).rejects.toThrow('WRITES_DISABLED');
+ }finally{transport.mockRestore();}
+});
+
+test('tab preview rejects target/owner substitution and bounded input violations before approval',async()=>{
+ const tab={operation_id:'tab-bound',spreadsheet:'operations',title:'Plan',rows:20,columns:3};
+ const p={operation_id:tab.operation_id,spreadsheet:tab.spreadsheet,fields:{title:'Plan',rows:20,columns:3,headers:[]},resource_kind:'sheets_tab',action:'create_tab',actor:owner.requesterSenderId,expires_at:'2099-01-01T00:00:00Z',preview_digest:'digest'};
+ for(const altered of [{actor:'another'},{spreadsheet:'another'},{resource_kind:'google_docs'},{fields:{...p.fields,rows:21}}]){
+  const transport=spyOn(globalThis,'fetch').mockResolvedValue(Response.json({ok:true,data:{...p,...altered}}));
+  try{const bridge=createSecretary(options);await expect(bridge.execute('sheets_preview_create_tab',tab,owner)).rejects.toThrow('INVALID_CORE_RESPONSE');await expect(bridge.prepareApproval('sheets_create_tab',{operation_id:tab.operation_id},owner)).rejects.toThrow('PREVIEW_REQUIRED');}finally{transport.mockRestore();}
+ }
+ const transport=spyOn(globalThis,'fetch').mockRejectedValue(Error('Unexpected traffic'));
+ try{
+  for(const altered of [{rows:1001},{rows:1000,columns:26},{title:'Bad/name'},{headers:['a','b','c','d']},{headers:['😀'.repeat(65)]},{sheet_id:3},{approved:true}])await expect(createSecretary(options).execute('sheets_preview_create_tab',{...tab,...altered},owner)).rejects.toThrow('INVALID_INPUT');
+  expect(transport).not.toHaveBeenCalled();
+ }finally{transport.mockRestore();}
+});

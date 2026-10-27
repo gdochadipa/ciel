@@ -17,6 +17,24 @@ pub enum WriteOutcome {
 
 /// Source access: implementations own protocol, authentication and bounded IO.
 pub trait WorkspacePort: Send + Sync {
+    fn tab_catalog<'a>(&'a self, _s: &'a Spreadsheet) -> PortFuture<'a, Result<Value, CoreError>> {
+        Box::pin(async { Err(CoreError::upstream()) })
+    }
+    fn tab_headers<'a>(
+        &'a self,
+        _s: &'a Spreadsheet,
+        _p: &'a Preview,
+    ) -> PortFuture<'a, Result<Value, CoreError>> {
+        Box::pin(async { Err(CoreError::upstream()) })
+    }
+    fn create_tab<'a>(
+        &'a self,
+        _s: &'a Spreadsheet,
+        _p: &'a Preview,
+    ) -> PortFuture<'a, WriteOutcome> {
+        Box::pin(async { WriteOutcome::Rejected })
+    }
+
     fn read<'a>(&'a self, sheet: &'a Spreadsheet) -> PortFuture<'a, Result<Value, CoreError>>;
     fn write_values<'a>(
         &'a self,
