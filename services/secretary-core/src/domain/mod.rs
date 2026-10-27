@@ -1,3 +1,4 @@
+pub mod documents;
 pub mod error;
 pub mod operation;
 pub mod projection;

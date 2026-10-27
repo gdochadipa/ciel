@@ -7,10 +7,17 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+#[derive(Clone, Copy)]
+pub enum GoogleAccess {
+    None,
+    Read,
+    Write,
+}
 #[derive(Clone)]
 pub struct GoogleClient {
     client: reqwest::Client,
     base: Arc<str>,
+    docs_base: Arc<str>,
     auth: Arc<Auth>,
 }
 enum Auth {
@@ -18,7 +25,7 @@ enum Auth {
     Service {
         email: String,
         key: jsonwebtoken::EncodingKey,
-        writes: bool,
+        scopes: Vec<&'static str>,
         cache: tokio::sync::Mutex<Option<(String, Instant)>>,
     },
 }
@@ -49,6 +56,7 @@ impl GoogleClient {
         Ok(Self {
             client: Self::client()?,
             base: base.trim_end_matches('/').into(),
+            docs_base: base.trim_end_matches('/').into(),
             auth: Arc::new(Auth::Static(token.into())),
         })
     }
@@ -60,6 +68,39 @@ impl GoogleClient {
         pem: &str,
         writes: bool,
     ) -> Result<Self, String> {
+        Self::service_account_with_capabilities(
+            email,
+            pem,
+            if writes {
+                GoogleAccess::Write
+            } else {
+                GoogleAccess::Read
+            },
+            GoogleAccess::None,
+        )
+    }
+    pub fn service_account_with_capabilities(
+        email: String,
+        pem: &str,
+        sheets: GoogleAccess,
+        documents: GoogleAccess,
+    ) -> Result<Self, String> {
+        let mut scopes = Vec::new();
+        match sheets {
+            GoogleAccess::None => {}
+            GoogleAccess::Read => {
+                scopes.push("https://www.googleapis.com/auth/spreadsheets.readonly")
+            }
+            GoogleAccess::Write => scopes.push("https://www.googleapis.com/auth/spreadsheets"),
+        };
+        match documents {
+            GoogleAccess::None => {}
+            GoogleAccess::Read => scopes.push("https://www.googleapis.com/auth/documents.readonly"),
+            GoogleAccess::Write => scopes.push("https://www.googleapis.com/auth/documents"),
+        };
+        if scopes.is_empty() {
+            return Err("at least one Google resource capability is required".into());
+        }
         let key = jsonwebtoken::EncodingKey::from_rsa_pem(pem.as_bytes())
             .map_err(|_| "invalid service account RSA key")?;
         if email.is_empty() {
@@ -68,10 +109,11 @@ impl GoogleClient {
         Ok(Self {
             client: Self::client()?,
             base: "https://sheets.googleapis.com/v4".into(),
+            docs_base: "https://docs.googleapis.com/v1".into(),
             auth: Arc::new(Auth::Service {
                 email,
                 key,
-                writes,
+                scopes,
                 cache: tokio::sync::Mutex::new(None),
             }),
         })
@@ -83,7 +125,7 @@ impl GoogleClient {
                 email,
                 key,
                 cache,
-                writes,
+                scopes,
             } => {
                 let mut cache = cache.lock().await;
                 if let Some((token, expiry)) = cache.as_ref() {
@@ -92,7 +134,7 @@ impl GoogleClient {
                     }
                 }
                 let now = chrono::Utc::now().timestamp();
-                let claims = json!({"iss":email,"scope":if *writes {"https://www.googleapis.com/auth/spreadsheets"}else{"https://www.googleapis.com/auth/spreadsheets.readonly"},"aud":"https://oauth2.googleapis.com/token","iat":now,"exp":now+3600});
+                let claims = json!({"iss":email,"scope":scopes.join(" "),"aud":"https://oauth2.googleapis.com/token","iat":now,"exp":now+3600});
                 let assertion = jsonwebtoken::encode(
                     &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::RS256),
                     &claims,
@@ -126,6 +168,78 @@ impl GoogleClient {
                 *cache = Some((token.clone(), Instant::now() + Duration::from_secs(ttl)));
                 Ok(token)
             }
+        }
+    }
+    pub fn with_disposable_docs_base(mut self, base: &str) -> Result<Self, String> {
+        if !matches!(self.auth.as_ref(), Auth::Static(_)) {
+            return Err("Docs endpoint injection requires disposable static auth".into());
+        }
+        let validated = Self::static_token(base, "endpoint-validation")?;
+        self.docs_base = validated.base;
+        Ok(self)
+    }
+    pub async fn read_document(
+        &self,
+        document: &crate::domain::registry::Document,
+    ) -> Result<Value, CoreError> {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            let token = self.token().await?;
+            let response = self
+                .client
+                .get(format!("{}/documents/{}", self.docs_base, document.id))
+                .bearer_auth(token)
+                .query(&[
+                    ("includeTabsContent", "true"),
+                    ("suggestionsViewMode", "SUGGESTIONS_INLINE"),
+                ])
+                .send()
+                .await
+                .map_err(|_| CoreError::upstream())?;
+            if !response.status().is_success() {
+                return Err(CoreError::upstream());
+            }
+            bounded(response).await
+        })
+        .await
+        .map_err(|_| CoreError::upstream())?
+    }
+    pub async fn write_document(
+        &self,
+        document: &crate::domain::registry::Document,
+        preview: &crate::domain::operation::Preview,
+    ) -> WriteOutcome {
+        let result = tokio::time::timeout(Duration::from_secs(10), async {
+            let request = crate::domain::documents::requests(preview)?;
+            let token = self.token().await?;
+            let response = self
+                .client
+                .post(format!(
+                    "{}/documents/{}:batchUpdate",
+                    self.docs_base, document.id
+                ))
+                .bearer_auth(token)
+                .json(&request)
+                .send()
+                .await
+                .map_err(|_| CoreError::upstream())?;
+            let status = response.status();
+            if status.is_success() {
+                return Ok::<WriteOutcome, CoreError>(if bounded(response).await.is_ok() {
+                    WriteOutcome::Accepted
+                } else {
+                    WriteOutcome::Uncertain
+                });
+            }
+            Ok(if matches!(status.as_u16(), 400 | 401 | 403 | 404 | 422) {
+                WriteOutcome::Rejected
+            } else {
+                WriteOutcome::Uncertain
+            })
+        })
+        .await;
+        match result {
+            Ok(Ok(outcome)) => outcome,
+            _ => WriteOutcome::Uncertain,
         }
     }
     pub async fn read(&self, s: &Spreadsheet) -> Result<Value, CoreError> {
@@ -273,7 +387,20 @@ fn raw(value: &Value) -> Value {
     }
 }
 
-impl crate::application::ports::SpreadsheetPort for GoogleClient {
+impl crate::application::ports::WorkspacePort for GoogleClient {
+    fn read_document<'a>(
+        &'a self,
+        document: &'a crate::domain::registry::Document,
+    ) -> crate::application::ports::PortFuture<'a, Result<Value, CoreError>> {
+        Box::pin(self.read_document(document))
+    }
+    fn write_document<'a>(
+        &'a self,
+        document: &'a crate::domain::registry::Document,
+        preview: &'a crate::domain::operation::Preview,
+    ) -> crate::application::ports::PortFuture<'a, WriteOutcome> {
+        Box::pin(self.write_document(document, preview))
+    }
     fn read<'a>(
         &'a self,
         s: &'a Spreadsheet,

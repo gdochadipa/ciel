@@ -1,0 +1,30 @@
+{
+  "version": "generic-workspace-v1",
+  "spreadsheets": [
+    {
+      "alias": "operations",
+      "id": "generic-spreadsheet",
+      "readable": true,
+      "views": [
+        {
+          "name": "overview",
+          "sheet_id": 7,
+          "title": "Operations",
+          "kind": "grid",
+          "range": "B2:D8",
+          "headers": {},
+          "merges": [],
+          "formulas": {}
+        }
+      ]
+    }
+  ],
+  "documents": [
+    {
+      "alias": "notes",
+      "id": "demo-document",
+      "readable": true,
+      "writable": false
+    }
+  ]
+}

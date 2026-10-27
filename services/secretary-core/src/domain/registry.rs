@@ -5,7 +5,19 @@ use serde::{Deserialize, Serialize};
 #[serde(deny_unknown_fields)]
 pub struct Registry {
     pub version: String,
+    #[serde(default)]
     pub spreadsheets: Vec<Spreadsheet>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub documents: Vec<Document>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Document {
+    pub alias: String,
+    pub id: String,
+    pub readable: bool,
+    #[serde(default)]
+    pub writable: bool,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -32,6 +44,7 @@ pub struct View {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Kind {
+    Grid,
     WeddingCosts,
     GuestEstimates,
     PlanningNotes,
@@ -149,11 +162,27 @@ impl View {
 }
 impl Registry {
     pub fn validate(&self) -> Result<(), String> {
-        if self.version.is_empty() || self.spreadsheets.len() > 20 {
+        if self.version.is_empty() || self.spreadsheets.len() + self.documents.len() > 20 {
             return Err("invalid registry bounds".into());
         }
         let mut ids = std::collections::HashSet::new();
         let mut aliases = std::collections::HashSet::new();
+        for doc in &self.documents {
+            if doc.alias.is_empty()
+                || doc.alias.len() > 100
+                || doc.id.is_empty()
+                || doc.id.len() > 200
+                || !doc
+                    .id
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+                || !ids.insert(&doc.id)
+                || !aliases.insert(&doc.alias)
+                || doc.writable && !doc.readable
+            {
+                return Err("invalid document registration".into());
+            }
+        }
         for s in &self.spreadsheets {
             if s.alias.is_empty()
                 || s.id.is_empty()
@@ -172,6 +201,7 @@ impl Registry {
             for v in &s.views {
                 v.validate_write_schema()?;
                 let expected = match v.kind {
+                    Kind::Grid => v.range.as_str(),
                     Kind::WeddingCosts => "A1:G63",
                     Kind::GuestEstimates => "A1:F13",
                     Kind::PlanningNotes => "A3:C26",
@@ -185,11 +215,20 @@ impl Registry {
                     || v.title.is_empty()
                     || v.title.len() > 100
                     || v.range != expected
-                    || v.headers.is_empty()
+                    || (v.kind != Kind::Grid && v.headers.is_empty())
                     || v.merges.len() > 100
                     || v.formulas.len() > 100
                 {
                     return Err("invalid bounded view registration".into());
+                }
+                if v.kind == Kind::Grid {
+                    let (r, c, rr, cc) = crate::domain::projection::parse_range(&v.range)
+                        .ok_or("invalid bounded grid range")?;
+                    if (rr - r).checked_mul(cc - c).is_none_or(|n| n > 10000)
+                        || v.write_schema.is_some()
+                    {
+                        return Err("grid reads require a bounded read-only range".into());
+                    }
                 }
                 for cell in v.headers.keys().chain(v.formulas.keys()) {
                     if crate::domain::projection::coordinate(cell).is_none() {
@@ -210,5 +249,11 @@ impl Registry {
             .iter()
             .find(|s| s.alias == name && s.readable)
             .ok_or(CoreError(ErrorKind::NotFound, "spreadsheet_not_registered"))
+    }
+    pub fn document(&self, name: &str) -> Result<&Document, CoreError> {
+        self.documents
+            .iter()
+            .find(|d| d.alias == name && d.readable)
+            .ok_or(CoreError(ErrorKind::NotFound, "document_not_registered"))
     }
 }

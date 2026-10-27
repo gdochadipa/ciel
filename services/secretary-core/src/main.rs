@@ -1,3 +1,4 @@
+use secretary_core::google::GoogleAccess;
 use secretary_core::{router, AppState, GoogleClient, Registry};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -10,12 +11,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             &std::env::var("SECRETARY_GOOGLE_BASE_URL")?,
             &std::env::var("SECRETARY_GOOGLE_TOKEN")?,
         )?
+        .with_disposable_docs_base(
+            &std::env::var("SECRETARY_GOOGLE_DOCS_BASE_URL")
+                .unwrap_or(std::env::var("SECRETARY_GOOGLE_BASE_URL")?),
+        )?
     } else {
         // Never print service-account contents or propagate provider error bodies.
         let credentials: serde_json::Value = serde_json::from_slice(&std::fs::read(
             std::env::var("GOOGLE_APPLICATION_CREDENTIALS")?,
         )?)?;
-        GoogleClient::service_account_with_writes(
+        GoogleClient::service_account_with_capabilities(
             credentials["client_email"]
                 .as_str()
                 .ok_or("missing client_email")?
@@ -23,7 +28,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             credentials["private_key"]
                 .as_str()
                 .ok_or("missing private_key")?,
-            enabled,
+            if !registry.spreadsheets.iter().any(|s| s.readable) {
+                GoogleAccess::None
+            } else if enabled
+                && registry
+                    .spreadsheets
+                    .iter()
+                    .any(|s| s.readable && s.views.iter().any(|v| v.structured()))
+            {
+                GoogleAccess::Write
+            } else {
+                GoogleAccess::Read
+            },
+            if !registry.documents.iter().any(|d| d.readable) {
+                GoogleAccess::None
+            } else if enabled && registry.documents.iter().any(|d| d.readable && d.writable) {
+                GoogleAccess::Write
+            } else {
+                GoogleAccess::Read
+            },
         )?
     };
     let mut state = AppState::new(

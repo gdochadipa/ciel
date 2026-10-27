@@ -1,4 +1,4 @@
-use super::{commands::Command, ports::SpreadsheetPort, writes::Writes};
+use super::{commands::Command, ports::WorkspacePort, writes::Writes};
 use crate::domain::{
     error::{CoreError, ErrorKind},
     projection,
@@ -11,7 +11,7 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct CommandBus {
     pub(crate) registry: Arc<Registry>,
-    pub(crate) sheets: Arc<dyn SpreadsheetPort>,
+    pub(crate) source: Arc<dyn WorkspacePort>,
     pub(crate) owner: Arc<str>,
     pub(crate) writes: Option<Arc<Writes>>,
 }
@@ -19,7 +19,7 @@ impl CommandBus {
     pub fn new(
         registry: Registry,
         owner: String,
-        sheets: impl SpreadsheetPort + 'static,
+        sheets: impl WorkspacePort + 'static,
     ) -> Result<Self, String> {
         registry.validate()?;
         if owner.is_empty() {
@@ -27,7 +27,7 @@ impl CommandBus {
         }
         Ok(Self {
             registry: Arc::new(registry),
-            sheets: Arc::new(sheets),
+            source: Arc::new(sheets),
             owner: owner.into(),
             writes: None,
         })
@@ -38,6 +38,11 @@ impl CommandBus {
     }
     pub async fn execute(&self, command: Command) -> Result<Value, CoreError> {
         match command {
+            Command::DocsList => Ok(
+                json!({"documents":self.registry.documents.iter().filter(|d|d.readable).map(|d|json!({"document":d.alias,"id":d.id,"readable":true,"writable":d.writable && self.writes.as_ref().is_some_and(|w|w.enabled)})).collect::<Vec<_>>(),"mapping_version":self.registry.version}),
+            ),
+            Command::DocsDescribe(p) => super::documents::describe(self, &p.document).await,
+            Command::DocsRead(p) => super::documents::read(self, p).await,
             Command::List => Ok(
                 json!({"spreadsheets":self.registry.spreadsheets.iter().filter(|s|s.readable).map(|s|json!({"spreadsheet":s.alias,"id":s.id,"readable":true,"writable":self.writes.as_ref().is_some_and(|w|w.enabled)&&s.views.iter().any(|v|v.structured())})).collect::<Vec<_>>(),"mapping_version":self.registry.version}),
             ),
@@ -64,7 +69,7 @@ impl CommandBus {
             }
             Command::Report(p) => {
                 let s = self.registry.lookup(&p.spreadsheet)?;
-                let book = self.sheets.read(s).await?;
+                let book = self.source.read(s).await?;
                 projection::validate(s, &book)?;
                 projection::report(s, &book, &self.registry.version)
             }
@@ -102,7 +107,7 @@ async fn read(
         .iter()
         .find(|v| v.name == view)
         .ok_or_else(CoreError::invalid)?;
-    let workbook = state.sheets.read(s).await?;
+    let workbook = state.source.read(s).await?;
     projection::validate(s, &workbook)?;
     let fingerprint = projection::fingerprint(&workbook);
     // Cursor binds the source revision and full query, preventing pagination over changed data.
@@ -148,6 +153,7 @@ fn literal_match(value: &Value, query: &str) -> bool {
     match value {
         Value::String(s) => s.to_lowercase().contains(query),
         Value::Number(n) => n.to_string().contains(query),
+        Value::Bool(b) => b.to_string().contains(query),
         Value::Array(a) => a.iter().any(|v| literal_match(v, query)),
         Value::Object(o) => o.values().any(|v| literal_match(v, query)),
         _ => false,

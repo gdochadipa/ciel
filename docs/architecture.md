@@ -1,6 +1,6 @@
 # Architecture and evidence
 
-WhatsApp → OpenClaw Secretary Agent → bounded TypeScript tool plugin → authenticated loopback Rust Core → approved Google Sheets registry. One agent uses five domain Skills. Rust owns mappings, deterministic arithmetic, immutable previews, approval consumption, the operation journal and reconciliation. Sheets remains authoritative for planning records; the native OpenClaw scheduler remains authoritative for jobs.
+WhatsApp → OpenClaw Secretary Agent → bounded TypeScript tool plugin → authenticated loopback Rust Core → approved Google Workspace registry. One agent uses five Skills; wedding-specific behavior is an optional domain profile. Rust owns mappings, deterministic arithmetic, immutable previews, approval consumption, the operation journal and reconciliation. Sheets and Docs remain authoritative for their registered records/text; the native OpenClaw scheduler remains authoritative for jobs.
 
 The bridge derives the requester from trusted tool factory context rather than tool arguments. Current documented SDK `defineToolPlugin` ordinary execute has no actor field; runtime factories expose `requesterSenderId`, `senderIsOwner` and an invocation guard. Approval hooks require a mixed plugin entry. [Pinned v2026.10.7 factory source](https://github.com/openclaw/openclaw/blob/v2026.10.7/src/plugin-sdk/tool-plugin.ts) and [tool context](https://github.com/openclaw/openclaw/blob/v2026.10.7/src/plugins/tool-types.ts) ground these boundaries; actual installed package activation remains a separate check.
 
@@ -20,13 +20,14 @@ flowchart TD
     Notes -->|Indexed by OpenClaw| Index[(Native SQLite FTS5 and provenance)]
     Native <-->|Search| Index
     Native -->|Relevant excerpts| Agent
-    Agent -->|Spreadsheet operations| Plugin[Our secretary-tools plugin]
+    Agent -->|Workspace operations| Plugin[Our secretary-tools plugin]
     Plugin --> Core[Rust Core]
     Core --> Journal[(Protected SQLite operation journal)]
-    Core --> Sheets[Google Sheets planning records]
+    Core --> Sheets[Registered Google Sheets ranges]
+    Core --> Docs[Registered Google Docs tabs]
 ```
 
-The secretary plugin registers only its 17 spreadsheet/report/reminder tools. The two SQLite stores have different responsibilities and permissions. Native memory state belongs to OpenClaw; the secretary does not edit its tables directly. Core's journal belongs to controlled business operations. Personal notes cannot authorize spreadsheet writes. Native memory recall is available only when the actual provider and run policy admit it; the diagram is the intended integration, not evidence of an activated host.
+The secretary plugin registers its 23 Sheets/Docs/report/reminder/history tools. The two SQLite stores have different responsibilities and permissions. Native memory state belongs to OpenClaw; the secretary does not edit its tables directly. Core's journal belongs to controlled business operations. Personal notes cannot authorize spreadsheet writes. Native memory recall is available only when the actual provider and run policy admit it; the diagram is the intended integration, not evidence of an activated host.
 
 [Interface notes](../contracts/interface-notes.md) define the implementation boundary. [Specification](specs/openclaw-personal-secretary.md) and [workbook assessment](spreadsheet-assessment.md) retain source decisions. The local ticket graph records completed checks and unresolved T007 live activation evidence. The subsequent low-effort review and its two local fixes are recorded in T009.
 
@@ -39,14 +40,14 @@ The Core follows the owner's DDD and hexagonal direction. Domain rules describe 
 ```text
 presentation/http.rs → application/CommandBus → domain rules
                                ↓
-                    SpreadsheetPort / OperationStore
+                    WorkspacePort / OperationStore
                                ↑
                  infrastructure/GoogleClient / Journal
 ```
 
 `domain/` and `application/` do not import Axum, Reqwest, SQLx or concrete infrastructure. `main.rs` is the composition root. `lib.rs` retains old module re-exports for adapter callers; new code should use the layer paths. The application owns generated record identities and preview expiry inputs. Presentation owns Core/operator bearer credentials; domain and application receive no caller-selected actor or approval proof.
 
-The bus dispatches typed commands directly to handlers and awaits their results. `Command` denotes a typed application request here, so it includes reads. `MutationCommand::History` is grouped with the mutation coordinator for operation-history access; it does not execute a spreadsheet mutation. Reads also use this entry point; there is no asynchronous queue, broker, event sourcing or separate read store. One mutation coordinator still serializes preview/approval/apply work; adding the command bus does not make Sheets transactional. Ports return bounded source snapshots and operation outcomes. The source snapshot remains a JSON grid document for the existing schema mappings; a replacement provider must adapt to that document shape. This is a deliberately narrow migration rather than a new arbitrary spreadsheet abstraction.
+The bus dispatches typed commands directly to handlers and awaits their results. `Command` denotes a typed application request here, so it includes reads. `MutationCommand::History` is grouped with the mutation coordinator for operation-history access; it does not execute a spreadsheet mutation. Reads also use this entry point; there is no asynchronous queue, broker, event sourcing or separate read store. One mutation coordinator still serializes preview/approval/apply work; adding the command bus does not make Sheets transactional. Ports return bounded source snapshots and operation outcomes. WorkspacePort returns bounded provider snapshots for registered Sheets grids and Docs tabs. Generic grid reads use column-letter keys without requiring wedding headers; existing structured tables/reports remain optional profiles. Docs append/one-occurrence replacement share the same coordinator, approval and journal. Preview binding includes resource kind, registered document ID, tab and required revision. Legacy Sheets JSON/digests remain compatible. See [ADR0002](adr/0002-workspace-capabilities-and-optional-domain-profiles.md) and [capability bounds](specs/workspace-capabilities.md).
 
 ## Operation state machine
 

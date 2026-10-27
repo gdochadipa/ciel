@@ -174,6 +174,10 @@ pub fn validate(s: &Spreadsheet, book: &Value) -> Result<(), CoreError> {
                 return Err(CoreError::drift());
             }
         }
+        // Generic registered grids are read-only data, not a frozen domain template.
+        if v.kind == Kind::Grid {
+            continue;
+        }
         let observed: BTreeMap<String, String> = c
             .iter()
             .filter_map(|(a, c)| {
@@ -234,6 +238,28 @@ pub fn project(
     let mut push =
         |range: String, fields: Value| out.push(record(s, v, range, fields, version, &rev, &now));
     match v.kind {
+        Kind::Grid => {
+            let (r, c0, rr, cc) = parse_range(&v.range).ok_or_else(CoreError::invalid)?;
+            for row in r..rr {
+                let mut fields = serde_json::Map::new();
+                for col in c0..cc {
+                    let addr = address(row, col);
+                    let key = addr
+                        .trim_end_matches(|c: char| c.is_ascii_digit())
+                        .to_owned();
+                    let cell = c.get(&addr);
+                    let mut value = at(&c, &addr);
+                    if let Some(error) = cell.and_then(|x| x["effectiveValue"].get("errorValue")) {
+                        value = json!({"error":error.get("type").and_then(Value::as_str).unwrap_or("CELL_ERROR")});
+                    }
+                    fields.insert(key, value);
+                }
+                push(
+                    format!("{}:{}", address(row, c0), address(row, cc - 1)),
+                    Value::Object(fields),
+                );
+            }
+        }
         Kind::WeddingCosts => {
             for (section, lo, hi) in [
                 ("initial", 2, 8),

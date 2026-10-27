@@ -216,6 +216,7 @@ pub fn prepare(
         after[k] = v.clone()
     }
     Ok(Preview {
+        resource_kind: crate::domain::operation::ResourceKind::Sheets,
         operation_id: change.operation_id.clone(),
         actor: owner.into(),
         spreadsheet: change.spreadsheet.clone(),
@@ -232,7 +233,8 @@ pub fn prepare(
     })
 }
 pub fn matches_request(p: &Preview, c: &Change, owner: &str) -> bool {
-    p.operation_id == c.operation_id
+    p.resource_kind == crate::domain::operation::ResourceKind::Sheets
+        && p.operation_id == c.operation_id
         && p.actor == owner
         && p.spreadsheet == c.spreadsheet
         && p.view == c.view

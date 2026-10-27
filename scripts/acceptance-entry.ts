@@ -6,7 +6,7 @@ import {getToolPluginMetadata} from 'openclaw/plugin-sdk/tool-plugin';
 import type {AnyAgentTool,OpenClawPluginApi} from 'openclaw/plugin-sdk/plugin-entry';
 import {acceptanceConfiguration,syntheticOwner,syntheticToken} from './acceptance';
 
-export async function runEntryAcceptance(coreUrl:string) {
+export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'='sheets') {
  const base=acceptanceConfiguration(coreUrl,'writes');
  const saved={core:process.env.SECRETARY_CORE_TOKEN,approval:process.env.SECRETARY_APPROVAL_TOKEN};
  delete process.env.SECRETARY_CORE_TOKEN;delete process.env.SECRETARY_APPROVAL_TOKEN;
@@ -17,7 +17,7 @@ export async function runEntryAcceptance(coreUrl:string) {
   const manifest=await Bun.file(new URL('../plugins/secretary-tools/openclaw.plugin.json',import.meta.url)).json();
   assert(metadata,'Actual SDK must recognize metadata after the plugin extends register');
   assert.deepEqual(metadata.tools.map(tool=>tool.name).sort(),manifest.contracts.tools.toSorted());
-  assert.equal(metadata.tools.length,17);
+  assert.equal(metadata.tools.length,23);
   let runtimeAllowed=false;
   function registry() {
    const tools=new Map<string,Function>();
@@ -36,7 +36,7 @@ export async function runEntryAcceptance(coreUrl:string) {
     on(name:string,handler:Function) {assert.equal(name,'before_tool_call');assert(!hook);hook=handler;},
    };
    entry.register(api as unknown as OpenClawPluginApi);
-   assert.equal(tools.size,17);assert(hook);
+   assert.equal(tools.size,23);assert(hook);
    assert.deepEqual([...tools.keys()].sort(),manifest.contracts.tools.toSorted());
    return {
     tool(name:string,context:Record<string,unknown>):AnyAgentTool {
@@ -53,8 +53,9 @@ export async function runEntryAcceptance(coreUrl:string) {
   let current=true;
   const owner={requesterSenderId:syntheticOwner,senderIsOwner:true,assertInvocationCurrent(){assert(current,'INVOCATION_EXPIRED');}};
   const list=first.tool('sheets_list',owner);
-  const previewTool=first.tool('sheets_preview_change',owner);
-  const append=first.tool('sheets_append',owner);
+  const commitName=kind==='docs'?'docs_apply':'sheets_append';
+  const previewTool=first.tool(kind==='docs'?'docs_preview_change':'sheets_preview_change',owner);
+  const append=first.tool(commitName,owner);
   // Both registration and concrete factory construction succeeded without secrets/runtime.
   runtimeAllowed=true;
   process.env.SECRETARY_CORE_TOKEN=syntheticToken;
@@ -69,17 +70,17 @@ export async function runEntryAcceptance(coreUrl:string) {
   current=false;
   assert.equal((await execute(list,{})).error.code,'INVOCATION_EXPIRED');
   current=true;
-  const change={operation_id:'acceptance-sdk-entry',spreadsheet:'wedding-demo',view:'tasks',action:'append',fields:{title:'Synthetic SDK entry task',status:'todo'}};
+  const change=kind==='docs'?{operation_id:'acceptance-sdk-docs-entry',document:'notes',tab_id:'t.0',action:'append_text',fields:{text:' SDK appended'}}:{operation_id:'acceptance-sdk-entry',spreadsheet:'wedding-demo',view:'tasks',action:'append',fields:{title:'Synthetic SDK entry task',status:'todo'}};
   const preview=await execute(previewTool,change);assert.equal(preview.ok,true);
   const immutable=structuredClone(preview.data);
-  preview.data.after.title='Model-altered text';preview.data.preview_digest='model-altered';
+  if(kind==='docs')preview.data.after.text='Model-altered text';else preview.data.after.title='Model-altered text';preview.data.preview_digest='model-altered';
   const requester={senderId:syntheticOwner,senderIsOwner:true};
-  assert.equal((await first.before('sheets_append',{operation_id:change.operation_id})).block,true);
-  assert.equal((await first.before('sheets_append',{operation_id:change.operation_id},{senderId:'other',senderIsOwner:true})).block,true);
+  assert.equal((await first.before(commitName,{operation_id:change.operation_id})).block,true);
+  assert.equal((await first.before(commitName,{operation_id:change.operation_id},{senderId:'other',senderIsOwner:true})).block,true);
   assert.equal((await first.before('sheets_update',{operation_id:change.operation_id},requester)).block,true);
-  assert.equal((await second.before('sheets_append',{operation_id:change.operation_id},requester)).block,true,'Preview must not cross host API instances');
+  assert.equal((await second.before(commitName,{operation_id:change.operation_id},requester)).block,true,'Preview must not cross host API instances');
   assert.equal(await first.before('sheets_list',{},requester),undefined,'Read operations must not request approval');
-  const decision=await first.before('sheets_append',{operation_id:change.operation_id},requester);
+  const decision=await first.before(commitName,{operation_id:change.operation_id},requester);
   assert(!decision.block);const approval=decision.requireApproval;assert(approval);
   assert(approval.description.includes(JSON.stringify(immutable,null,2)));
   assert(!approval.description.includes('model-altered'));
@@ -88,8 +89,13 @@ export async function runEntryAcceptance(coreUrl:string) {
   await assert.rejects(approval.onResolution('allow-once'),/APPROVAL_ALREADY_RESOLVED/);
   assert.equal((await execute(append,{operation_id:change.operation_id})).data.state,'applied');
   assert.equal((await execute(append,{operation_id:change.operation_id})).data.state,'applied');
+  if(kind==='docs'){
+   const read=await execute(first.tool('docs_read',owner),{document:'notes',tab_id:'t.0'});
+   assert.equal(read.data.text.split(' SDK appended').length-1,1);
+  }else{
   const read=await execute(first.tool('sheets_read',owner),{spreadsheet:'wedding-demo',view:'tasks'});
   assert.equal(read.data.records.filter((row:any)=>row.source.record_id===immutable.record_id).length,1);
+  }
   console.log(JSON.stringify({acceptance:'passed',scenario:'sdk-entry',scope:'built plugin + actual SDK registration -> real Core -> simulated Google; host registry fixture only, no live approval UI'}));
  } finally {
   if(saved.core===undefined)delete process.env.SECRETARY_CORE_TOKEN;else process.env.SECRETARY_CORE_TOKEN=saved.core;

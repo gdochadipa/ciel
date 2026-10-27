@@ -85,7 +85,13 @@
       "reminders_pause",
       "reminders_resume",
       "reminders_cancel",
-      "reminders_history"
+      "reminders_history",
+      "docs_list",
+      "docs_describe",
+      "docs_read",
+      "docs_preview_change",
+      "docs_apply",
+      "operations_get_history"
     ],
     "deny": [
       "group:fs",

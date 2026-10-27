@@ -1,0 +1,7 @@
+# Register Workspace capabilities independently of domain profiles
+
+Accepted from owner steering 2026-10-27, implemented locally in T023: general Sheets/Google Docs access is a Core capability; the wedding workbook is an optional domain profile rather than the universal resource template. Bounded registered grid reads and registered Docs text edits share one WorkspacePort, command bus, approval transport, mutation coordinator, durable journal and FSM, preserving the lightweight architecture from ADR0001.
+
+The journal envelope adds a defaulted resource-kind tag while omitting it for legacy Sheets payloads, preserving old stored JSON/digests without a database migration. Docs persistence reuses legacy internal target slots for compatibility; its public preview uses document/tab names and enforces resource-kind/target/revision checks. New resource types must preserve these authorization and recovery semantics rather than weakening them to accept arbitrary provider request bodies.
+
+Generic grids return registered-range values without guessed domain fields and remain read-only. Initial Docs edits are explicit append_text and one-match replace_text in supported plain-text tab bodies, with required revision control, one send and observation-only reconciliation. Rich structural editing and unrestricted Sheets writes need separate supported operations; no broker, new daemon, event sourcing or preference database is introduced.

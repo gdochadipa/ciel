@@ -2,8 +2,22 @@ use super::error::{CoreError, ErrorKind};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResourceKind {
+    #[default]
+    Sheets,
+    GoogleDocs,
+}
+impl ResourceKind {
+    fn is_sheets(&self) -> bool {
+        *self == Self::Sheets
+    }
+}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Preview {
+    #[serde(default, skip_serializing_if = "ResourceKind::is_sheets")]
+    pub resource_kind: ResourceKind,
     pub operation_id: String,
     pub actor: String,
     pub spreadsheet: String,
@@ -20,6 +34,11 @@ pub struct Preview {
 }
 impl Preview {
     pub fn request_digest(&self) -> String {
+        if self.resource_kind == ResourceKind::GoogleDocs {
+            return digest(
+                &json!({"resource_kind":"google_docs","operation_id":self.operation_id,"actor":self.actor,"document":self.spreadsheet,"tab_id":self.view,"action":self.action,"fields":self.fields}),
+            );
+        }
         digest(
             &json!({"operation_id":self.operation_id,"actor":self.actor,"spreadsheet":self.spreadsheet,"view":self.view,"action":self.action,"record_id":if self.action=="update"{Some(&self.record_id)}else{None},"fields":self.fields}),
         )
@@ -27,6 +46,14 @@ impl Preview {
     pub fn public(&self, state: &str) -> Value {
         let mut out = serde_json::to_value(self).unwrap_or(Value::Null);
         out["state"] = json!(state);
+        if self.resource_kind == ResourceKind::GoogleDocs {
+            if let Some(object) = out.as_object_mut() {
+                let document = object.remove("spreadsheet").unwrap_or(Value::Null);
+                let tab = object.remove("view").unwrap_or(Value::Null);
+                object.insert("document".into(), document);
+                object.insert("tab_id".into(), tab);
+            }
+        }
         out["expires_at"] = json!(chrono::DateTime::from_timestamp(self.expires_at, 0)
             .map(|t| t.to_rfc3339())
             .unwrap_or_default());

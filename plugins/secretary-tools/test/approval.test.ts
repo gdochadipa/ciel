@@ -163,3 +163,45 @@ test('large previews share a four MiB serialized cache budget without corrupting
   expect(transport).toHaveBeenCalledTimes(6);
  } finally {transport.mockRestore();}
 });
+
+test('Docs uses the same immutable one-shot approval and cannot cross into a Sheets commit',async()=>{
+ const docChange={operation_id:'docs-approval',document:'notes',tab_id:'t.0',action:'replace_text',fields:{find:'sample',replacement:'team'}};
+ const docPreview={...docChange,resource_kind:'google_docs',actor:owner.requesterSenderId,before:{text:'Hello sample\n'},after:{text:'Hello team\n'},record_id:'registered-doc',mapping_version:'v1',source_revision:'revision-1',preview_digest:'docs-digest',expires_at:'2099-01-01T00:00:00Z',state:'previewed'};
+ const requests:Request[]=[];
+ const transport=spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
+  requests.push(new Request(input,init));
+  return Response.json(requests.length===1?{ok:true,data:docPreview}:{ok:true,data:{state:'approved'}});
+ });
+ try{
+  const bridge=createSecretary(options);
+  const shown=await bridge.execute('docs_preview_change',docChange,owner) as any;shown.data.after.text='Model changed';
+  await expect(bridge.prepareApproval('sheets_update',{operation_id:docChange.operation_id},owner)).rejects.toThrow('PREVIEW_ACTION_MISMATCH');
+  const approval=(await bridge.prepareApproval('docs_apply',{operation_id:docChange.operation_id},owner))!;
+  expect(approval.description).toContain(JSON.stringify(docPreview,null,2));
+  await approval.onResolution('allow-once');await expect(approval.onResolution('allow-once')).rejects.toThrow('APPROVAL_ALREADY_RESOLVED');
+  expect(await requests[1].json()).toEqual({decision:'approve',preview_digest:'docs-digest'});
+  expect(requests[1].headers.get('authorization')).toBe('Bearer synthetic-approval');
+ }finally{transport.mockRestore();}
+});
+
+test('Docs preview binding rejects another resource or actor before caching',async()=>{
+ const change={operation_id:'docs-bad',document:'notes',tab_id:'t.0',action:'append_text',fields:{text:'Test'}};
+ for(const altered of [{resource_kind:'sheets'},{document:'another'},{tab_id:'t.1'},{actor:'another'},{action:'replace_text'}]){
+  const transport=spyOn(globalThis,'fetch').mockResolvedValue(Response.json({ok:true,data:{...change,resource_kind:'google_docs',actor:owner.requesterSenderId,expires_at:'2099-01-01T00:00:00Z',preview_digest:'digest',...altered}}));
+  try{
+   const bridge=createSecretary(options);await expect(bridge.execute('docs_preview_change',change,owner)).rejects.toThrow('INVALID_CORE_RESPONSE');
+   await expect(bridge.prepareApproval('docs_apply',{operation_id:change.operation_id},owner)).rejects.toThrow('PREVIEW_REQUIRED');
+  }finally{transport.mockRestore();}
+ }
+});
+
+test('unqualified Docs apply and injected provider controls fail before traffic',async()=>{
+ const transport=spyOn(globalThis,'fetch').mockRejectedValue(Error('Must not be called'));
+ try{
+  const bridge=createSecretary({...options,approvalTransportQualified:false});
+  await expect(bridge.execute('docs_apply',{operation_id:'docs-denied'},owner)).rejects.toThrow('WRITES_DISABLED');
+  await expect(bridge.execute('docs_read',{document:'notes',tab_id:'t.0',url:'https://example.com'},owner)).rejects.toThrow('INVALID_INPUT');
+  await expect(bridge.execute('docs_preview_change',{operation_id:'docs-denied',document:'notes',tab_id:'t.0',action:'arbitrary_batch',fields:{}},owner)).rejects.toThrow('INVALID_INPUT');
+  expect(transport).not.toHaveBeenCalled();
+ }finally{transport.mockRestore();}
+});

@@ -1,0 +1,11 @@
+version: 1
+name: Synthetic google-docs bounded subset
+slug: google-docs-text
+protocol: http
+port: 4901
+origin: docs.googleapis.com
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

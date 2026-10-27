@@ -20,3 +20,10 @@ test('simulation wiring derives only an observed loopback URL',()=>{
  expect(simulationGoogleBase('{"event":"listening","members":[{"url":"http://127.0.0.1:54321/google"}]}')).toBe('http://127.0.0.1:54321/google/v4');
  expect(()=>simulationGoogleBase('{"event":"listening","url":"https://sheets.googleapis.com"}')).toThrow('Listening event');
 });
+
+test('workspace wiring requires an observed Docs member address',()=>{
+ const log='{"event":"listening","mocks":[{"address":"http://localhost:4900/google"},{"address":"http://localhost:4900/google-docs"}]}';
+ expect(simulationGoogleBase(log,'google-docs','v1')).toBe('http://127.0.0.1:4900/google-docs/v1');
+ expect(()=>simulationGoogleBase('{"event":"listening","url":"http://localhost:4900"}','google-docs','v1')).toThrow('Listening event');
+ expect(acceptanceConfiguration('http://127.0.0.1:8787','workspace').owner).toBe('+15555550123');
+});

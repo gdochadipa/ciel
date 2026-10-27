@@ -2,9 +2,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 scenario="${1:-read}"
-case "$scenario" in read|error|slow|drift|retry|writes) ;; *) echo 'Use read, error, slow, drift, retry or writes' >&2; exit 2;; esac
+case "$scenario" in read|error|slow|drift|retry|writes|workspace) ;; *) echo 'Use read, error, slow, drift, retry, writes or workspace' >&2; exit 2;; esac
 # The write scenario also exercises the actual SDK's registered distribution entry.
-if [ "$scenario" = writes ]; then bun run build; fi
+if [ "$scenario" = writes ] || [ "$scenario" = workspace ]; then bun run build; fi
 log_dir="$(mktemp -d "${SECRETARY_ACCEPTANCE_LOG_ROOT:-${TMPDIR:-/tmp}}/secretary-acceptance.XXXXXX")"
 sim_pid=''; core_pid=''
 cleanup() {
@@ -51,18 +51,21 @@ if [ "$ready" != true ]; then
 fi
 # Derive the provider address from the actual listening event, never a guessed port.
 provider_base="$(bun scripts/acceptance.ts --simulation-base "$log_dir/sim.ndjson")"
+docs_base="$provider_base"
+if [ "$scenario" = workspace ]; then docs_base="$(bun scripts/acceptance.ts --simulation-docs-base "$log_dir/sim.ndjson")"; fi
 cat "$log_dir/sim.ndjson"
 registry="$PWD/postman/fixtures/registry.json"
 writes_enabled=false
 if [ "$scenario" = writes ]; then registry="$PWD/postman/fixtures/registry-writes.json"; writes_enabled=true; fi
+if [ "$scenario" = workspace ]; then registry="$PWD/postman/fixtures/registry-workspace.json"; writes_enabled=true; fi
 SECRETARY_CONFIG="$registry" SECRETARY_WRITES_ENABLED="$writes_enabled" \
 SECRETARY_STATE_DIR="$log_dir/state" SECRETARY_APPROVAL_TOKEN=synthetic-separate-operator-token \
 SECRETARY_CORE_TOKEN=synthetic-acceptance-core-token SECRETARY_OWNER=+15555550123 \
 SECRETARY_MOCK_MODE=true SECRETARY_GOOGLE_BASE_URL="$provider_base" \
-SECRETARY_GOOGLE_TOKEN=synthetic-provider-token \
+SECRETARY_GOOGLE_TOKEN=synthetic-provider-token SECRETARY_GOOGLE_DOCS_BASE_URL="$docs_base" \
 "$core_binary" > "$log_dir/core.log" 2>&1 &
 core_pid=$!
-if ! SECRETARY_ACCEPTANCE_PROVIDER_URL="$provider_base" bun scripts/acceptance.ts "$scenario"; then
+if ! SECRETARY_ACCEPTANCE_PROVIDER_URL="$provider_base" SECRETARY_ACCEPTANCE_DOCS_URL="$docs_base" bun scripts/acceptance.ts "$scenario"; then
  cat "$log_dir/core.log" >&2
  echo "Acceptance failed; disposable logs: $log_dir" >&2
  exit 1

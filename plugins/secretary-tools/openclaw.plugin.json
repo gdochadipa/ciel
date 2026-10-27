@@ -1,7 +1,7 @@
 {
   "id": "secretary-tools",
   "name": "Personal Secretary tools",
-  "description": "Bounded owner-only Core and native scheduler bridge",
+  "description": "Bounded owner-only Workspace and native scheduler bridge",
   "configSchema": {
     "type": "object",
     "required": [
@@ -36,6 +36,12 @@
   },
   "contracts": {
     "tools": [
+      "docs_list",
+      "docs_describe",
+      "docs_read",
+      "docs_preview_change",
+      "docs_apply",
+      "operations_get_history",
       "sheets_list",
       "sheets_describe",
       "sheets_read",

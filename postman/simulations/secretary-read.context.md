@@ -19,6 +19,7 @@ Run `bash scripts/acceptance.sh read` in the qualified environment from `docs/lo
 ## Observations
 
 <!-- begin:observations -->
+2026-10-28 (T023): Google served the existing workflow successfully after generic Workspace capabilities were added; the seven-case suite passed.
 2026-10-27 (T021): Google served synthetic read grids; all real bridge/Core assertions passed as the first case of the sequential suite.
 2026-10-26: Google served synthetic grids; actual public bridge/Core read assertions passed. A second read run using the final verification image also passed.
 <!-- end:observations -->

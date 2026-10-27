@@ -4,6 +4,9 @@ use serde::Deserialize;
 /// Typed in-process application requests, including reads and mutations.
 /// HTTP names and JSON decoding belong to presentation.
 pub enum Command {
+    DocsList,
+    DocsDescribe(DocumentRequest),
+    DocsRead(DocumentRead),
     List,
     Describe(Describe),
     Read(Read),
@@ -20,10 +23,25 @@ pub enum Command {
 }
 /// Requests served by the mutation coordinator, including read-only operation history.
 pub enum MutationCommand {
+    DocsPreview(crate::domain::documents::DocChange),
+    DocsApply(Commit),
     Preview(Change),
     Append(Commit),
     Update(Commit),
     History(History),
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DocumentRequest {
+    pub document: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DocumentRead {
+    pub document: String,
+    pub tab_id: String,
+    pub limit: Option<usize>,
+    pub cursor: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

@@ -1,5 +1,8 @@
 # OpenClaw Personal AI Secretary — Architecture & Delivery Specification
 
+T023 scope extension: [general Workspace capabilities](workspace-capabilities.md) adds generic registered Sheets grids and controlled Google Docs editing. The wedding workbook remains an optional domain profile, not the universal template. The lightweight command bus/FSM and owner approval requirements remain.
+
+
 Version: 1.3 native-memory scope amendment\
 Date: 2026-10-26\
 Status: Local implementation authorized; live activation qualification pending  

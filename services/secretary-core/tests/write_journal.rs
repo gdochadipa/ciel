@@ -9,6 +9,7 @@ async fn store() -> Journal {
 }
 fn preview() -> Preview {
     Preview {
+        resource_kind: secretary_core::domain::operation::ResourceKind::Sheets,
         operation_id: "op-demo-one".into(),
         actor: "configured-owner".into(),
         spreadsheet: "wedding-demo".into(),

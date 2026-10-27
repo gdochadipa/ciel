@@ -19,6 +19,7 @@ Run `bash scripts/acceptance.sh slow` in the qualified environment from `docs/lo
 ## Observations
 
 <!-- begin:observations -->
+2026-10-28 (T023): Google handler stayed silent under the injected condition; caller assertions passed in the seven-case suite.
 2026-10-27 (T021): Google handler stayed silent because injected latency intercepted requests; caller deadline assertions passed and the sequential suite exited successfully.
 2026-10-26: Google member handler stayed silent because injected latency intercepted requests; actual bridge deadline assertion passed.
 <!-- end:observations -->

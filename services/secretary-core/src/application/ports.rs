@@ -1,7 +1,7 @@
 use crate::domain::{
     error::CoreError,
     operation::{Operation, Outcome, Preview},
-    registry::{Spreadsheet, View},
+    registry::{Document, Spreadsheet, View},
 };
 use serde_json::Value;
 use std::{future::Future, pin::Pin};
@@ -16,7 +16,7 @@ pub enum WriteOutcome {
 }
 
 /// Source access: implementations own protocol, authentication and bounded IO.
-pub trait SpreadsheetPort: Send + Sync {
+pub trait WorkspacePort: Send + Sync {
     fn read<'a>(&'a self, sheet: &'a Spreadsheet) -> PortFuture<'a, Result<Value, CoreError>>;
     fn write_values<'a>(
         &'a self,
@@ -25,7 +25,27 @@ pub trait SpreadsheetPort: Send + Sync {
         preview: &'a Preview,
         row: Option<usize>,
     ) -> PortFuture<'a, WriteOutcome>;
+    fn read_document<'a>(
+        &'a self,
+        _document: &'a Document,
+    ) -> PortFuture<'a, Result<Value, CoreError>> {
+        Box::pin(async {
+            Err(CoreError(
+                crate::domain::error::ErrorKind::Unavailable,
+                "documents_unavailable",
+            ))
+        })
+    }
+    fn write_document<'a>(
+        &'a self,
+        _document: &'a Document,
+        _preview: &'a Preview,
+    ) -> PortFuture<'a, WriteOutcome> {
+        Box::pin(async { WriteOutcome::Rejected })
+    }
 }
+/// Compatibility name for existing Sheets adapters; new adapters use WorkspacePort.
+pub use WorkspacePort as SpreadsheetPort;
 
 /// Durable intent and atomic lifecycle persistence; no mutation is sent without it.
 pub trait OperationStore: Send + Sync {

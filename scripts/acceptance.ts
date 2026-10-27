@@ -6,10 +6,10 @@ export const syntheticToken='synthetic-acceptance-core-token';
 export function acceptanceConfiguration(coreUrl:string, scenario:string) {
  const url=new URL(coreUrl);
  if(url.origin!=='http://127.0.0.1:8787'||url.pathname!=='/'||url.search||url.hash||url.username||url.password) throw Error('Acceptance requires disposable Core at http://127.0.0.1:8787');
- if(!['read','error','slow','drift','retry','writes'].includes(scenario)) throw Error('Unsupported acceptance scenario');
+ if(!['read','error','slow','drift','retry','writes','workspace'].includes(scenario)) throw Error('Unsupported acceptance scenario');
  return {coreUrl:url.origin,coreToken:syntheticToken,owner:syntheticOwner};
 }
-export function simulationGoogleBase(log:string) {
+export function simulationGoogleBase(log:string,route="google",version="v4") {
  const urls:string[]=[];
  function collect(value:unknown) {
   if(typeof value==='string' && /^http:\/\/(?:127\.0\.0\.1|localhost):[0-9]+(?:\/|$)/.test(value)) urls.push(value);
@@ -17,12 +17,16 @@ export function simulationGoogleBase(log:string) {
   else if(value && typeof value==='object') Object.values(value).forEach(collect);
  }
  for(const line of log.trim().split('\n')) {const event=JSON.parse(line);if(JSON.stringify(event).includes('"listening"')) collect(event);}
- const reported=urls.find(value=>new URL(value).pathname.replace(/\/$/,'')==='/google')??urls.find(value=>new URL(value).pathname==='/');
+ const reported=urls.find(value=>new URL(value).pathname.replace(/\/$/,'')===`/${route}`)??(route==='google'?urls.find(value=>new URL(value).pathname==='/'):undefined);
  if(!reported) throw Error('Listening event did not report a loopback member/server URL; inspect actual CLI event before wiring');
  const url=new URL(reported);if(url.username||url.password||url.search||url.hash) throw Error('Invalid simulation listening URL');
- url.hostname='127.0.0.1';url.pathname='/google/v4';return url.toString().replace(/\/$/,'');
+ url.hostname='127.0.0.1';url.pathname=`/${route}/${version}`;return url.toString().replace(/\/$/,'');
 }
 export async function runAcceptance(coreUrl:string,scenario:string) {
+ if(scenario==='workspace'){
+  const {runWorkspaceAcceptance}=await import('./acceptance-workspace');
+  return runWorkspaceAcceptance(coreUrl,process.env.SECRETARY_ACCEPTANCE_DOCS_URL??'');
+ }
  const bridge=createSecretary(acceptanceConfiguration(coreUrl,scenario));
  const owner={requesterSenderId:syntheticOwner,senderIsOwner:true};
  let ready=false;
@@ -71,6 +75,7 @@ export async function runAcceptance(coreUrl:string,scenario:string) {
  console.log(JSON.stringify({acceptance:'passed',scenario,scope:'actual public bridge -> real Core -> simulated Google; no live host or delivery proof'}));
 }
 if(import.meta.main) {
- if(process.argv[2]==='--simulation-base') console.log(simulationGoogleBase(await Bun.file(process.argv[3]!).text()));
+ if(process.argv[2]==='--simulation-docs-base') console.log(simulationGoogleBase(await Bun.file(process.argv[3]!).text(),'google-docs','v1'));
+ else if(process.argv[2]==='--simulation-base') console.log(simulationGoogleBase(await Bun.file(process.argv[3]!).text()));
  else await runAcceptance(process.env.SECRETARY_ACCEPTANCE_CORE_URL??'http://127.0.0.1:8787',process.argv[2]??'read');
 }

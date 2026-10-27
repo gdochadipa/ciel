@@ -6,7 +6,7 @@ use crate::{
     },
     domain::{
         error::{CoreError, ErrorKind},
-        operation::{OperationState, Outcome, Preview},
+        operation::{OperationState, Outcome, Preview, ResourceKind},
         projection, write_model,
     },
 };
@@ -58,6 +58,8 @@ impl Writes {
         }
         let _guard = self.writer.lock().await;
         match command {
+            MutationCommand::DocsPreview(c) => self.docs_preview(state, c).await,
+            MutationCommand::DocsApply(p) => self.docs_apply(state, &p.operation_id).await,
             MutationCommand::Preview(c) => {
                 if !write_model::valid_id(&c.operation_id) {
                     return Err(CoreError::invalid());
@@ -75,7 +77,7 @@ impl Writes {
                     .find(|v| v.name == c.view)
                     .ok_or_else(CoreError::invalid)?;
                 write_model::validate_fields(v, &c.fields, c.action == "append")?;
-                let book = state.sheets.read(s).await?;
+                let book = state.source.read(s).await?;
                 projection::validate(s, &book)?;
                 let generated_id = uuid::Uuid::new_v4().to_string();
                 let context = write_model::PreparationContext {
@@ -104,7 +106,8 @@ impl Writes {
                     return Err(CoreError::invalid());
                 }
                 let old = self.journal.get(&p.operation_id).await?;
-                if old.preview.actor.as_str() != state.owner.as_ref()
+                if old.preview.resource_kind != ResourceKind::Sheets
+                    || old.preview.actor.as_str() != state.owner.as_ref()
                     || old.preview.action != action
                 {
                     return Err(CoreError(ErrorKind::Conflict, "operation_action_mismatch"));
@@ -136,7 +139,7 @@ impl Writes {
             Some(v) => v,
             None => return Outcome::Conflict,
         };
-        let book = match state.sheets.read(s).await {
+        let book = match state.source.read(s).await {
             Ok(b) => b,
             Err(_) => return Outcome::KnownFailure,
         };
@@ -163,7 +166,7 @@ impl Writes {
             }
             None
         };
-        match state.sheets.write_values(s, v, p, row).await {
+        match state.source.write_values(s, v, p, row).await {
             WriteOutcome::Rejected => Outcome::KnownFailure,
             WriteOutcome::Uncertain => Outcome::Uncertain,
             WriteOutcome::Accepted => self.observe(state, p).await,
@@ -178,7 +181,7 @@ impl Writes {
             Some(v) => v,
             None => return Outcome::Reconciliation,
         };
-        let book = match state.sheets.read(s).await {
+        let book = match state.source.read(s).await {
             Ok(b) => b,
             Err(_) => return Outcome::Reconciliation,
         };
@@ -230,7 +233,11 @@ impl Writes {
         ) {
             return Err(CoreError(ErrorKind::Conflict, "operation_not_reconcilable"));
         }
-        let outcome = self.observe(state, &op.preview).await;
+        let outcome = if op.preview.resource_kind == ResourceKind::GoogleDocs {
+            self.observe_document(state, &op.preview).await
+        } else {
+            self.observe(state, &op.preview).await
+        };
         let op = self.journal.finish(id, outcome).await?;
         Ok(op.preview.public(op.state.as_str()))
     }

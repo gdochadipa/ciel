@@ -13,8 +13,18 @@ const reminderDescriptions:Record<string,string>={
  reminders_cancel:'Cancel an owner reminder by disabling and retaining the native job for history. Creation retries do not resume canceled jobs.',
  reminders_history:'Read up to 100 recent native executions. Preserve separate execution and delivery statuses; unknown or accepted delivery is not proof of receipt.',
 };
+const documentDescriptions:Record<string,string>={
+ docs_list:'List only operator-registered Google Docs aliases; this does not enumerate Google Drive.',
+ docs_describe:'Describe a registered Google Doc, its tab IDs, revision and supported text structure before choosing a tab.',
+ docs_read:'Read a bounded body-text excerpt from a registered Google Doc tab. Default 2000 characters; cursor is bound to the source revision. Layout and non-text objects are not reproduced.',
+ docs_preview_change:'Prepare an immutable Google Docs text edit. append_text fields: {text}; replace_text fields: {find,replacement}, exactly one case-sensitive match. Select a tab ID from docs_describe. Unsupported structures and suggestions fail closed for editing.',
+ docs_apply:'Apply only a previously previewed and owner-approved Google Docs operation_id. Revision changes conflict. After uncertain outcome, inspect operation history and reconcile; never resend blindly.',
+ operations_get_history:'Read the owner operation journal for registered Sheets and Google Docs work; this does not authorize retrying a mutation.',
+ reports_wedding:'Optional wedding-profile report. Generic grids and Google Docs do not require or infer wedding fields.',
+};
 const string={type:'string',minLength:1,maxLength:8192};
 const specs:Record<string,[string[],Record<string,unknown>]>={
+ docs_list:[[],{}],docs_describe:[['document'],{document:string}],docs_read:[['document','tab_id'],{document:string,tab_id:string,limit:{type:'integer',minimum:1,maximum:10000},cursor:string}],docs_preview_change:[['operation_id','document','tab_id','action','fields'],{operation_id:string,document:string,tab_id:string,action:{enum:['append_text','replace_text']},fields:{oneOf:[{type:'object',required:['text'],properties:{text:{type:'string',minLength:1,maxLength:8192}},additionalProperties:false},{type:'object',required:['find','replacement'],properties:{find:{type:'string',minLength:1,maxLength:2048},replacement:{type:'string',maxLength:8192}},additionalProperties:false}]}}],docs_apply:[['operation_id'],{operation_id:string}],operations_get_history:[[],{operation_id:string,limit:{type:'integer',minimum:1,maximum:100},cursor:string}],
  sheets_list:[[],{}],sheets_describe:[['spreadsheet'],{spreadsheet:string}],sheets_read:[['spreadsheet','view'],{spreadsheet:string,view:string,limit:{type:'integer',minimum:1,maximum:100},cursor:string}],sheets_search:[['spreadsheet','view','query'],{spreadsheet:string,view:string,query:string,limit:{type:'integer',minimum:1,maximum:100},cursor:string}],
  sheets_preview_change:[['operation_id','spreadsheet','view','action','fields'],{operation_id:string,spreadsheet:string,view:string,action:{enum:['append','update']},record_id:string,fields:{type:'object'}}],sheets_append:[['operation_id'],{operation_id:string}],sheets_update:[['operation_id'],{operation_id:string}],sheets_get_history:[[],{operation_id:string,limit:{type:'integer',minimum:1,maximum:100},cursor:string}],reports_wedding:[['spreadsheet'],{spreadsheet:string}]
 };
@@ -36,7 +46,7 @@ function bridgeFor(api:OpenClawPluginApi) {
  return bridge;
 }
 const entry=defineToolPlugin({
- id:'secretary-tools',name:'Personal Secretary tools',description:'Bounded owner-only Core and native scheduler bridge',
+ id:'secretary-tools',name:'Personal Secretary tools',description:'Bounded owner-only Workspace and native scheduler bridge',
  configSchema:Type.Object({
   owner:Type.String({minLength:1}),
   coreUrl:Type.Optional(Type.String({default:'http://127.0.0.1:8787'})),
@@ -44,10 +54,10 @@ const entry=defineToolPlugin({
   schedulerQualified:Type.Optional(Type.Boolean({default:false})),
  },{additionalProperties:false}),
  tools:tool=>secretaryToolNames.map(name=>tool({
-  name,label:name,description:reminderDescriptions[name]??'Owner-only secretary operation; input cannot set actor, credentials, host or outbound recipient.',
+  name,label:name,description:documentDescriptions[name]??reminderDescriptions[name]??'Owner-only secretary operation; input cannot set actor, credentials, host or outbound recipient.',
   parameters:Type.Unsafe(schemas[name]),
   factory:({api,toolContext}):AnyAgentTool=>({
-   name,label:name,description:reminderDescriptions[name]??'Owner-only secretary operation; input cannot set actor, credentials, host or outbound recipient.',
+   name,label:name,description:documentDescriptions[name]??reminderDescriptions[name]??'Owner-only secretary operation; input cannot set actor, credentials, host or outbound recipient.',
    parameters:Type.Unsafe(schemas[name]),
    async execute(_toolCallId,params) {
     try {
@@ -63,7 +73,7 @@ const registerTools=entry.register!;
 entry.register=(api)=>{
  registerTools(api);
  api.on('before_tool_call',async(event,context)=>{
-  if(!['sheets_append','sheets_update'].includes(event.toolName))return;
+  if(!['sheets_append','sheets_update','docs_apply'].includes(event.toolName))return;
   const requester=context.requester;
   try {
    const requireApproval=await bridgeFor(api).prepareApproval(event.toolName,event.params,{requesterSenderId:requester?.senderId,senderIsOwner:requester?.senderIsOwner});

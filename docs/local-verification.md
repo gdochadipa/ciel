@@ -1,6 +1,6 @@
 # Local verification with the real SDK
 
-Verified 2026-10-26 using Linux arm64: Node 24.22.1, Bun 1.2.21, Rust 1.95.0, OpenClaw 2026.10.7, TypeScript 7.0.2 and Postman CLI 1.75.0. The actual SDK engine range is `>=24.22.1 <25 || >=26.12.1`. Other platforms require their own run.
+Verified 2026-10-28 using Linux arm64: Node 24.22.1, Bun 1.2.21, Rust 1.95.0, OpenClaw 2026.10.7, TypeScript 7.0.2 and Postman CLI 1.75.0. The actual SDK engine range is `>=24.22.1 <25 || >=26.12.1`. Other platforms require their own run.
 
 Use a normal Git checkout containing this increment. In this session the retained checkout is `/private/tmp/openclaw-secretary-implementation.on4Zt7`; the working source root has no Git metadata. The commands below copy only committed files into a disposable directory. They exclude the untracked workbook, operator `.env` files, credentials and personal OpenClaw configuration. No host home directory or Docker socket is mounted into the verification container.
 
@@ -38,7 +38,7 @@ secretary_verify_run none -c 'bash scripts/verify.sh'
 
 The locked OpenClaw dependency is explicitly trusted for its reviewed local package postinstall. Optional untrusted dependency lifecycle scripts need not be enabled for these authoring checks. Do not generate substitute SDK declarations or silently replace production dependencies if installation fails.
 
-Run dependency scenarios separately, with no external network. The fail-fast suite runs all six scenarios sequentially and waits for each owned service to stop. The writes launcher rebuilds the current plugin and includes actual SDK/built-entry factory and approval-hook integration using a host registration fixture. Core and the bridge run for real; Google is the only simulation member. Ports belong to each disposable container, avoiding host-port publication.
+Run dependency scenarios separately, with no external network. The fail-fast suite runs all seven scenarios sequentially and waits for each owned service to stop. The writes and workspace launchers rebuild the current plugin and includes actual SDK/built-entry factory and approval-hook integration using a host registration fixture. Core and the bridge run for real; Only Google is simulated; workspace uses separate Sheets and Docs members. Ports belong to each disposable container, avoiding host-port publication.
 
 ```sh
 secretary_verify_run none -c 'bash scripts/acceptance-all.sh'
@@ -55,4 +55,4 @@ The verification script includes ten Python operator CLI tests; the Rust suite i
 
 Full local checks passed; live VPS/Google OAuth, trusted owner approval UI, native scheduler persistence, WhatsApp routing, backup/restore and hosted CI remain separate gates in [implementation status](implementation-status.md). Memory remains owned by OpenClaw and all live capability flags remain off.
 
-The repository's full CI job now installs Postman CLI1.75.0 with lifecycle scripts disabled and runs the same `scripts/acceptance-all.sh` gate after local verification. It requires no Postman login, API key or live credentials, and publishes nothing. The acceptance step has a ten-minute ceiling; the job has a thirty-minute ceiling. Local sequential execution passed in T021; hosted CI remains unobserved.
+The repository's full CI job now installs Postman CLI1.75.0 with lifecycle scripts disabled and runs the same `scripts/acceptance-all.sh` gate after local verification. It requires no Postman login, API key or live credentials, and publishes nothing. The acceptance step has a ten-minute ceiling; the job has a thirty-minute ceiling. Local sequential execution passed in T023; hosted CI remains unobserved.

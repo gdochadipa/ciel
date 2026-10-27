@@ -74,6 +74,15 @@ fn authorized(provided: &str, token: &str) -> bool {
 }
 fn decode_tool(name: &str, input: Value) -> Result<Command, CoreError> {
     Ok(match name {
+        "docs_list" => {
+            let _: Empty = parse(input)?;
+            Command::DocsList
+        }
+        "docs_describe" => Command::DocsDescribe(parse(input)?),
+        "docs_read" => Command::DocsRead(parse(input)?),
+        "docs_preview_change" => Command::Mutation(MutationCommand::DocsPreview(parse(input)?)),
+        "docs_apply" => Command::Mutation(MutationCommand::DocsApply(parse(input)?)),
+        "operations_get_history" => Command::Mutation(MutationCommand::History(parse(input)?)),
         "sheets_list" => {
             let _: Empty = parse(input)?;
             Command::List
