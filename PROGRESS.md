@@ -12,6 +12,8 @@ The owner retained a lightweight single in-process command bus + durable SQLite 
 
 ## Current verification evidence
 
+[T024](.scratch/secretary-mvp/T024.md) closes an operator-gate gap after T023: any readable Docs registration requires separate `google_disposable_docs` evidence, even when writes are disabled. Missing/blank/non-string evidence and malformed flags fail closed. Sheets-only/unreadable Docs registries preserve the old contract. Thirteen operator CLI tests pass on macOS and qualified Linux. This checks private local attestations, not live provider behavior; T007 remains open.
+
 - Full `bash scripts/verify.sh` passed: 30 Rust tests, 41 TypeScript checks (37 plugin + four acceptance configuration, all four HTTP tests enabled), ten Python operator checks, formatting/Clippy with warnings denied and actual SDK strict types/build/validation (`valid: true`, no errors).
 - All seven Google-only dependency simulations passed sequentially: read, writes, retry, drift, error, slow and workspace. Real bridge/Core/journal executed; workspace served both Sheets and Docs (three Sheets and 31 Docs request events). SDK-built entry factories/approval hooks execute through a host registration fixture, not a qualified live host UI.
 - Docs coverage includes explicit tab targeting, pagination/source evidence, full captured preview, separate approval, exact replacement, append replay without another send, external revision conflict, other-tab preservation, accepted-write/lost-response uncertainty and observation-only reconciliation. These are bounded synthetic-provider results, not live Google semantics.

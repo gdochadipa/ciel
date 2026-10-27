@@ -62,6 +62,24 @@ def main():
         credentials = json.loads(private_file(values['GOOGLE_APPLICATION_CREDENTIALS']).read_text())
         if not isinstance(registry, dict) or credentials.get('type') != 'service_account':
             raise ValueError('registry or Google service-account file has an invalid shape')
+        # Do not let a legacy Sheets attestation qualify newly configured Docs access.
+        # Core validates the complete registry; here flags must be unambiguous so
+        # malformed values cannot bypass the capability-specific evidence gate.
+        documents = registry.get('documents', [])
+        if not isinstance(documents, list):
+            raise ValueError('document capabilities must be an array')
+        docs_readable = False
+        for document in documents:
+            if (not isinstance(document, dict)
+                    or type(document.get('readable')) is not bool
+                    or type(document.get('writable', False)) is not bool
+                    or document.get('writable', False) and not document['readable']):
+                raise ValueError('document capability flags are invalid')
+            docs_readable = docs_readable or document['readable']
+        if docs_readable:
+            docs_evidence = evidence.get('google_disposable_docs')
+            if not isinstance(docs_evidence, str) or not docs_evidence.strip():
+                raise ValueError('configured Docs access requires separate qualification evidence')
         print('Preflight passed: operator qualification and local file checks only.')
         return 0
     except (OSError, ValueError, TypeError, AttributeError):

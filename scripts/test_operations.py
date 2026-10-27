@@ -133,6 +133,39 @@ class OperatorCommands(unittest.TestCase):
                 self.assert_denied(self.preflight())
                 path.write_text(original)
 
+    @unittest.skipIf(os.geteuid() == 0, 'capability preflight requires a non-root service user')
+    def test_readable_docs_require_separate_evidence_even_when_writes_are_disabled(self):
+        self.registry.write_text(json.dumps({'documents': [
+            {'alias': 'notes', 'id': 'synthetic-doc', 'readable': True}]}))
+        self.assert_denied(self.preflight())
+        for evidence in (None, '', '  ', False, [], {}):
+            with self.subTest(evidence=evidence):
+                self.record.write_text(json.dumps({**self.qualification, 'evidence': {
+                    **self.qualification['evidence'], 'google_disposable_docs': evidence}}))
+                self.assert_denied(self.preflight())
+        self.record.write_text(json.dumps({**self.qualification, 'evidence': {
+            **self.qualification['evidence'],
+            'google_disposable_docs': 'Synthetic Docs API/ACL/tab/revision evidence; not live'}}))
+        result = self.preflight()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('operator qualification and local file checks only', result.stdout)
+
+    @unittest.skipIf(os.geteuid() == 0, 'capability preflight requires a non-root service user')
+    def test_unreadable_docs_keep_sheets_only_attestation_compatible(self):
+        self.registry.write_text(json.dumps({'documents': [
+            {'alias': 'notes', 'id': 'synthetic-doc', 'readable': False}]}))
+        self.assertEqual(self.preflight().returncode, 0)
+
+    def test_malformed_document_capabilities_cannot_bypass_evidence_gate(self):
+        invalid = [None, {}, 'SYNTHETIC_PRIVATE_DETAIL', [None], [True], [{}]]
+        invalid.extend([[{'readable': value}] for value in (None, 'true', 'false', 0, 1)])
+        invalid.extend([[{'readable': False, 'writable': value}]
+                        for value in (True, 'false', 0, None)])
+        for documents in invalid:
+            with self.subTest(documents=documents):
+                self.registry.write_text(json.dumps({'documents': documents}))
+                self.assert_denied(self.preflight())
+
     def test_backup_includes_committed_wal_and_excludes_uncommitted_changes(self):
         source = self.state / 'journal.sqlite3'
         live = sqlite3.connect(source)

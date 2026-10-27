@@ -1,6 +1,6 @@
 # Implementation status
 
-Updated 2026-10-28. T023 adds generic registered Sheets reads and controlled Google Docs editing through the existing FSM. The local plugin/Core verification milestone is complete; T018 adds tested operator gates and Core journal recovery; T019 adds built-entry factory/hook integration; T020 bounds transient preview state; T021 adds a sequential acceptance CI gate and reliable launcher cleanup. **Live activation remains unqualified (T007)**; this is not a production acceptance claim.
+Updated 2026-10-28. T023 adds generic registered Sheets reads and controlled Google Docs editing through the existing FSM. T024 makes the operator gate require separate evidence for configured Docs access. The local plugin/Core verification milestone is complete; T018 adds tested operator gates and Core journal recovery; T019 adds built-entry factory/hook integration; T020 bounds transient preview state; T021 adds a sequential acceptance CI gate and reliable launcher cleanup. **Live activation remains unqualified (T007)**; this is not a production acceptance claim.
 
 ## Implemented behavior
 
@@ -19,7 +19,7 @@ All checks below used synthetic data in isolated Linux. Actual dependency locks 
 | Check | Result and boundary |
 | --- | --- |
 | Full Rust dependency graph | Formatting, Clippy with warnings denied and 30 tests passed offline/locked, including the real Reqwest HTTP adapter and accepted-write/lost-response reconciliation. Google OAuth/JWT code compiled; live credential exchange through Rust Core remains unverified. The owner separately reported successful Python service-account refresh (see below). |
-| Operator CLI and restore | Ten Python checks pass on native macOS and qualified Linux. Actual Core WAL journal backup/restore preserves approval/digest, recovers interrupted writes to reconciliation and rejects replay. Temporary backup sidecars are cleaned; existing snapshots remain untouched (T018). |
+| Operator CLI and restore | Thirteen Python checks pass on native macOS and qualified Linux. Readable Docs requires separate `google_disposable_docs` evidence, with malformed flags rejected and Sheets-only compatibility preserved (T024). Actual Core WAL journal backup/restore preserves approval/digest, recovers interrupted writes to reconciliation and rejects replay. Temporary backup sidecars are cleaned; existing snapshots remain untouched (T018). |
 | TypeScript checks | 37 plugin tests plus four acceptance-configuration tests passed, with all four HTTP tests enabled and no skips. Native Gateway behavior remains a boundary fixture. |
 | Actual SDK | Strict type checking against the installed public SDK passed. OpenClaw build and validation passed (`valid: true`, no errors); metadata import requires no credentials. |
 | Built entry integration | T023: actual SDK recognizes bundle metadata and all 23 factory registrations match the manifest. Exercised tool factories and approval hook execute through a host registration fixture. Preview/hook sharing, API-instance isolation, owner/revocation guards and one-shot approval → real Core → one synthetic Google append passed (T019); T023 also exercises the registered Docs entry/approval hook through real Core. Live host UI/policy remains unqualified. |

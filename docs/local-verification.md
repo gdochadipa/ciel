@@ -51,7 +51,7 @@ The SDK archive is under the disposable checkout's `plugins/secretary-tools/dist
 
 This session's approved direct Docker commands worked, while Docker invoked from a sandboxed shell wrapper could not reach the daemon. A user terminal with Docker access can use the helper above; agents may need equivalent direct Docker invocations. Native macOS registry DNS/loopback restrictions were not changed.
 
-The verification script includes ten Python operator CLI tests; the Rust suite includes a real Core WAL backup/restore check. These use disposable local files and never require live credentials.
+The verification script includes 13 Python operator CLI tests; the Rust suite includes a real Core WAL backup/restore check. These use disposable local files and never require live credentials.
 
 Full local checks passed; live VPS/Google OAuth, trusted owner approval UI, native scheduler persistence, WhatsApp routing, backup/restore and hosted CI remain separate gates in [implementation status](implementation-status.md). Memory remains owned by OpenClaw and all live capability flags remain off.
 

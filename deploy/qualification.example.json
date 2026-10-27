@@ -8,6 +8,7 @@
     "trusted_full_diff_approval": "",
     "native_scheduler_restart_and_delivery": "",
     "explicit_memory_policy": "",
-    "backup_restore": ""
+    "backup_restore": "",
+    "google_disposable_docs": ""
   }
 }
