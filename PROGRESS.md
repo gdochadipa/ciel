@@ -31,9 +31,17 @@ Latest local archive remains T020: 35576 bytes, SHA-256 `44e765ed105760675b84954
 - [Local ticket graph](.scratch/secretary-mvp/index.md), [T007 qualification checklist](.scratch/secretary-mvp/T007.md), [plugin README](plugins/secretary-tools/README.md), [architecture](docs/architecture.md).
 - [Specification](docs/specs/openclaw-personal-secretary.md), [security](docs/security.md), [deployment](docs/deployment.md), [Core contract](contracts/openapi.yaml).
 
+## Current live-integration prerequisite and cost constraint
+
+The owner now asks to continue integration/operational validation and allows reusing credentials already supplied to OpenClaw, with no additional paid services. Standard Sheets API use is documented as no additional cost; do not enable billing, paid quota increases or new paid hosting/model services. Existing hosting/model charges are separate. Preserve the lightweight FSM + one command bus decision.
+
+The owner clarified using `google-auth`/`requests` installed by `~/.venvs/openclaw-memory/bin/pip install google-auth requests` for Workspace access. This names libraries, not a proven auth flow. The named virtualenv and conventional gcloud ADC file are absent locally; the consuming script/host or credential source is still needed. Do not assume user OAuth is established, prescribe a new key, or add an auth backend until the actual call site is identified.
+
+Current Core supports service-account JSON via `GOOGLE_APPLICATION_CREDENTIALS`; an OpenClaw user OAuth client/token connection is not automatically compatible. Read-only inventory found no local OpenClaw CLI/config directory, service environment, credential path or Git remote. The owner has been asked for the existing host/connection or protected credential path/type, without secret contents. Until that location is supplied, live OAuth/Sheets/host verification cannot proceed; do not claim the absence on this development machine means the owner's credentials do not exist elsewhere. See the reuse/cost section in [deployment](docs/deployment.md). No live auth/read/write or service activation was attempted.
+
 ## Remaining gates
 
-1. T007 live work is deferred: qualify the actual target VPS/plugin activation/model entitlement and disposable Google service-account OAuth/read/write preservation.
+1. T007 live work requires the existing host/credential location before proceeding: qualify the actual target VPS/plugin activation/model entitlement and disposable Google service-account OAuth/read/write preservation.
 2. Prove trusted owner-only approval routing, complete preview display and callback failure blocking in the real host. The SDK registration fixture does not establish host policy execution or requester provenance.
 3. Qualify native Gateway declaration convergence, concurrent edits, restart persistence, history and owner-only WhatsApp delivery/outbound policy. Offset discovery is not transactional.
 4. Test a supported native scheduler backup/restore and complete target-host recovery. Core journal snapshot/restore already passes locally.
