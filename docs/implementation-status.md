@@ -16,7 +16,7 @@ All checks below used synthetic data in isolated Linux. Actual dependency locks 
 
 | Check | Result and boundary |
 | --- | --- |
-| Full Rust dependency graph | Formatting, Clippy with warnings denied and 24 tests passed offline/locked, including the real Reqwest HTTP adapter and accepted-write/lost-response reconciliation. Google OAuth/JWT code compiled; live credential exchange was not exercised. |
+| Full Rust dependency graph | Formatting, Clippy with warnings denied and 24 tests passed offline/locked, including the real Reqwest HTTP adapter and accepted-write/lost-response reconciliation. Google OAuth/JWT code compiled; live credential exchange through Rust Core remains unverified. The owner separately reported successful Python service-account refresh (see below). |
 | Operator CLI and restore | Ten Python checks pass on native macOS and qualified Linux. Actual Core WAL journal backup/restore preserves approval/digest, recovers interrupted writes to reconciliation and rejects replay. Temporary backup sidecars are cleaned; existing snapshots remain untouched (T018). |
 | TypeScript checks | 34 plugin tests plus three acceptance-configuration tests passed, with all four HTTP tests enabled and no skips. Native Gateway behavior remains a boundary fixture. |
 | Actual SDK | Strict type checking against the installed public SDK passed. OpenClaw build and validation passed (`valid: true`, no errors); metadata import requires no credentials. |
@@ -30,6 +30,8 @@ The write scenario exercised approval callback replay, append/update, owner/bear
 The real SDK requires Node `>=24.22.1 <25 || >=26.12.1`; the earlier 24.16 assumption was corrected. `defineToolPlugin` now supplies actual host authoring metadata and context factories, preserving the native approval hook. Bridge construction and credential access are lazy. See [T017](../.scratch/secretary-mvp/T017.md) for fixes and run evidence and [local verification](local-verification.md) for reproduction.
 
 The T022 full baseline exposed and fixed a journal lock handoff race: explicit RAII unlock on last Journal owner prevents inherited descriptors from prolonging ownership. A live Journal clone still excludes another owner. Two deterministic regressions and 50 iterations of the original journal suite passed, with no retry/sleep workaround. The full write/SDK-entry scenario also passed again with the updated Core.
+
+On 2026-10-27 the owner reported `AUTH_REFRESH: OK` from a Python check using the existing host service-account file, the Google token endpoint and Sheets read-only scope. This is operator-reported live auth evidence, not a Core integration or spreadsheet-access pass. An approved spreadsheet ID/link has been requested for metadata-only validation; Core wiring, host permissions, Sheets ACL/API enablement and remaining live gates are still open. No credentials or tokens were obtained/committed and no live cells were changed.
 
 ## Remaining acceptance gates
 
