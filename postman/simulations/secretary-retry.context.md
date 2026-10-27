@@ -19,5 +19,6 @@ Run `bash scripts/acceptance.sh retry` in the qualified environment from `docs/l
 ## Observations
 
 <!-- begin:observations -->
+2026-10-27 (T021): Google served transient failures then synthetic grids; real Core recovery passed within the sequential suite.
 2026-10-26: Google served transient failures followed by synthetic grids; actual Core retry and bridge assertions passed.
 <!-- end:observations -->

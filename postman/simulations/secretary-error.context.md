@@ -19,5 +19,6 @@ Run `bash scripts/acceptance.sh error` in the qualified environment from `docs/l
 ## Observations
 
 <!-- begin:observations -->
+2026-10-27 (T021): Google handler stayed silent because the injected error intercepted requests; caller provider_unavailable assertions passed within the sequential suite.
 2026-10-26: Google member handler stayed silent because the injected persistent error intercepted requests; actual bridge/Core returned provider_unavailable as asserted.
 <!-- end:observations -->

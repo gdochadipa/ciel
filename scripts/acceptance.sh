@@ -9,11 +9,34 @@ log_dir="$(mktemp -d "${SECRETARY_ACCEPTANCE_LOG_ROOT:-${TMPDIR:-/tmp}}/secretar
 sim_pid=''; core_pid=''
 cleanup() {
  if [ -n "$core_pid" ]; then kill "$core_pid" 2>/dev/null || true; fi
- if [ -n "$sim_pid" ]; then kill "$sim_pid" 2>/dev/null || true; fi
+ # Postman's npm wrapper spawns CLI/dataset children. Signal only this run's
+ # dedicated process group, then bound the shutdown grace period.
+ if [ -n "$sim_pid" ]; then
+  kill -TERM -- "-$sim_pid" 2>/dev/null || true
+  for _ in {1..30}; do
+   if ! kill -0 -- "-$sim_pid" 2>/dev/null; then break; fi
+   sleep 0.1
+  done
+  kill -KILL -- "-$sim_pid" 2>/dev/null || true
+ fi
+ if [ -n "$core_pid" ]; then wait "$core_pid" 2>/dev/null || true; fi
+ if [ -n "$sim_pid" ]; then wait "$sim_pid" 2>/dev/null || true; fi
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+# Compile before the readiness deadline. Launch the emitted binary directly so
+# cleanup owns the actual service PID rather than a cargo wrapper process.
+cargo build --offline --locked -p secretary-core --message-format=json > "$log_dir/build.ndjson"
+core_binary="$(bun -e '
+ const events=(await Bun.file(process.argv[1]).text()).trim().split("\n").map(line=>JSON.parse(line));
+ const binaries=events.filter(event=>event.reason==="compiler-artifact" && event.target?.name==="secretary-core" && event.target.kind.includes("bin") && typeof event.executable==="string");
+ if(binaries.length!==1)throw Error("Cargo did not report exactly one Core executable");
+ console.log(binaries[0].executable);
+' "$log_dir/build.ndjson")"
 : > "$log_dir/sim.ndjson"
-postman simulation run "postman/simulations/secretary-${scenario}.sim.yaml" --port 4900 --output ndjson --no-history > "$log_dir/sim.ndjson" 2> "$log_dir/sim.err" &
+python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
+ postman simulation run "postman/simulations/secretary-${scenario}.sim.yaml" --port 4900 --output ndjson --no-history > "$log_dir/sim.ndjson" 2> "$log_dir/sim.err" &
 sim_pid=$!
 ready=false
 for _ in {1..50}; do
@@ -37,7 +60,7 @@ SECRETARY_STATE_DIR="$log_dir/state" SECRETARY_APPROVAL_TOKEN=synthetic-separate
 SECRETARY_CORE_TOKEN=synthetic-acceptance-core-token SECRETARY_OWNER=+15555550123 \
 SECRETARY_MOCK_MODE=true SECRETARY_GOOGLE_BASE_URL="$provider_base" \
 SECRETARY_GOOGLE_TOKEN=synthetic-provider-token \
-cargo run --offline --locked -p secretary-core > "$log_dir/core.log" 2>&1 &
+"$core_binary" > "$log_dir/core.log" 2>&1 &
 core_pid=$!
 if ! SECRETARY_ACCEPTANCE_PROVIDER_URL="$provider_base" bun scripts/acceptance.ts "$scenario"; then
  cat "$log_dir/core.log" >&2

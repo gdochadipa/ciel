@@ -19,5 +19,6 @@ Run `bash scripts/acceptance.sh drift` in the qualified environment from `docs/l
 ## Observations
 
 <!-- begin:observations -->
+2026-10-27 (T021): Google served schema drift; real Core rejected it safely within the sequential suite.
 2026-10-26: Google served the changed header; actual Core/bridge rejected schema drift safely.
 <!-- end:observations -->

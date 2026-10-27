@@ -38,12 +38,10 @@ secretary_verify_run none -c 'bash scripts/verify.sh'
 
 The locked OpenClaw dependency is explicitly trusted for its reviewed local package postinstall. Optional untrusted dependency lifecycle scripts need not be enabled for these authoring checks. Do not generate substitute SDK declarations or silently replace production dependencies if installation fails.
 
-Run dependency scenarios separately, with no external network. The writes launcher rebuilds the current plugin and includes actual SDK/built-entry factory and approval-hook integration using a host registration fixture. Core and the bridge run for real; Google is the only simulation member. Ports belong to each disposable container, avoiding host-port publication.
+Run dependency scenarios separately, with no external network. The fail-fast suite runs all six scenarios sequentially and waits for each owned service to stop. The writes launcher rebuilds the current plugin and includes actual SDK/built-entry factory and approval-hook integration using a host registration fixture. Core and the bridge run for real; Google is the only simulation member. Ports belong to each disposable container, avoiding host-port publication.
 
 ```sh
-for secretary_scenario in read writes retry drift error slow; do
-  secretary_verify_run none -c 'bash scripts/acceptance.sh "$1"' sh "$secretary_scenario" || exit 1
-done
+secretary_verify_run none -c 'bash scripts/acceptance-all.sh'
 secretary_verify_run none -c 'bun run --cwd plugins/secretary-tools pack'
 ```
 
@@ -56,3 +54,5 @@ This session's approved direct Docker commands worked, while Docker invoked from
 The verification script includes ten Python operator CLI tests; the Rust suite includes a real Core WAL backup/restore check. These use disposable local files and never require live credentials.
 
 Full local checks passed; live VPS/Google OAuth, trusted owner approval UI, native scheduler persistence, WhatsApp routing, backup/restore and hosted CI remain separate gates in [implementation status](implementation-status.md). Memory remains owned by OpenClaw and all live capability flags remain off.
+
+The repository's full CI job now installs Postman CLI1.75.0 with lifecycle scripts disabled and runs the same `scripts/acceptance-all.sh` gate after local verification. It requires no Postman login, API key or live credentials, and publishes nothing. The acceptance step has a ten-minute ceiling; the job has a thirty-minute ceiling. Local sequential execution passed in T021; hosted CI remains unobserved.

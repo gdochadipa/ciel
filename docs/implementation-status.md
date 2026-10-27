@@ -1,6 +1,6 @@
 # Implementation status
 
-Updated 2026-10-26. The local plugin/Core verification milestone is complete; T018 adds tested operator gates and Core journal recovery; T019 adds built-entry factory/hook integration; T020 bounds transient preview state. **Live activation remains unqualified (T007)**; this is not a production acceptance claim.
+Updated 2026-10-27. The local plugin/Core verification milestone is complete; T018 adds tested operator gates and Core journal recovery; T019 adds built-entry factory/hook integration; T020 bounds transient preview state; T021 adds a sequential acceptance CI gate and reliable launcher cleanup. **Live activation remains unqualified (T007)**; this is not a production acceptance claim.
 
 ## Implemented behavior
 
@@ -20,8 +20,8 @@ All checks below used synthetic data in isolated Linux. Actual dependency locks 
 | Actual SDK | Strict type checking against the installed public SDK passed. OpenClaw build and validation passed (`valid: true`, no errors); metadata import requires no credentials. |
 | Built entry integration | T019/T020: actual SDK recognizes bundle metadata and all 17 factory registrations match the manifest. Exercised tool factories and approval hook execute through a host registration fixture. Preview/hook sharing, API-instance isolation, owner/revocation guards and one-shot approval → real Core → one synthetic Google append passed (T019). Live host UI/policy remains unqualified. |
 | Distribution | Actual host pack produced a local archive with three runtime files: package metadata, manifest and bundled entry. npm dry-run separately verifies its four-file selection, including README, and private-file exclusion. No install/enable/reload/publish occurred. |
-| Full verification script | `bash scripts/verify.sh` exited successfully in T017 with the supported runtime and real locks. T018 adds the ten Python checks; those and the full Rust checks passed separately. Hosted CI has not run. |
-| Real bridge → Rust Core → simulated Google | All six Postman scenarios passed: read, writes, retry, drift, persistent error and slow response. Core and its journal ran for real; Google was the sole simulated dependency. |
+| Full verification script | `bash scripts/verify.sh` exited successfully in T017 with the supported runtime and real locks. T018 adds the ten Python checks; those and the full Rust checks passed separately. CI now also installs pinned Postman CLI and runs the fail-fast six-scenario suite without secrets/login/publication. Hosted CI has not run. |
+| Real bridge → Rust Core → simulated Google | All six Postman scenarios passed together sequentially in T021: read, writes (including built-entry factory/hook exercise), retry, drift, persistent error and slow response. Core and its journal ran for real; Google was the sole simulated dependency. |
 
 The write scenario exercised approval callback replay, append/update, owner/bearer/digest rejection, changed payload, stale external edits, uncertain-write rejection and reconciliation to exactly one synthetic payment. Retry served two failures before recovery. Drift failed closed. Injected error/latency conditions short-circuit before Google member request events; caller error/timeout assertions establish those outcomes. This is bounded Google contract evidence, not live Google semantics or host approval UI qualification.
 

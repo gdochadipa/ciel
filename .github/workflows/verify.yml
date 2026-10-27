@@ -28,6 +28,7 @@ jobs:
           bun run --cwd plugins/secretary-tools bundle
   verify:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Require qualified dependency locks
@@ -51,3 +52,8 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Verify local behavior
         run: bash scripts/verify.sh
+      - name: Install pinned Postman CLI without lifecycle scripts
+        run: npm install --global --ignore-scripts postman-cli@1.75.0
+      - name: Verify real bridge and Core against Google-only simulations
+        timeout-minutes: 10
+        run: bash scripts/acceptance-all.sh
