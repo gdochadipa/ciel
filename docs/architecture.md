@@ -32,6 +32,8 @@ The secretary plugin registers only its 17 spreadsheet/report/reminder tools. Th
 
 ## Rust layers and command dispatch
 
+The owner confirmed retaining the lightweight FSM + command bus architecture after discussing CQRS. [ADR0001](adr/0001-lightweight-command-bus-and-operation-fsm.md) records the scope and trade-off.
+
 The Core follows the owner's DDD and hexagonal direction. Domain rules describe immutable change previews, source mappings, field validation, cost groups, exact arithmetic and legal operation transitions. Application code coordinates these rules through a typed in-process command bus. Infrastructure implements source and durable-operation ports. Presentation authenticates HTTP callers, decodes strict input, dispatches commands and maps domain errors into the existing JSON/status contract.
 
 ```text
@@ -44,11 +46,11 @@ presentation/http.rs → application/CommandBus → domain rules
 
 `domain/` and `application/` do not import Axum, Reqwest, SQLx or concrete infrastructure. `main.rs` is the composition root. `lib.rs` retains old module re-exports for adapter callers; new code should use the layer paths. The application owns generated record identities and preview expiry inputs. Presentation owns Core/operator bearer credentials; domain and application receive no caller-selected actor or approval proof.
 
-The bus dispatches typed commands directly to handlers and awaits their results. Reads also use this entry point; there is no asynchronous queue, broker, event sourcing or separate read store. One mutation coordinator still serializes preview/approval/apply work; adding the command bus does not make Sheets transactional. Ports return bounded source snapshots and operation outcomes. The source snapshot remains a JSON grid document for the existing schema mappings; a replacement provider must adapt to that document shape. This is a deliberately narrow migration rather than a new arbitrary spreadsheet abstraction.
+The bus dispatches typed commands directly to handlers and awaits their results. `Command` denotes a typed application request here, so it includes reads. `MutationCommand::History` is grouped with the mutation coordinator for operation-history access; it does not execute a spreadsheet mutation. Reads also use this entry point; there is no asynchronous queue, broker, event sourcing or separate read store. One mutation coordinator still serializes preview/approval/apply work; adding the command bus does not make Sheets transactional. Ports return bounded source snapshots and operation outcomes. The source snapshot remains a JSON grid document for the existing schema mappings; a replacement provider must adapt to that document shape. This is a deliberately narrow migration rather than a new arbitrary spreadsheet abstraction.
 
 ## Operation state machine
 
-`domain/operation.rs` owns `OperationState`, `OperationEvent`, outcome types, digest checks, expiry decisions and legal transitions. The SQLite adapter persists these decisions atomically with audit events. Persisted names and preview JSON stay compatible with the existing journal, so this refactor needs no schema migration.
+`domain/operation.rs` owns `OperationState`, `OperationEvent`, outcome types, digest checks, expiry decisions and legal transitions. The SQLite adapter persists these decisions atomically with audit events. A shared RAII ownership guard releases its file lock explicitly only when the last application Journal handle drops; transient inherited descriptors cannot prolong ownership, and a live Journal clone still excludes another owner (T022). Persisted names and preview JSON stay compatible with the existing journal, so this refactor needs no schema migration.
 
 ```mermaid
 stateDiagram-v2

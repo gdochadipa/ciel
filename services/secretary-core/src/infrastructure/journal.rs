@@ -14,11 +14,22 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
+struct JournalLock {
+    file: std::fs::File,
+}
+impl Drop for JournalLock {
+    fn drop(&mut self) {
+        // A spawned child can temporarily inherit the open file description.
+        // Explicitly release ownership when the final application guard drops,
+        // rather than waiting for every inherited descriptor to close at exec.
+        let _ = self.file.unlock();
+    }
+}
 #[derive(Clone)]
 pub struct Journal {
     pool: SqlitePool,
     directory: PathBuf,
-    _lock: std::sync::Arc<std::fs::File>,
+    _lock: std::sync::Arc<JournalLock>,
 }
 fn storage() -> CoreError {
     CoreError(ErrorKind::Unavailable, "journal_unavailable")
@@ -58,6 +69,7 @@ impl Journal {
             .open(lockpath)
             .map_err(|_| storage())?;
         lock.try_lock().map_err(|_| storage())?;
+        let lock = std::sync::Arc::new(JournalLock { file: lock });
         let db = directory.join("secretary.sqlite3");
         if let Ok(meta) = std::fs::symlink_metadata(&db) {
             if meta.file_type().is_symlink() || !meta.is_file() {
@@ -90,7 +102,7 @@ impl Journal {
         let journal = Self {
             pool,
             directory: directory.to_owned(),
-            _lock: std::sync::Arc::new(lock),
+            _lock: lock,
         };
         // A process may have stopped after sending a request. Never resend that intent.
         sqlx::query("UPDATE operations SET state=?,updated_at=? WHERE state=?")
@@ -319,5 +331,43 @@ impl crate::application::ports::OperationStore for Journal {
         cursor: usize,
     ) -> crate::application::ports::PortFuture<'a, Result<Value, CoreError>> {
         Box::pin(self.history(id, limit, cursor))
+    }
+}
+
+#[cfg(test)]
+mod lifecycle_tests {
+    use super::Journal;
+
+    #[tokio::test]
+    async fn dropped_journal_releases_ownership_despite_an_inherited_descriptor() {
+        let directory =
+            std::env::temp_dir().join(format!("secretary-inherited-lock-{}", uuid::Uuid::new_v4()));
+        let journal = Journal::open(&directory).await.unwrap();
+        // dup and fork retain the same open file description. A child descriptor
+        // must not prolong journal ownership after the last application handle dies.
+        let inherited = journal._lock.file.try_clone().unwrap();
+        drop(journal);
+        let reopened = Journal::open(&directory).await;
+        drop(inherited);
+        assert!(
+            reopened.is_ok(),
+            "last Journal drop must release ownership before child exec/exit"
+        );
+        drop(reopened);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_live_journal_clone_retains_exclusive_ownership() {
+        let directory =
+            std::env::temp_dir().join(format!("secretary-cloned-lock-{}", uuid::Uuid::new_v4()));
+        let journal = Journal::open(&directory).await.unwrap();
+        let active = journal.clone();
+        drop(journal);
+        assert!(Journal::open(&directory).await.is_err());
+        drop(active);
+        let reopened = Journal::open(&directory).await.unwrap();
+        drop(reopened);
+        std::fs::remove_dir_all(directory).unwrap();
     }
 }

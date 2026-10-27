@@ -4,6 +4,8 @@ Updated 2026-10-27. The local plugin/Core verification milestone is complete; T0
 
 ## Implemented behavior
 
+The owner explicitly retained FSM + one in-process command bus for lightweight operation. [ADR0001](adr/0001-lightweight-command-bus-and-operation-fsm.md) records the decision. Read and write handlers share dispatch; there is no separate query bus, event broker, replicated read store, projection worker or event-sourced model.
+
 The plugin exposes 17 spreadsheet, report and reminder tools. Rust Core retains domain/application/infrastructure/presentation layers, typed command dispatch and a durable SQLite operation FSM. Transient preview state is limited to 64 entries and 4 MiB serialized JSON per host API, pruned on preview/approval activity without background timers. Evicted previews need fetching again; already-open dialogs retain their immutable snapshot. Core operation history is unaffected. Controlled writes use immutable previews, separate operator approval, owner/digest/action binding, single-use commits, conflict checks and explicit reconciliation after uncertain provider outcomes. Reminder operations use OpenClaw's native Gateway and retain canceled/completed jobs for history.
 
 Personal memory is owned by OpenClaw. The plugin has no memory tools or preference store. The host template requests FTS-only retrieval and three primary-memory results; these are resource-conscious defaults, not measured savings or a hard token cap. Core's SQLite journal stores operation state, not personal memory.
@@ -14,18 +16,20 @@ All checks below used synthetic data in isolated Linux. Actual dependency locks 
 
 | Check | Result and boundary |
 | --- | --- |
-| Full Rust dependency graph | Formatting, Clippy with warnings denied and 22 tests passed offline/locked, including the real Reqwest HTTP adapter and accepted-write/lost-response reconciliation. Google OAuth/JWT code compiled; live credential exchange was not exercised. |
+| Full Rust dependency graph | Formatting, Clippy with warnings denied and 24 tests passed offline/locked, including the real Reqwest HTTP adapter and accepted-write/lost-response reconciliation. Google OAuth/JWT code compiled; live credential exchange was not exercised. |
 | Operator CLI and restore | Ten Python checks pass on native macOS and qualified Linux. Actual Core WAL journal backup/restore preserves approval/digest, recovers interrupted writes to reconciliation and rejects replay. Temporary backup sidecars are cleaned; existing snapshots remain untouched (T018). |
 | TypeScript checks | 34 plugin tests plus three acceptance-configuration tests passed, with all four HTTP tests enabled and no skips. Native Gateway behavior remains a boundary fixture. |
 | Actual SDK | Strict type checking against the installed public SDK passed. OpenClaw build and validation passed (`valid: true`, no errors); metadata import requires no credentials. |
 | Built entry integration | T019/T020: actual SDK recognizes bundle metadata and all 17 factory registrations match the manifest. Exercised tool factories and approval hook execute through a host registration fixture. Preview/hook sharing, API-instance isolation, owner/revocation guards and one-shot approval → real Core → one synthetic Google append passed (T019). Live host UI/policy remains unqualified. |
 | Distribution | Actual host pack produced a local archive with three runtime files: package metadata, manifest and bundled entry. npm dry-run separately verifies its four-file selection, including README, and private-file exclusion. No install/enable/reload/publish occurred. |
-| Full verification script | `bash scripts/verify.sh` exited successfully in T017 with the supported runtime and real locks. T018 adds the ten Python checks; those and the full Rust checks passed separately. CI now also installs pinned Postman CLI and runs the fail-fast six-scenario suite without secrets/login/publication. Hosted CI has not run. |
+| Full verification script | `bash scripts/verify.sh` exited successfully on the current T022 baseline with actual locks: 24 Rust, 37 TypeScript and ten Python checks, formatting/Clippy and SDK type/build/validation. CI now also installs pinned Postman CLI and runs the fail-fast six-scenario suite without secrets/login/publication. Hosted CI has not run. |
 | Real bridge → Rust Core → simulated Google | All six Postman scenarios passed together sequentially in T021: read, writes (including built-entry factory/hook exercise), retry, drift, persistent error and slow response. Core and its journal ran for real; Google was the sole simulated dependency. |
 
 The write scenario exercised approval callback replay, append/update, owner/bearer/digest rejection, changed payload, stale external edits, uncertain-write rejection and reconciliation to exactly one synthetic payment. Retry served two failures before recovery. Drift failed closed. Injected error/latency conditions short-circuit before Google member request events; caller error/timeout assertions establish those outcomes. This is bounded Google contract evidence, not live Google semantics or host approval UI qualification.
 
 The real SDK requires Node `>=24.22.1 <25 || >=26.12.1`; the earlier 24.16 assumption was corrected. `defineToolPlugin` now supplies actual host authoring metadata and context factories, preserving the native approval hook. Bridge construction and credential access are lazy. See [T017](../.scratch/secretary-mvp/T017.md) for fixes and run evidence and [local verification](local-verification.md) for reproduction.
+
+The T022 full baseline exposed and fixed a journal lock handoff race: explicit RAII unlock on last Journal owner prevents inherited descriptors from prolonging ownership. A live Journal clone still excludes another owner. Two deterministic regressions and 50 iterations of the original journal suite passed, with no retry/sleep workaround. The full write/SDK-entry scenario also passed again with the updated Core.
 
 ## Remaining acceptance gates
 

@@ -4,7 +4,11 @@ Updated: 2026-10-27 · Asia/Makassar
 
 ## Current position
 
-Latest milestone: [T021](.scratch/secretary-mvp/T021.md) adds the six-scenario real bridge/Core acceptance suite to CI and fixes launcher cleanup. All six scenarios now pass sequentially in one network-isolated qualified container; earlier one-scenario containers did not expose the Postman wrapper/child shutdown problem. Core launches directly from Cargo's reported executable, Postman owns a dedicated process group, and cleanup waits/reaps before advancing. Hosted CI remains unobserved: no remote/runner is configured.
+Architecture decision: the owner chose to retain FSM + a single in-process command bus for a lightweight plugin. [ADR0001](docs/adr/0001-lightweight-command-bus-and-operation-fsm.md) records it. Keep the current DDD/hexagonal boundaries and shared dispatch for reads/writes; do not introduce CQRS buses, broker, replicated read store, projection worker or event sourcing without a measured need and a new decision.
+
+Latest milestone: [T022](.scratch/secretary-mvp/T022.md) records the lightweight FSM + command bus decision and fixes a journal lock handoff race found during full verification. The last Journal owner now explicitly releases its lock despite inherited descriptors; genuinely live Journal clones still exclude a second owner. Two deterministic regressions and 50 repeats of the original journal suite pass. The complete current verify script passes 24 Rust tests, 37 TypeScript checks, ten operator checks, formatting/Clippy and actual SDK type/build/validation. The stateful Google-only write + built-entry approval scenario also passes with the updated Core.
+
+[T021](.scratch/secretary-mvp/T021.md) remains the latest full six-scenario sequential acceptance run. Its launcher cleanup fix and CI gate remain in place. Hosted CI is unobserved: no remote/runner is configured.
 
 **Live activation remains T007 and is not accepted.** The owner explicitly chose to continue local preparation first. The plugin owns 17 spreadsheet/report/reminder tools. Personal memory is delegated to OpenClaw; no custom memory store/lifecycle is required.
 
@@ -13,6 +17,7 @@ Latest milestone: [T021](.scratch/secretary-mvp/T021.md) adds the six-scenario r
 - T017: actual Cargo/Bun locks, frozen installation, full Rust dependency graph and actual OpenClaw2026.10.7 SDK type/build/validate/pack passed. Never substitute SDK declarations or dependency graphs.
 - T018: ten real Python operator CLI checks and all 22 Rust tests passed with formatting/Clippy; actual Core WAL backup/restore preserves approval/digest/history and recovers interrupted writes to reconciliation without replay. Fixed temporary SQLite backup sidecars.
 - T019/T020: actual built distribution factories/hook execute through real Core and Google-only simulation with a host registration fixture. Current TypeScript suite passes 34 plugin plus three acceptance-configuration checks, no skips. Preview cache is bounded to 64 entries/4 MiB serialized UTF-8 JSON per host API, with activity-driven expiry cleanup and no background timer. Open dialogs retain immutable one-shot snapshots outside the cache budget.
+- T022: current full verify and real Core write/SDK-entry acceptance pass after explicit last-owner lock release; temporary diagnostics/probe were removed. Architecture decision is recorded without CQRS infrastructure or runtime handler changes.
 - T021: read/writes/retry/drift/error/slow pass sequentially. Writes includes current SDK build and registered entry approval exercise. Error/latency conditions intercept before Google member request events; actual caller assertions passed. Workflow/shell syntax checks pass, permissions stay read-only, no CI secrets/login/publication/raw-log upload. Rust/Python/plugin code was unchanged, so their suites were not rerun for this launcher/CI slice.
 
 The actual SDK engine range is `>=24.22.1 <25 || >=26.12.1`, correcting the old 24.16 assumption. Qualified runtime: Node24.22.1, Bun1.2.21, Rust1.95.0, TypeScript7.0.2 and Postman CLI1.75.0.

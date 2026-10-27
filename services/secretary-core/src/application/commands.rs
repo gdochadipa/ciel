@@ -1,7 +1,8 @@
 use crate::domain::write_model::Change;
 use serde::Deserialize;
 
-/// Typed application requests. HTTP names and JSON decoding belong to presentation.
+/// Typed in-process application requests, including reads and mutations.
+/// HTTP names and JSON decoding belong to presentation.
 pub enum Command {
     List,
     Describe(Describe),
@@ -17,6 +18,7 @@ pub enum Command {
         operation_id: String,
     },
 }
+/// Requests served by the mutation coordinator, including read-only operation history.
 pub enum MutationCommand {
     Preview(Change),
     Append(Commit),

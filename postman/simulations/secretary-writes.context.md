@@ -19,6 +19,7 @@ Run `bash scripts/acceptance.sh writes` in the qualified environment from `docs/
 ## Observations
 
 <!-- begin:observations -->
+2026-10-27 (T022): Google served the stateful and built-entry workflows after the Core ownership-lock fix; approval/reconciliation/single-record assertions passed. No live host UI/routing evidence is claimed.
 2026-10-27 (T021): Google served the stateful and actual built-entry factory/hook workflows; the sequential suite passed approval, conflict, reconciliation and single-record assertions.
 2026-10-26 (T020): Google again served the stateful and built-entry workflows after preview-cache bounds were introduced; approval, reconciliation and single-record assertions passed. Host routing/UI remain unqualified.
 2026-10-26 (T019): Google served the existing stateful workflow plus the built entry’s registered factory/hook append. SDK metadata, lazy construction, API-instance preview isolation and exactly-once append assertions passed; the host registry remains a boundary fixture.
