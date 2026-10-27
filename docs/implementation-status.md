@@ -31,7 +31,7 @@ The real SDK requires Node `>=24.22.1 <25 || >=26.12.1`; the earlier 24.16 assum
 
 The T022 full baseline exposed and fixed a journal lock handoff race: explicit RAII unlock on last Journal owner prevents inherited descriptors from prolonging ownership. A live Journal clone still excludes another owner. Two deterministic regressions and 50 iterations of the original journal suite passed, with no retry/sleep workaround. The full write/SDK-entry scenario also passed again with the updated Core.
 
-On 2026-10-27 the owner reported `AUTH_REFRESH: OK` from a Python check using the existing host service-account file, the Google token endpoint and Sheets read-only scope. This is operator-reported live auth evidence, not a Core integration or spreadsheet-access pass. An approved spreadsheet ID/link has been requested for metadata-only validation; Core wiring, host permissions, Sheets ACL/API enablement and remaining live gates are still open. No credentials or tokens were obtained/committed and no live cells were changed.
+On 2026-10-27 the owner reported `AUTH_REFRESH: OK` from a Python check using the existing host service-account file, the Google token endpoint and Sheets read-only scope. This is operator-reported live auth evidence, not a Core integration or spreadsheet-access pass. The owner subsequently supplied a target ID and reported `SHEETS_READ: OK` from the metadata-only Python GET check. This adds target-specific operator-reported API access. Tab-ID/title registry matching, Core wiring, service-user file permissions, quota settings and remaining live gates are still open; full live write preservation is unqualified. No credentials or tokens were obtained/committed and no live cells were changed.
 
 ## Remaining acceptance gates
 
