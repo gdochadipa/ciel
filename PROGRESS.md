@@ -36,6 +36,12 @@ The real target ID/path-only evidence is retained privately at `/private/tmp/sec
 
 This is operator-reported Python evidence, not agent remote execution or a live Rust Core pass. Host/connection and effective service-user access, API/ACL/scopes, standard quota settings and private Core registry/wiring still need verification. No live Docs ID has been supplied; Sheets access does not prove Docs access. Neither the remote credential nor virtualenv is present locally; no secret was copied. Existing hosting/model costs are separate; no new paid services are allowed.
 
+## Next requested capability — create a tab in an existing spreadsheet
+
+Owner discussion 2026-10-28: support creating a new sheet/tab inside an already registered Google spreadsheet. Status: recorded for implementation; not implemented or tested yet. This is distinct from creating a new spreadsheet file.
+
+Use the existing command bus, immutable preview, owner approval, durable journal and FSM. The preview should identify the target spreadsheet, requested tab title, bounded initial dimensions and optional headers. Implementation must handle title/ID collisions, replay and uncertain provider outcomes without blindly creating duplicate tabs. Define explicit registration/read/write permissions for the resulting tab; creating a tab must not automatically grant unrestricted access. Google supports tab creation through [AddSheetRequest](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/request#AddSheetRequest). No live tab creation is authorized by this progress entry.
+
 ## Remaining live gates
 
 1. Qualify the actual VPS, pinned plugin activation (23 tools), model entitlement and disposable Sheets/Docs scopes/API/ACL/read/write preservation. Docs qualification must include explicit tabs, required revisions and reconciliation before activation.
