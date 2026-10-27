@@ -24,6 +24,7 @@ Qualified runtime: Linux arm64, Node 24.22.1, Bun 1.2.21, Rust 1.95.0, OpenClaw 
 
 ## Read these first
 
+- [AGENTS.md](AGENTS.md): persistent project decisions and agent instructions.
 - [Implementation status](docs/implementation-status.md), [Workspace capability bounds](docs/specs/workspace-capabilities.md), [plugin README](plugins/secretary-tools/README.md).
 - [Local verification](docs/local-verification.md), [local ticket graph](.scratch/secretary-mvp/index.md), [T007 live checklist](.scratch/secretary-mvp/T007.md).
 - [Architecture](docs/architecture.md), [specification](docs/specs/openclaw-personal-secretary.md), [security](docs/security.md), [deployment](docs/deployment.md), [Core contract](contracts/openapi.yaml).
