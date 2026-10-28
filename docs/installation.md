@@ -4,7 +4,7 @@ The owner-selected delivery flow is local development → reviewed GitHub commit
 
 ## Source and destination
 
-Use the retained integration Git history (`integration/secretary-mvp`), not a replacement repository or a copy that contains untracked operator files. The GitHub URL and visibility must be selected by the owner before publication. On the VPS, clone the selected repository and check out the reviewed commit. A branch name alone is not an immutable release identity. Verify the checkout before running installation code.
+Use the retained integration Git history (`integration/secretary-mvp`), not a replacement repository or a copy that contains untracked operator files. The owner selected [gdochadipa/ciel](https://github.com/gdochadipa/ciel), initialized with MIT LICENSE. Its initial commit is merged into the retained integration history. On the VPS, clone the selected repository and check out the reviewed commit. A branch name alone is not an immutable release identity. Verify the checkout before running installation code.
 
 SSH is optional operator transport for reaching the selected VPS. No IP is embedded in the plugin or installer. Once installed, the plugin talks to Core on that same VPS using the configured loopback `coreUrl` (default `http://127.0.0.1:8787`); it does not clone repositories or connect back to the development computer at runtime.
 
@@ -25,7 +25,7 @@ The owner reports compatible Node/OpenClaw versions and successful active-config
 
 ## Installer CLI
 
-Set `SECRETARY_REPO_URL` to the owner-selected GitHub URL and `SECRETARY_REVISION` to the **full reviewed 40-character commit**, then clone and check out that revision on the chosen VPS. These are operator inputs; no actual destination or token belongs in this file. Use Git's normal credential helper/SSH agent for private repositories, never credentials embedded in a URL or shell history.
+Set `SECRETARY_REPO_URL` to `https://github.com/gdochadipa/ciel.git` and `SECRETARY_REVISION` to the **full reviewed 40-character commit**, then clone and check out that revision on the chosen VPS. These are operator inputs; no actual destination or token belongs in this file. Use Git's normal credential helper/SSH agent for private repositories, never credentials embedded in a URL or shell history.
 
 ```sh
 git clone "$SECRETARY_REPO_URL" secretary
@@ -46,7 +46,7 @@ python3 scripts/install.py verify --revision "$SECRETARY_REVISION" \
 
 The release parent must be a private, operator-owned directory, outside the checkout. `--offline` skips JavaScript installation and requires that this checkout already had a successful `bun install --frozen-lockfile`; it also adds Cargo `--offline`. Use that mode only with qualified cached dependencies. Build commands use isolated HOME/config paths and filter inherited Core/Google environment secrets. No credential, live environment, registry, journal or workbook is copied. Build failure removes its private temporary release and publishes nothing. A same-revision, same-host output is reused after hash verification; conflicting outputs or locks fail closed.
 
-The fixed release contents are: native Core executable; a plugin archive with exactly three regular runtime files/25 tools and inactive flags; preflight/backup utilities; service/registry/OpenClaw/qualification/environment **examples**; this guide; and `release.json`. The receipt binds commit, native OS/architecture/libc, tool versions, both lock hashes and every payload hash. Treat the release directory as trusted local operator input: these hashes detect drift, not authenticity of an attacker-authored receipt. Verify against the independently selected reviewed commit, not a commit copied from an untrusted receipt.
+Receipt format 2 adds the repository MIT `LICENSE` as a required hashed payload; earlier format-1 staging is not accepted by the current verifier. The fixed release contents are: MIT LICENSE; native Core executable; a plugin archive with exactly three regular runtime files/25 tools and inactive flags; preflight/backup utilities; service/registry/OpenClaw/qualification/environment **examples**; this guide; and `release.json`. The plugin bundle also embeds the full MIT notice in its JavaScript banner while retaining the SDK three-file archive layout. The receipt binds commit, native OS/architecture/libc, tool versions, both lock hashes and every payload hash. Treat the release directory as trusted local operator input: these hashes detect drift, not authenticity of an attacker-authored receipt. Verify against the independently selected reviewed commit, not a commit copied from an untrusted receipt.
 
 After **explicit target file-installation authorization**, the following command places the release at `/opt/secretary` and the unit template at `/etc/systemd/system/secretary-core.service`:
 
@@ -65,3 +65,24 @@ A failed unit publication can leave the fully verified release installed but the
 ## Executed local evidence
 
 T026's CLI is accepted locally. Ten public installer tests pass on macOS and qualified Linux with only external build tools simulated. The full real-dependency suite passes 23 Python, 34 Rust and 43 TypeScript checks, formatting/Clippy and actual SDK type/build/validation. A separate real disposable Git clone built/staged the native Core and actual 25-tool SDK archive, verified/reused the release, installed/replayed files under a disposable root, preserved existing synthetic config/journal bytes and stayed Git-clean. Details, tested code revision, artifact hashes and review fixes are recorded in [T026](../.scratch/secretary-mvp/T026.md). No host installation, plugin activation, provider write or native job/message is established by these local checks. GitHub destination and T007 target steps remain separate.
+
+
+## First publication to the selected GitHub repository
+
+The existing `main` seed contains only the owner's MIT LICENSE. It was fetched anonymously and merged with `--allow-unrelated-histories`; all retained local implementation commits and the seed are ancestors of the prepared integration branch. The selected repository is not a replacement for local history. No force push is required.
+
+After local checks/review, publish the prepared branch and fast-forward main atomically from an authenticated operator terminal:
+
+```sh
+git -C /private/tmp/openclaw-secretary-implementation.on4Zt7 push --atomic origin \
+  integration/secretary-mvp integration/secretary-mvp:main
+```
+
+That path is the retained integration checkout for this development workspace, not a VPS path or a runtime dependency. If remote main advanced, the normal non-force push must refuse; fetch and integrate that work before retrying. If branch protection requires a PR, publish only the integration branch and use the repository's PR workflow rather than weakening protections. The reviewed revision for VPS installation is the actual successful published commit, verified after push. GitHub Actions configuration already exists but its hosted results remain unobserved until publication.
+
+Agent-native Git/gh DNS/connectivity and active gh authentication are currently unavailable. Anonymous remote inspection/fetch succeeded through the sanitized Docker network path without credentials. No private credential was mounted or printed. If normal terminal authentication is needed, use GitHub's normal browser/credential-helper login there; do not paste tokens into agent messages or URLs. Repository connection/preparation is not proof that a push succeeded.
+
+
+Ciel publication preparation passed the full local suite (23 Python, 34 Rust, 43 TypeScript, formatting/Clippy and actual SDK type/build/validate). A real disposable clone of code `4e691b5` staged format 2 with eleven payload files, verified root MIT LICENSE bytes and the full MIT banner inside the three-file SDK archive, then verified/replayed a disposable-root file installation. Plugin archive: 37636 bytes, SHA-256 `ca59e0a466d47ee99a7f190910e2dae596f3cc95179a5f1f6dd39ac2be37eff7`. It remained Git-clean. No credential/token was mounted or printed.
+
+The agent attempted the atomic non-force push and received `Could not resolve host: github.com`; no remote ref was updated by that attempt. Local native gh authentication is also unavailable in this session. The terminal command above is the remaining publication step; run it on the development computer containing the retained checkout, not on the VPS. After success, verify GitHub refs before selecting a reviewed clone revision or treating hosted CI as observed. No VPS command is part of publication.

@@ -17,5 +17,6 @@
   },
   "trustedDependencies": [
     "openclaw"
-  ]
+  ],
+  "license": "MIT"
 }

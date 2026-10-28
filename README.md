@@ -1,12 +1,12 @@
-# OpenClaw Personal Secretary
+# Ciel
 
-A lightweight personal secretary using one OpenClaw agent, optional domain Skills, an owner-only TypeScript plugin and a loopback Rust Core. Registered Google Sheets grids and Google Docs are general capabilities; the wedding workbook is an optional domain profile. Native OpenClaw owns reminders and personal memory. Controlled writes share one command bus, approval flow, journal and FSM.
+Ciel is a lightweight personal secretary for OpenClaw, using one OpenClaw agent, optional domain Skills, an owner-only TypeScript plugin and a loopback Rust Core. Registered Google Sheets grids and Google Docs are general capabilities; the wedding workbook is an optional domain profile. Native OpenClaw owns reminders and personal memory. Controlled writes share one command bus, approval flow, journal and FSM.
 
 Start with [architecture](docs/architecture.md), [interface notes](contracts/interface-notes.md), [workbook assessment](docs/spreadsheet-assessment.md) and [security boundaries](docs/security.md). The original [specification](docs/specs/openclaw-personal-secretary.md) defines the intended behavior. Progress and acceptance evidence live in [local tickets](.scratch/secretary-mvp/index.md).
 
 See [current implementation status](docs/implementation-status.md) for what is coded, which checks actually passed, and why full acceptance remains open. This is not a production-ready or fully accepted implementation of the entire specification.
 
-The full local verification now passes with actual dependency locks and the installed OpenClaw 2026.10.7 SDK: 30 Rust tests, ten Python operator checks and 41 TypeScript checks, strict SDK type checking, host build/validation/pack and seven real bridge/Core scenarios against simulated Google Sheets/Docs. See [the reproducible Docker setup](docs/local-verification.md). The verified runtime uses Node 24.22.1, Bun 1.2.21 and Rust 1.95.0; the SDK engine range is `>=24.22.1 <25 || >=26.12.1`. The full CI job also runs `bash scripts/acceptance-all.sh` with pinned Postman CLI and synthetic local targets; all seven cases pass sequentially locally. Hosted CI remains unexecuted.
+The full local verification now passes with actual dependency locks and the installed OpenClaw 2026.10.7 SDK: 34 Rust tests, 23 Python CLI checks and 43 TypeScript checks, strict SDK type checking, host build/validation/pack and seven real bridge/Core scenarios against simulated Google Sheets/Docs. See [the reproducible Docker setup](docs/local-verification.md). The verified runtime uses Node 24.22.1, Bun 1.2.21 and Rust 1.95.0; the SDK engine range is `>=24.22.1 <25 || >=26.12.1`. The full CI job also runs `bash scripts/acceptance-all.sh` with pinned Postman CLI and synthetic local targets; all seven cases pass sequentially locally. Hosted CI remains unexecuted.
 
 Local HTTP stand-ins and disposable fixtures demonstrate only their exercised behavior. They do not establish actual Google write preservation, installed OpenClaw SDK activation, trusted WhatsApp approvals, native restart persistence or channel delivery. [Deployment guidance](docs/deployment.md) keeps startup gated on an operator's version-specific host qualification. No production connection, workbook modification or deployment is implied by repository files.
 
@@ -22,3 +22,5 @@ Use [the generic workspace example](config/workspace.example.json) for registere
 T025 adds preview/approval-based tab creation inside registered spreadsheets (`create_tabs` defaults false). New tabs remain unregistered for reads/writes until the operator explicitly configures bounded access. No new spreadsheet files are created; see [Workspace capabilities](docs/specs/workspace-capabilities.md).
 
 For the owner-selected GitHub → VPS checkout → installer flow, see [installation](docs/installation.md). The CLI stages a reviewed native release and installs inactive files separately; it never starts services, activates plugins or changes production qualification flags.
+
+Licensed under the [MIT License](LICENSE).

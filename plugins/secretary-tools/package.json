@@ -17,7 +17,7 @@
     "validate": "bun run check:package && openclaw plugins validate --root . --entry ./dist/index.js --json",
     "build:bridge": "bun build ./src/bridge.ts --target=node --outdir ./dist/bridge",
     "check:package": "bun ./scripts/check-package.ts",
-    "bundle": "bun run check:package && bun build ./src/index.ts --target=node --external \"openclaw/*\" --outdir ./dist",
+    "bundle": "bun run check:package && bun build ./src/index.ts --target=node --external \"openclaw/*\" --banner \"/*!$(cat ../../LICENSE)*/\" --outdir ./dist",
     "pack": "bun run build && bun run validate && openclaw plugins pack --root . --out ./dist/secretary-tools.tgz --json",
     "check:types": "tsc --project tsconfig.json"
   },
@@ -33,5 +33,6 @@
     "typebox": "1.3.34",
     "typescript": "7.0.2",
     "@types/node": "24"
-  }
+  },
+  "license": "MIT"
 }

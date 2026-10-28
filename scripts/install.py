@@ -44,6 +44,7 @@ def reviewed_source(source, revision):
 
 # Exact release allowlist: no live configuration, credentials, workbook or journals.
 TEMPLATES = {
+    'LICENSE': 'LICENSE',
     'scripts/preflight.py': 'scripts/preflight.py',
     'scripts/backup.py': 'scripts/backup.py',
     'templates/service.env.example': '.env.example',
@@ -106,7 +107,7 @@ def verify_release(release, revision):
     if found != ARTIFACTS | {'release.json'}:
         raise InstallerError('release contains missing or unexpected files')
     receipt = json.loads((release / 'release.json').read_text())
-    if (receipt.get('format_version') != 1 or receipt.get('source_commit') != revision
+    if (receipt.get('format_version') != 2 or receipt.get('source_commit') != revision
             or receipt.get('production_writes') is not False
             or receipt.get('starts_services') is not False or receipt.get('activates_plugins') is not False
             or set(receipt.get('artifact_hashes', {})) != ARTIFACTS):
@@ -221,7 +222,7 @@ def stage(source, revision, output, offline):
             shutil.copyfile(source / origin, destination)
             destination.chmod(0o644)
         reviewed_source(source, revision)
-        receipt = {'format_version': 1, 'source_commit': revision, 'build_host': native_host(),
+        receipt = {'format_version': 2, 'source_commit': revision, 'build_host': native_host(),
                    'tool_versions': versions, 'tool_count': len(tools), 'production_writes': False,
                    'starts_services': False, 'activates_plugins': False,
                    'lock_hashes': {name: fingerprint(source / name) for name in ('Cargo.lock', 'bun.lock')},

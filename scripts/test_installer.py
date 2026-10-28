@@ -26,7 +26,7 @@ class InstallerCLI(unittest.TestCase):
     def source_fixture(self):
         source = self.directory / 'checkout'
         source.mkdir()
-        for name in ('.gitignore', 'Cargo.toml', 'Cargo.lock', 'bun.lock', 'package.json',
+        for name in ('.gitignore', 'LICENSE', 'Cargo.toml', 'Cargo.lock', 'bun.lock', 'package.json',
                      'plugins/secretary-tools/package.json', 'plugins/secretary-tools/openclaw.plugin.json',
                      'scripts/preflight.py', 'scripts/backup.py', '.env.example',
                      'config/workspace.example.json', 'config/openclaw.example.json',
@@ -112,6 +112,7 @@ else:sys.exit(8)
         receipt = json.loads((output / 'release.json').read_text())
         self.assertEqual(receipt['source_commit'], revision)
         self.assertFalse(receipt['production_writes'])
+        self.assertIn('Copyright (c) 2026 gdochadipa', (output / 'LICENSE').read_text())
         self.assertTrue((output / 'bin/secretary-core').stat().st_mode & 0o111)
         self.assertIn('SECRETARY_WRITES_ENABLED=false', (output / 'templates/service.env.example').read_text())
         self.assertFalse(json.loads((output / 'templates/qualification.example.json').read_text())['qualified'])
