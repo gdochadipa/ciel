@@ -6,6 +6,7 @@ User instruction: implement locally using medium-effort agents; subsequently rev
 
 | Ticket | Depends on | Status | Outcome |
 | --- | --- | --- | --- |
+| T026 GitHub checkout and staged VPS installer | T007, T025 | workflow requested; GitHub target/test seam pending | Native target build; reviewable staging; separate installation/activation; dynamic SSH; preserve live gates. |
 | T025 Bounded tab creation | T004, T023 | accepted locally: suite + seven scenarios + per-commit review; live T007 open; live T007 open | Explicit create_tabs permission; one approved addSheet/header batch; resulting tab unregistered; shared replay/reconciliation. |
 | T001 Foundation and contract | — | done | Local integration repository, interface conventions, confirmed local tracker; commits 70cd886 and 233ba0b. Machine OpenAPI/build manifests belong to T002/T003. |
 | T002 Read-only Rust Core | T001 | local acceptance passed; live T007 open | Full production dependency graph compiles; 21 combined Rust tests and real bridge/Core read simulation pass (T017). Live OAuth/Google remains unqualified. |
