@@ -33,6 +33,11 @@ export async function runWorkspaceAcceptance(coreUrl:string,docsUrl:string) {
  const foundNext=await tool('docs_search',{document:'notes',query:'e',limit:1,cursor:found.data.next_cursor});assert.equal(foundNext.ok,true);
  assert.equal((await tool('docs_search',{document:'notes',query:'tab',tab_id:'t.1'})).data.matches.length,1);
  assert.equal((await tool('docs_search',{document:'notes',query:'absent phrase'})).data.matches.length,0);
+ const insensitive=await tool('docs_search',{document:'notes',query:'HELLO',case_sensitive:false});assert.equal(insensitive.data.matches.length,1);assert.equal(insensitive.data.matches[0].text,'Hello sample\n');assert.equal(insensitive.data.match_mode,'literal_case_insensitive');
+ assert.equal((await tool('docs_search',{document:'notes',query:'HELLO'})).data.matches.length,0);
+ const mixedPage=await tool('docs_search',{document:'notes',query:'E',case_sensitive:false,limit:1});assert(mixedPage.data.next_cursor);
+ assert.equal((await tool('docs_search',{document:'notes',query:'E',cursor:mixedPage.data.next_cursor})).error.code,'stale_cursor');
+ assert.equal((await fixture('/__fixture/stats')).applies,0);
  const change={operation_id:'docs-append-one',document:'notes',tab_id:'t.0',action:'append_text',fields:{text:' Added'}};
  const preview=await tool('docs_preview_change',change);assert.equal(preview.ok,true);assert.equal(preview.data.resource_kind,'google_docs');assert.equal(preview.data.before.text,'Hello sample\n');assert.equal(preview.data.after.text,'Hello sample Added\n');
  assert.equal((await tool('docs_apply',{operation_id:change.operation_id})).ok,false,'Unapproved intent cannot execute');

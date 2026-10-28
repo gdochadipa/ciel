@@ -93,6 +93,7 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
    const read=await execute(first.tool('docs_read',owner),{document:'notes',tab_id:'t.0'});
    assert.equal(read.data.text.split(' SDK appended').length-1,1);
    const found=await execute(first.tool('docs_search',owner),{document:'notes',query:'SDK appended'});assert.equal(found.data.matches.length,1);assert.equal(found.data.matches[0].tab_id,'t.0');
+   const folded=await execute(first.tool('docs_search',owner),{document:'notes',query:'sdk APPENDED',case_sensitive:false});assert.equal(folded.data.matches.length,1);assert.equal(folded.data.match_mode,'literal_case_insensitive');
   }else if(kind==='grid'){
    const history=await execute(first.tool('operations_get_history',owner),{operation_id:change.operation_id});assert.deepEqual(history.data.operation.after,immutable.after);
   }else if(kind==='tabs'){

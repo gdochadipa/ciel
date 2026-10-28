@@ -54,6 +54,11 @@ pub struct DocumentSearch {
     pub tab_id: Option<String>,
     pub limit: Option<usize>,
     pub cursor: Option<String>,
+    #[serde(default = "default_case_sensitive")]
+    pub case_sensitive: bool,
+}
+fn default_case_sensitive() -> bool {
+    true
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

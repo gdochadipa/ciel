@@ -3052,7 +3052,7 @@
     "/v1/tools/docs_search": {
       "post": {
         "operationId": "docs_search",
-        "description": "Read-only literal case-sensitive search in one registered Google Doc body, all projected tabs or optional tab_id. Query nonblank <=256 UTF-8 bytes; nonoverlapping matches, no regex/normalization. Snippets include <=80 Unicode scalar values each side; titles capped at200 scalars. Cursor binds document identity, full source fingerprint, registry version, exact query and tab selection. Offsets are projected Unicode scalars, not native Google edit indices. No Drive discovery.",
+        "description": "Read-only literal search in one registered Google Doc body, all projected tabs or optional tab_id. Query nonblank <=256 UTF-8 bytes; nonoverlapping matches, no regex/normalization. Snippets include <=80 Unicode scalar values each side; titles capped at200 scalars. Cursor binds document identity, full source fingerprint, registry version, exact query and tab selection. Offsets are projected Unicode scalars, not native Google edit indices. case_sensitive defaults true; false uses locale-independent full Unicode case folding (unicase 2.10.0). Matches must align to whole original Unicode scalars, including expansions; no normalization or Turkish-specific rules. Cursor binds matching mode and exact query; default/true retain legacy binding. No Drive discovery.",
         "security": [
           {
             "CoreBearer": []
@@ -3091,6 +3091,11 @@
                     "minLength": 1,
                     "maxLength": 256,
                     "description": "Nonblank exact literal; additionally limited to256 UTF-8 bytes."
+                  },
+                  "case_sensitive": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "false uses full Unicode case folding; snippets/offsets retain original text. No normalization."
                   }
                 },
                 "required": [
@@ -3210,7 +3215,10 @@
                           "const": "body_text_only"
                         },
                         "match_mode": {
-                          "const": "literal_case_sensitive"
+                          "enum": [
+                            "literal_case_sensitive",
+                            "literal_case_insensitive"
+                          ]
                         },
                         "offset_unit": {
                           "const": "unicode_scalar"

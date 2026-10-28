@@ -304,3 +304,18 @@ test('available asynchronous Gateway preserves invocation checks before schedule
   await expect(bridge.execute('docs_search',{document:'notes',query:'cat',limit:51},owner)).rejects.toThrow('INVALID_INPUT');
  }finally{server.stop(true);}
 });
+
+(process.env.SECRETARY_HTTP_TESTS==='1'?test:test.skip)('Docs search forwards explicit case mode and rejects non-booleans before traffic',async()=>{
+ let calls=0;
+ const {server,options}=setup(async request=>{
+  calls++;expect(new URL(request.url).pathname).toBe('/v1/tools/docs_search');
+  expect(await request.json()).toEqual({document:'notes',query:'MEETING',case_sensitive:false});
+  return Response.json({ok:true,data:{matches:[],match_mode:'literal_case_insensitive'}});
+ });
+ try {
+  const bridge=createSecretary(options);
+  expect((await bridge.execute('docs_search',{document:'notes',query:'MEETING',case_sensitive:false},owner) as any).ok).toBe(true);
+  for(const mode of ['false',0,null,[]]) await expect(bridge.execute('docs_search',{document:'notes',query:'MEETING',case_sensitive:mode},owner)).rejects.toThrow('INVALID_INPUT');
+  expect(calls).toBe(1);
+ }finally{server.stop(true);}
+});

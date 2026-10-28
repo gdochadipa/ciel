@@ -243,3 +243,161 @@ async fn missing_tab_and_wrong_provider_document_identity_fail_closed() {
     assert_eq!(p.writes.load(Ordering::SeqCst), 0);
     task.abort();
 }
+
+#[tokio::test]
+async fn insensitive_search_matches_mixed_case_pages_and_preserves_legacy_default() {
+    let (app, p, task) = fixture().await;
+    p.book.lock().await["tabs"][0] = tab("t.0", "Main", "😀 Meeting MEETING meeting\n");
+    let input = json!({"document":"notes","tab_id":"t.0","query":"meeting","limit":2,"case_sensitive":false});
+    let (status, first) = search(&app, input.clone()).await;
+    assert_eq!(status, 200, "{first}");
+    assert_eq!(first["data"]["match_mode"], "literal_case_insensitive");
+    assert_eq!(first["data"]["matches"][0]["start_character"], 2);
+    assert_eq!(first["data"]["matches"][0]["end_character"], 9);
+    assert_eq!(first["data"]["matches"][1]["start_character"], 10);
+    assert_eq!(
+        first["data"]["matches"][0]["text"],
+        "😀 Meeting MEETING meeting\n"
+    );
+    let mut next = input;
+    next["cursor"] = first["data"]["next_cursor"].clone();
+    let (status, last) = search(&app, next).await;
+    assert_eq!(status, 200);
+    assert_eq!(last["data"]["matches"][0]["start_character"], 18);
+    assert!(last["data"]["next_cursor"].is_null());
+    for extra in [json!({}), json!({"case_sensitive":true})] {
+        let mut input = json!({"document":"notes","tab_id":"t.0","query":"meeting"});
+        input
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        let (status, r) = search(&app, input).await;
+        assert_eq!(status, 200);
+        assert_eq!(r["data"]["match_mode"], "literal_case_sensitive");
+        assert_eq!(r["data"]["matches"].as_array().unwrap().len(), 1);
+        assert_eq!(r["data"]["matches"][0]["start_character"], 18);
+    }
+    assert_eq!(p.writes.load(Ordering::SeqCst), 0);
+    task.abort();
+}
+
+#[tokio::test]
+async fn unicode_folding_preserves_original_boundaries_and_does_not_normalize() {
+    let (app, p, task) = fixture().await;
+    for (text, query, start, end) in [
+        ("😀 Straße", "STRASSE", 2, 8),
+        ("😀 İ", "i\u{307}", 2, 3),
+        ("😀 ﬃ", "FFI", 2, 3),
+    ] {
+        p.book.lock().await["tabs"][0] = tab("t.0", "Main", text);
+        let (status, r) = search(
+            &app,
+            json!({"document":"notes","tab_id":"t.0","query":query,"case_sensitive":false}),
+        )
+        .await;
+        assert_eq!(status, 200, "{r}");
+        let hits = r["data"]["matches"].as_array().unwrap();
+        assert_eq!(hits.len(), 1, "text={text:?} query={query:?} result={r}");
+        assert_eq!(hits[0]["start_character"], start);
+        assert_eq!(hits[0]["end_character"], end);
+        assert_eq!(hits[0]["text"], text);
+    }
+    p.book.lock().await["tabs"][0] = tab("t.0", "Main", "Σ ς σ");
+    let (_, r) = search(
+        &app,
+        json!({"document":"notes","tab_id":"t.0","query":"σ","case_sensitive":false}),
+    )
+    .await;
+    assert_eq!(r["data"]["matches"].as_array().unwrap().len(), 3);
+    p.book.lock().await["tabs"][0] = tab("t.0", "Main", "sßs");
+    let (_, r) = search(
+        &app,
+        json!({"document":"notes","tab_id":"t.0","query":"ss","case_sensitive":false}),
+    )
+    .await;
+    assert_eq!(r["data"]["matches"].as_array().unwrap().len(), 1);
+    assert_eq!(r["data"]["matches"][0]["start_character"], 1);
+    assert_eq!(r["data"]["matches"][0]["end_character"], 2);
+    let (_, r) = search(
+        &app,
+        json!({"document":"notes","tab_id":"t.0","query":"s","case_sensitive":false}),
+    )
+    .await;
+    assert_eq!(r["data"]["matches"].as_array().unwrap().len(), 2);
+    assert_eq!(r["data"]["matches"][1]["start_character"], 2);
+    p.book.lock().await["tabs"][0] = tab(
+        "t.0",
+        "Main",
+        &format!("{}{}{}", "x".repeat(100), "s".repeat(200), "x".repeat(100)),
+    );
+    let (_, expanded) = search(
+        &app,
+        json!({"document":"notes","tab_id":"t.0","query":"ß".repeat(100),"case_sensitive":false}),
+    )
+    .await;
+    let hit = &expanded["data"]["matches"][0];
+    assert_eq!(hit["start_character"], 100);
+    assert_eq!(hit["end_character"], 300);
+    assert_eq!(hit["text"].as_str().unwrap().chars().count(), 360);
+    p.book.lock().await["tabs"][0] = tab("t.0", "Main", "e\u{301}");
+    let (_, r) = search(
+        &app,
+        json!({"document":"notes","tab_id":"t.0","query":"é","case_sensitive":false}),
+    )
+    .await;
+    assert!(r["data"]["matches"].as_array().unwrap().is_empty());
+    assert_eq!(p.writes.load(Ordering::SeqCst), 0);
+    task.abort();
+}
+
+#[tokio::test]
+async fn cursors_keep_legacy_binding_but_reject_mode_and_exact_query_changes() {
+    let (app, p, task) = fixture().await;
+    let (_, legacy) = search(&app, json!({"document":"notes","query":"cat","limit":1})).await;
+    let (_, explicit) = search(
+        &app,
+        json!({"document":"notes","query":"cat","limit":1,"case_sensitive":true}),
+    )
+    .await;
+    assert_eq!(
+        legacy["data"]["next_cursor"],
+        explicit["data"]["next_cursor"]
+    );
+    let(status,next)=search(&app,json!({"document":"notes","query":"cat","cursor":legacy["data"]["next_cursor"],"case_sensitive":true})).await;
+    assert_eq!(status, 200);
+    assert_eq!(next["data"]["matches"].as_array().unwrap().len(), 3);
+    let (_, folded) = search(
+        &app,
+        json!({"document":"notes","query":"cat","limit":1,"case_sensitive":false}),
+    )
+    .await;
+    for input in [
+        json!({"document":"notes","query":"cat","case_sensitive":false,"cursor":legacy["data"]["next_cursor"]}),
+        json!({"document":"notes","query":"cat","cursor":folded["data"]["next_cursor"]}),
+        json!({"document":"notes","query":"CAT","case_sensitive":false,"cursor":folded["data"]["next_cursor"]}),
+    ] {
+        let (status, r) = search(&app, input).await;
+        assert_eq!(status, 409);
+        assert_eq!(r["error"]["code"], "stale_cursor");
+    }
+    assert_eq!(p.writes.load(Ordering::SeqCst), 0);
+    task.abort();
+}
+
+#[tokio::test]
+async fn non_boolean_mode_is_rejected_before_any_provider_request() {
+    let (app, p, task) = fixture().await;
+    for mode in [json!("false"), json!(0), Value::Null, json!([])] {
+        assert_eq!(
+            search(
+                &app,
+                json!({"document":"notes","query":"cat","case_sensitive":mode})
+            )
+            .await
+            .0,
+            400
+        );
+    }
+    assert_eq!(p.reads.load(Ordering::SeqCst), 0);
+    task.abort();
+}

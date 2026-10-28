@@ -288,20 +288,62 @@ pub fn search(
     tab_id: Option<&str>,
     offset: usize,
     limit: usize,
+    case_sensitive: bool,
 ) -> Result<(Vec<Value>, bool), CoreError> {
     if tab_id.is_some_and(|id| !snapshot.tabs.iter().any(|tab| tab.id == id)) {
         return Err(CoreError(ErrorKind::NotFound, "document_tab_not_found"));
     }
     let mut matches = Vec::new();
     let mut seen = 0;
-    let query_chars = query.chars().count();
+    let needle = if case_sensitive {
+        query.to_owned()
+    } else {
+        unicase::UniCase::new(query).to_folded_case()
+    };
+    if needle.is_empty() {
+        return Err(CoreError::invalid());
+    }
     for tab in snapshot
         .tabs
         .iter()
         .filter(|tab| tab_id.is_none_or(|id| tab.id == id))
     {
         let chars: Vec<_> = tab.text.chars().collect();
-        for (byte, _) in tab.text.match_indices(query) {
+        // Mapping boundaries keeps expansions (e.g. ß -> ss) attached to whole
+        // original scalars. Display text and offsets always use the original.
+        let mut boundaries = Vec::with_capacity(chars.len() + 1);
+        let mut folded = String::with_capacity(tab.text.len());
+        let haystack = if case_sensitive {
+            boundaries.extend(tab.text.char_indices().map(|(byte, _)| byte));
+            tab.text.as_str()
+        } else {
+            for ch in &chars {
+                boundaries.push(folded.len());
+                if ch.is_ascii() {
+                    folded.push(ch.to_ascii_lowercase());
+                } else {
+                    let mut utf8 = [0; 4];
+                    folded.push_str(
+                        &unicase::UniCase::unicode(ch.encode_utf8(&mut utf8)).to_folded_case(),
+                    );
+                }
+            }
+            folded.as_str()
+        };
+        boundaries.push(haystack.len());
+        let mut position = 0;
+        while position < chars.len() {
+            let byte = boundaries[position];
+            if !haystack[byte..].starts_with(&needle) {
+                position += 1;
+                continue;
+            }
+            let Ok(end) = boundaries.binary_search(&(byte + needle.len())) else {
+                position += 1;
+                continue;
+            };
+            let start = position;
+            position = end;
             if seen < offset {
                 seen += 1;
                 continue;
@@ -309,8 +351,6 @@ pub fn search(
             if matches.len() == limit {
                 return Ok((matches, true));
             }
-            let start = tab.text[..byte].chars().count();
-            let end = start + query_chars;
             let snippet_start = start.saturating_sub(80);
             let snippet_end = (end + 80).min(chars.len());
             matches.push(json!({"tab_id":tab.id,"tab_title":tab.title.chars().take(200).collect::<String>(),"start_character":start,"end_character":end,"snippet_start_character":snippet_start,"snippet_end_character":snippet_end,"text":chars[snippet_start..snippet_end].iter().collect::<String>()}));

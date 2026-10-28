@@ -70,14 +70,21 @@ pub async fn search(bus: &CommandBus, p: DocumentSearch) -> Result<Value, CoreEr
         return Err(CoreError::invalid());
     }
     let snapshot = load(bus, &p.document).await?;
-    let binding = fingerprint(&json!([
+    let mut identity = json!([
         "docs_search",
         snapshot.id,
         snapshot.fingerprint,
         bus.registry.version,
         p.query,
         p.tab_id
-    ]));
+    ]);
+    if !p.case_sensitive {
+        identity
+            .as_array_mut()
+            .unwrap()
+            .push(json!("unicode_casefold_2.10.0"));
+    }
+    let binding = fingerprint(&identity);
     let offset = if let Some(cursor) = p.cursor {
         let (revision, offset) = cursor.split_once(':').ok_or_else(CoreError::invalid)?;
         if revision != binding {
@@ -87,12 +94,18 @@ pub async fn search(bus: &CommandBus, p: DocumentSearch) -> Result<Value, CoreEr
     } else {
         0
     };
-    let (matches, more) =
-        documents::search(&snapshot, &p.query, p.tab_id.as_deref(), offset, limit)?;
+    let (matches, more) = documents::search(
+        &snapshot,
+        &p.query,
+        p.tab_id.as_deref(),
+        offset,
+        limit,
+        p.case_sensitive,
+    )?;
     Ok(
         json!({"matches":matches,"next_cursor":if more {Some(format!("{binding}:{}",offset+limit))} else {None},
         "source":{"document":p.document,"document_id":snapshot.id,"title":snapshot.title.chars().take(200).collect::<String>(),"revision_id":snapshot.revision,"source_fingerprint":snapshot.fingerprint,"mapping_version":bus.registry.version,"retrieved_at":chrono::Utc::now().to_rfc3339()},
-        "coverage":"body_text_only","match_mode":"literal_case_sensitive","offset_unit":"unicode_scalar"}),
+        "coverage":"body_text_only","match_mode":if p.case_sensitive {"literal_case_sensitive"} else {"literal_case_insensitive"},"offset_unit":"unicode_scalar"}),
     )
 }
 impl Writes {
