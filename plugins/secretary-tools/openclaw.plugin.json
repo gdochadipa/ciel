@@ -39,6 +39,7 @@
       "docs_list",
       "docs_describe",
       "docs_read",
+      "docs_search",
       "docs_preview_change",
       "docs_apply",
       "operations_get_history",

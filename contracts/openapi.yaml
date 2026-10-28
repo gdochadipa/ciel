@@ -3048,6 +3048,276 @@
           }
         }
       }
+    },
+    "/v1/tools/docs_search": {
+      "post": {
+        "operationId": "docs_search",
+        "description": "Read-only literal case-sensitive search in one registered Google Doc body, all projected tabs or optional tab_id. Query nonblank <=256 UTF-8 bytes; nonoverlapping matches, no regex/normalization. Snippets include <=80 Unicode scalar values each side; titles capped at200 scalars. Cursor binds document identity, full source fingerprint, registry version, exact query and tab selection. Offsets are projected Unicode scalars, not native Google edit indices. No Drive discovery.",
+        "security": [
+          {
+            "CoreBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "document": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "tab_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "default": 10
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "query": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "description": "Nonblank exact literal; additionally limited to256 UTF-8 bytes."
+                  }
+                },
+                "required": [
+                  "document",
+                  "query"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "matches": {
+                          "type": "array",
+                          "maxItems": 50,
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "tab_id": {
+                                "type": "string"
+                              },
+                              "tab_title": {
+                                "type": "string",
+                                "maxLength": 200
+                              },
+                              "text": {
+                                "type": "string",
+                                "maxLength": 416
+                              },
+                              "start_character": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "end_character": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "snippet_start_character": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "snippet_end_character": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "tab_id",
+                              "tab_title",
+                              "text",
+                              "start_character",
+                              "end_character",
+                              "snippet_start_character",
+                              "snippet_end_character"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "next_cursor": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "document": {
+                              "type": "string"
+                            },
+                            "document_id": {
+                              "type": "string"
+                            },
+                            "title": {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            "revision_id": {
+                              "type": "string"
+                            },
+                            "source_fingerprint": {
+                              "type": "string"
+                            },
+                            "mapping_version": {
+                              "type": "string"
+                            },
+                            "retrieved_at": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          },
+                          "required": [
+                            "document",
+                            "document_id",
+                            "title",
+                            "revision_id",
+                            "source_fingerprint",
+                            "mapping_version",
+                            "retrieved_at"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "coverage": {
+                          "const": "body_text_only"
+                        },
+                        "match_mode": {
+                          "const": "literal_case_sensitive"
+                        },
+                        "offset_unit": {
+                          "const": "unicode_scalar"
+                        }
+                      },
+                      "required": [
+                        "matches",
+                        "next_cursor",
+                        "source",
+                        "coverage",
+                        "match_mode",
+                        "offset_unit"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid core token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Writes disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown tool or spreadsheet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Schema drift or stale pagination cursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request exceeds 64 KiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bounded provider read failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Journal unavailable; fail closed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

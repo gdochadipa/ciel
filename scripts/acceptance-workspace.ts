@@ -29,6 +29,10 @@ export async function runWorkspaceAcceptance(coreUrl:string,docsUrl:string) {
  const described=await tool('docs_describe',{document:'notes'});assert.equal(described.data.tabs.length,2);
  const first=await tool('docs_read',{document:'notes',tab_id:'t.0',limit:2});assert.equal(first.data.text,'He');assert(first.data.next_cursor);
  const next=await tool('docs_read',{document:'notes',tab_id:'t.0',limit:2,cursor:first.data.next_cursor});assert.equal(next.data.text,'ll');
+ const found=await tool('docs_search',{document:'notes',query:'e',limit:1});assert.equal(found.ok,true);assert(found.data.next_cursor);assert.equal(found.data.matches[0].tab_id,'t.0');
+ const foundNext=await tool('docs_search',{document:'notes',query:'e',limit:1,cursor:found.data.next_cursor});assert.equal(foundNext.ok,true);
+ assert.equal((await tool('docs_search',{document:'notes',query:'tab',tab_id:'t.1'})).data.matches.length,1);
+ assert.equal((await tool('docs_search',{document:'notes',query:'absent phrase'})).data.matches.length,0);
  const change={operation_id:'docs-append-one',document:'notes',tab_id:'t.0',action:'append_text',fields:{text:' Added'}};
  const preview=await tool('docs_preview_change',change);assert.equal(preview.ok,true);assert.equal(preview.data.resource_kind,'google_docs');assert.equal(preview.data.before.text,'Hello sample\n');assert.equal(preview.data.after.text,'Hello sample Added\n');
  assert.equal((await tool('docs_apply',{operation_id:change.operation_id})).ok,false,'Unapproved intent cannot execute');
@@ -42,6 +46,7 @@ export async function runWorkspaceAcceptance(coreUrl:string,docsUrl:string) {
  assert.equal((await fixture('/__fixture/stats')).applies,1);
  assert.equal((await tool('docs_read',{document:'notes',tab_id:'t.1'})).data.text,'Untouched tab\n');
  assert.equal((await tool('docs_read',{document:'notes',tab_id:'t.0',cursor:first.data.next_cursor})).error.code,'stale_cursor');
+ assert.equal((await tool('docs_search',{document:'notes',query:'e',cursor:found.data.next_cursor})).error.code,'stale_cursor');
  const replace={...change,operation_id:'docs-replace-one',action:'replace_text',fields:{find:'sample',replacement:'team'}};
  const replaced=await tool('docs_preview_change',replace);assert.equal(replaced.ok,true);
  await operator(replace.operation_id,'approval',{decision:'approve',preview_digest:replaced.data.preview_digest});

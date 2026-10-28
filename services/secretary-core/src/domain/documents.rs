@@ -280,3 +280,45 @@ pub fn requests(preview: &Preview) -> Result<Value, CoreError> {
     };
     Ok(json!({"writeControl":{"requiredRevisionId":preview.source_revision},"requests":[request]}))
 }
+
+/// Literal, nonoverlapping matches in projected body text; offsets are Unicode scalars.
+pub fn search(
+    snapshot: &Snapshot,
+    query: &str,
+    tab_id: Option<&str>,
+    offset: usize,
+    limit: usize,
+) -> Result<(Vec<Value>, bool), CoreError> {
+    if tab_id.is_some_and(|id| !snapshot.tabs.iter().any(|tab| tab.id == id)) {
+        return Err(CoreError(ErrorKind::NotFound, "document_tab_not_found"));
+    }
+    let mut matches = Vec::new();
+    let mut seen = 0;
+    let query_chars = query.chars().count();
+    for tab in snapshot
+        .tabs
+        .iter()
+        .filter(|tab| tab_id.is_none_or(|id| tab.id == id))
+    {
+        let chars: Vec<_> = tab.text.chars().collect();
+        for (byte, _) in tab.text.match_indices(query) {
+            if seen < offset {
+                seen += 1;
+                continue;
+            }
+            if matches.len() == limit {
+                return Ok((matches, true));
+            }
+            let start = tab.text[..byte].chars().count();
+            let end = start + query_chars;
+            let snippet_start = start.saturating_sub(80);
+            let snippet_end = (end + 80).min(chars.len());
+            matches.push(json!({"tab_id":tab.id,"tab_title":tab.title.chars().take(200).collect::<String>(),"start_character":start,"end_character":end,"snippet_start_character":snippet_start,"snippet_end_character":snippet_end,"text":chars[snippet_start..snippet_end].iter().collect::<String>()}));
+            seen += 1;
+        }
+    }
+    if offset > 0 && matches.is_empty() {
+        return Err(CoreError::invalid());
+    }
+    Ok((matches, false))
+}

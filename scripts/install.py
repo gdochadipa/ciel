@@ -86,8 +86,8 @@ def plugin_contract(archive):
         manifest = json.load(packed.extractfile('package/openclaw.plugin.json'))
     tools = manifest.get('contracts', {}).get('tools', [])
     properties = manifest.get('configSchema', {}).get('properties', {})
-    if (manifest.get('id') != 'secretary-tools' or len(tools) != 25 or len(set(tools)) != 25
-            or not {'sheets_preview_create_tab', 'sheets_create_tab'} <= set(tools)
+    if (manifest.get('id') != 'secretary-tools' or len(tools) != 26 or len(set(tools)) != 26
+            or not {'sheets_preview_create_tab', 'sheets_create_tab', 'docs_search'} <= set(tools)
             or properties.get('approvalTransportQualified', {}).get('default') is not False
             or properties.get('schedulerQualified', {}).get('default') is not False):
         raise InstallerError('plugin contract or inactive defaults differ')

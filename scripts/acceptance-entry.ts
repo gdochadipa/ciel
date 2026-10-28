@@ -17,7 +17,7 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
   const manifest=await Bun.file(new URL('../plugins/secretary-tools/openclaw.plugin.json',import.meta.url)).json();
   assert(metadata,'Actual SDK must recognize metadata after the plugin extends register');
   assert.deepEqual(metadata.tools.map(tool=>tool.name).sort(),manifest.contracts.tools.toSorted());
-  assert.equal(metadata.tools.length,25);
+  assert.equal(metadata.tools.length,26);
   let runtimeAllowed=false;
   function registry() {
    const tools=new Map<string,Function>();
@@ -36,7 +36,7 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
     on(name:string,handler:Function) {assert.equal(name,'before_tool_call');assert(!hook);hook=handler;},
    };
    entry.register(api as unknown as OpenClawPluginApi);
-   assert.equal(tools.size,25);assert(hook);
+   assert.equal(tools.size,26);assert(hook);
    assert.deepEqual([...tools.keys()].sort(),manifest.contracts.tools.toSorted());
    return {
     tool(name:string,context:Record<string,unknown>):AnyAgentTool {
@@ -92,6 +92,7 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
   if(kind==='docs'){
    const read=await execute(first.tool('docs_read',owner),{document:'notes',tab_id:'t.0'});
    assert.equal(read.data.text.split(' SDK appended').length-1,1);
+   const found=await execute(first.tool('docs_search',owner),{document:'notes',query:'SDK appended'});assert.equal(found.data.matches.length,1);assert.equal(found.data.matches[0].tab_id,'t.0');
   }else if(kind==='grid'){
    const history=await execute(first.tool('operations_get_history',owner),{operation_id:change.operation_id});assert.deepEqual(history.data.operation.after,immutable.after);
   }else if(kind==='tabs'){

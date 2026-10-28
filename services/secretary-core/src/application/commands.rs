@@ -7,6 +7,7 @@ pub enum Command {
     DocsList,
     DocsDescribe(DocumentRequest),
     DocsRead(DocumentRead),
+    DocsSearch(DocumentSearch),
     List,
     Describe(Describe),
     Read(Read),
@@ -42,6 +43,15 @@ pub struct DocumentRequest {
 pub struct DocumentRead {
     pub document: String,
     pub tab_id: String,
+    pub limit: Option<usize>,
+    pub cursor: Option<String>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DocumentSearch {
+    pub document: String,
+    pub query: String,
+    pub tab_id: Option<String>,
     pub limit: Option<usize>,
     pub cursor: Option<String>,
 }

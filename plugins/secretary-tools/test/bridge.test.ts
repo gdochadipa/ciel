@@ -288,3 +288,19 @@ test('available asynchronous Gateway preserves invocation checks before schedule
  await expect(bridge.execute('reminders_list',{},identity)).rejects.toThrow('INVOCATION_EXPIRED');
  expect(requests).toBe(1);
 });
+
+(process.env.SECRETARY_HTTP_TESTS==='1'?test:test.skip)('registered Docs search is owner-only and works without approval credentials',async()=>{
+ const {server,options}=setup(async request=>{
+  expect(new URL(request.url).pathname).toBe('/v1/tools/docs_search');
+  expect(await request.json()).toEqual({document:'notes',query:'cat',tab_id:'t.0',limit:2});
+  return Response.json({ok:true,data:{matches:[{tab_id:'t.0',text:'cat'}],next_cursor:null}});
+ });
+ try {
+  const bridge=createSecretary(options);
+  await expect(bridge.execute('docs_search',{document:'notes',query:'cat'},{})).rejects.toThrow('OWNER_REQUIRED');
+  const result=await bridge.execute('docs_search',{document:'notes',query:'cat',tab_id:'t.0',limit:2},owner) as any;
+  expect(result.data.matches[0].text).toBe('cat');
+  expect(await bridge.prepareApproval('docs_search',{},owner)).toBeUndefined();
+  await expect(bridge.execute('docs_search',{document:'notes',query:'cat',limit:51},owner)).rejects.toThrow('INVALID_INPUT');
+ }finally{server.stop(true);}
+});

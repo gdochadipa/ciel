@@ -1,5 +1,10 @@
 //! Google Docs queries and controlled mutations through the shared bus and journal.
-use super::{bus::CommandBus, commands::DocumentRead, ports::WriteOutcome, writes::Writes};
+use super::{
+    bus::CommandBus,
+    commands::{DocumentRead, DocumentSearch},
+    ports::WriteOutcome,
+    writes::Writes,
+};
 use crate::domain::{
     documents::{self, DocChange, Snapshot},
     error::{CoreError, ErrorKind},
@@ -51,6 +56,43 @@ pub async fn read(bus: &CommandBus, p: DocumentRead) -> Result<Value, CoreError>
     let end = offset.saturating_add(limit).min(chars.len());
     Ok(
         json!({"text":chars[offset..end].iter().collect::<String>(),"next_cursor":if end<chars.len(){Some(format!("{binding}:{end}"))}else{None},"source":{"document_id":snapshot.id,"tab_id":p.tab_id,"revision_id":snapshot.revision,"source_fingerprint":snapshot.fingerprint,"mapping_version":bus.registry.version,"start_character":offset,"end_character":end,"retrieved_at":chrono::Utc::now().to_rfc3339()},"editable_structure":tab.editable,"coverage":"body_text_only"}),
+    )
+}
+pub async fn search(bus: &CommandBus, p: DocumentSearch) -> Result<Value, CoreError> {
+    let limit = p.limit.unwrap_or(10);
+    if !(1..=50).contains(&limit)
+        || p.query.trim().is_empty()
+        || p.query.len() > 256
+        || p.tab_id
+            .as_deref()
+            .is_some_and(|id| !documents::valid_tab(id))
+    {
+        return Err(CoreError::invalid());
+    }
+    let snapshot = load(bus, &p.document).await?;
+    let binding = fingerprint(&json!([
+        "docs_search",
+        snapshot.id,
+        snapshot.fingerprint,
+        bus.registry.version,
+        p.query,
+        p.tab_id
+    ]));
+    let offset = if let Some(cursor) = p.cursor {
+        let (revision, offset) = cursor.split_once(':').ok_or_else(CoreError::invalid)?;
+        if revision != binding {
+            return Err(CoreError(ErrorKind::Conflict, "stale_cursor"));
+        }
+        offset.parse::<usize>().map_err(|_| CoreError::invalid())?
+    } else {
+        0
+    };
+    let (matches, more) =
+        documents::search(&snapshot, &p.query, p.tab_id.as_deref(), offset, limit)?;
+    Ok(
+        json!({"matches":matches,"next_cursor":if more {Some(format!("{binding}:{}",offset+limit))} else {None},
+        "source":{"document":p.document,"document_id":snapshot.id,"title":snapshot.title.chars().take(200).collect::<String>(),"revision_id":snapshot.revision,"source_fingerprint":snapshot.fingerprint,"mapping_version":bus.registry.version,"retrieved_at":chrono::Utc::now().to_rfc3339()},
+        "coverage":"body_text_only","match_mode":"literal_case_sensitive","offset_unit":"unicode_scalar"}),
     )
 }
 impl Writes {

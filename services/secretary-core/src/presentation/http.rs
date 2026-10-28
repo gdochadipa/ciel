@@ -80,6 +80,7 @@ fn decode_tool(name: &str, input: Value) -> Result<Command, CoreError> {
         }
         "docs_describe" => Command::DocsDescribe(parse(input)?),
         "docs_read" => Command::DocsRead(parse(input)?),
+        "docs_search" => Command::DocsSearch(parse(input)?),
         "docs_preview_change" => Command::Mutation(MutationCommand::DocsPreview(parse(input)?)),
         "docs_apply" => Command::Mutation(MutationCommand::DocsApply(parse(input)?)),
         "operations_get_history" => Command::Mutation(MutationCommand::History(parse(input)?)),

@@ -2,12 +2,12 @@ export type Identity = { requesterSenderId?: string; senderIsOwner?: boolean; as
 export type Gateway = { isAvailable(): boolean | Promise<boolean>; request<T = unknown>(method: string, params?: Record<string,unknown>): Promise<T> };
 type ApprovalDecision = 'allow-once' | 'allow-always' | 'deny' | 'timeout' | 'cancelled';
 export type Options = { coreUrl?: string; coreToken: string; owner: string; timeoutMs?: number; maxResponseBytes?: number; approvalToken?: string; approvalTransportQualified?: boolean; gateway?: Gateway; schedulerQualified?: boolean };
-export const docsTools=['docs_list','docs_describe','docs_read','docs_preview_change','docs_apply','operations_get_history'] as const;
+export const docsTools=['docs_list','docs_describe','docs_read','docs_search','docs_preview_change','docs_apply','operations_get_history'] as const;
 export const coreTools = [...docsTools,'sheets_preview_create_tab','sheets_create_tab','sheets_list','sheets_describe','sheets_read','sheets_search','sheets_preview_change','sheets_append','sheets_update','sheets_get_history','reports_wedding'] as const;
 export const reminderTools = ['create','list','get','reschedule','pause','resume','cancel','history'].map(action=>`reminders_${action}`);
 export const secretaryToolNames = [...coreTools,...reminderTools];
 const fields: Record<string, [string[], string[]]> = {
- docs_list:[[],[]],docs_describe:[['document'],[]],docs_read:[['document','tab_id'],['limit','cursor']],docs_preview_change:[['operation_id','document','tab_id','action','fields'],[]],docs_apply:[['operation_id'],[]],operations_get_history:[[],['operation_id','limit','cursor']],
+ docs_list:[[],[]],docs_describe:[['document'],[]],docs_read:[['document','tab_id'],['limit','cursor']],docs_search:[['document','query'],['tab_id','limit','cursor']],docs_preview_change:[['operation_id','document','tab_id','action','fields'],[]],docs_apply:[['operation_id'],[]],operations_get_history:[[],['operation_id','limit','cursor']],
  sheets_preview_create_tab:[['operation_id','spreadsheet','title','rows','columns'],['headers']],sheets_create_tab:[['operation_id'],[]],
  sheets_list:[[],[]], sheets_describe:[['spreadsheet'],[]], sheets_read:[['spreadsheet','view'],['limit','cursor']], sheets_search:[['spreadsheet','view','query'],['limit','cursor']],
  sheets_preview_change:[['operation_id','spreadsheet','view','action','fields'],['record_id']], sheets_append:[['operation_id'],[]], sheets_update:[['operation_id'],[]], sheets_get_history:[[],['operation_id','limit','cursor']], reports_wedding:[['spreadsheet'],[]],
@@ -71,9 +71,10 @@ export function createSecretary(options: Options) {
    if (key==='rows' || key==='columns') {if(!Number.isInteger(val) || Number(val)<1 || Number(val)>(key==='rows'?1000:26)) fail('INVALID_INPUT');continue;}
    if(key==='headers') {if(!Array.isArray(val) || val.length>Number(input.columns) || val.some(h=>typeof h!=='string' || new TextEncoder().encode(h).length>256 || /[\x00-\x1f\x7f-\x9f]/.test(h))) fail('INVALID_INPUT');continue;}
    if (key==='fields') {object(val);continue;}
-   if (key==='limit') {if(!Number.isInteger(val) || Number(val)<1 || Number(val)>(name==='docs_read'?10000:100)) fail('INVALID_INPUT');continue;}
+   if (key==='limit') {if(!Number.isInteger(val) || Number(val)<1 || Number(val)>(name==='docs_read'?10000:name==='docs_search'?50:100)) fail('INVALID_INPUT');continue;}
    if(typeof val !=='string' || !val.trim() || val.length>8192) fail('INVALID_INPUT');
   }
+  if(name==='docs_search' && (!String(input.query).trim() || new TextEncoder().encode(String(input.query)).length>256)) fail('INVALID_INPUT');
   if(name==='sheets_preview_create_tab' && (Number(input.rows)*Number(input.columns)>10000 || String(input.title).trim()!==input.title || [...String(input.title)].length>100 || /[\x00-\x1f\x7f-\x9f\[\]:*?/\\]/.test(String(input.title)))) fail('INVALID_INPUT');
   if((name==='sheets_preview_change' && !['append','update'].includes(String(input.action))) || (name==='docs_preview_change' && !['append_text','replace_text'].includes(String(input.action)))) fail('INVALID_INPUT');
   if(['sheets_append','sheets_update','docs_apply','sheets_create_tab'].includes(name) && (!options.approvalTransportQualified || !options.approvalToken)) fail('WRITES_DISABLED');
