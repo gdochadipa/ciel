@@ -14,6 +14,9 @@ const reminderDescriptions:Record<string,string>={
  reminders_history:'Read up to 100 recent native executions. Preserve separate execution and delivery statuses; unknown or accepted delivery is not proof of receipt.',
 };
 const documentDescriptions:Record<string,string>={
+ sheets_preview_change:'Prepare immutable registered Sheets edit. Structured fields follow its schema. Grid update requires explicit writable_range, action update, no record_id, fields {range,values}: complete rectangle <=100 literal cells; null clears. No formulas/merges/protected headers or structural changes.',
+ sheets_update:'Apply only the exact owner-approved registered structured/grid update. Changed source conflicts; ambiguous outcomes require operator observation-only reconciliation, never resending.',
+
  sheets_preview_create_tab:'Preview a new bounded tab inside a registered spreadsheet with create_tabs permission. Specify title, rows, columns and optional literal text headers. Result remains unregistered and unreadable/unwritable until the operator registers bounded access.',
  sheets_create_tab:'Create only the immutable owner-approved tab preview. Replay does not create another tab. An uncertain outcome requires observation-only operator reconciliation; never retry with a new operation ID.',
  docs_list:'List only operator-registered Google Docs aliases; this does not enumerate Google Drive.',

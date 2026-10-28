@@ -14,7 +14,8 @@
           "range": "B2:D8",
           "headers": {},
           "merges": [],
-          "formulas": {}
+          "formulas": {},
+          "writable_range": "B4:D8"
         }
       ],
       "create_tabs": true

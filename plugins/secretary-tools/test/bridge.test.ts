@@ -96,7 +96,7 @@ test('unqualified approval transport never issues a permission callback', async 
 (process.env.SECRETARY_HTTP_TESTS==='1'?test:test.skip)('immutable preview approval reaches separate authenticated endpoint once', async () => {
  const {server,options}=setup(async request=>{
   const path=new URL(request.url).pathname;
-  if(path==='/v1/tools/sheets_preview_change') return Response.json({ok:true,data:{operation_id:'op1',actor:'owner',action:'append',preview_digest:'core-digest',expires_at:'2099-01-01T00:00:00Z',before:{},after:{amount:42}}});
+  if(path==='/v1/tools/sheets_preview_change') return Response.json({ok:true,data:{operation_id:'op1',actor:'+628123',spreadsheet:'wedding',view:'payments',fields:{amount:42},action:'append',preview_digest:'core-digest',expires_at:'2099-01-01T00:00:00Z',before:{},after:{amount:42}}});
   expect(path).toBe('/v1/operations/op1/approval');
   expect(request.headers.get('authorization')).toBe('Bearer approval-secret');
   expect(await request.json()).toEqual({decision:'approve',preview_digest:'core-digest'});

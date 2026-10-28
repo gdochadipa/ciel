@@ -174,7 +174,7 @@ pub fn validate(s: &Spreadsheet, book: &Value) -> Result<(), CoreError> {
                 return Err(CoreError::drift());
             }
         }
-        // Generic registered grids are read-only data, not a frozen domain template.
+        // Generic grids project dynamic data rather than a frozen domain template.
         if v.kind == Kind::Grid {
             continue;
         }

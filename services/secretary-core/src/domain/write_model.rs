@@ -233,13 +233,20 @@ pub fn prepare(
     })
 }
 pub fn matches_request(p: &Preview, c: &Change, owner: &str) -> bool {
-    p.resource_kind == crate::domain::operation::ResourceKind::Sheets
-        && p.operation_id == c.operation_id
+    matches!(
+        p.resource_kind,
+        crate::domain::operation::ResourceKind::Sheets
+            | crate::domain::operation::ResourceKind::SheetsGrid
+    ) && p.operation_id == c.operation_id
         && p.actor == owner
         && p.spreadsheet == c.spreadsheet
         && p.view == c.view
         && p.action == c.action
         && p.fields == c.fields
         && (c.action == "append" && c.record_id.is_none()
-            || c.action == "update" && c.record_id.as_ref() == Some(&p.record_id))
+            || c.action == "update"
+                && ((p.resource_kind == crate::domain::operation::ResourceKind::Sheets
+                    && c.record_id.as_ref() == Some(&p.record_id))
+                    || (p.resource_kind == crate::domain::operation::ResourceKind::SheetsGrid
+                        && c.record_id.is_none())))
 }

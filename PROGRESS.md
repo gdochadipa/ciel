@@ -80,9 +80,9 @@ README branding is Ciel; Rust/npm license metadata is MIT. The plugin bundle ret
 3. Qualify native Gateway declaration convergence/concurrent edits, restart persistence, history and owner-only WhatsApp delivery/outbound policy. Offset discovery is not transactional.
 4. Test supported native scheduler backup/restore and complete target-host recovery. Core journal recovery already passes locally.
 5. Verify native OpenClaw memory privacy/permissions separately. Markdown is native note source; OpenClaw owns its SQLite index, JSON is configuration/interchange and Core SQLite is operation state. FTS-only retrieval and three primary-memory results are defaults, not measured savings or a hard token ceiling.
-6. Observe hosted CI when a remote/runner is configured.
+6. Resolve the hosted CI simulation failure on published 30d4dfa; local seven-scenario checks pass, but hosted CI is not green.
 
-Generic Sheets grids are read-only. Docs editing currently covers plain-text append and one exact case-sensitive replacement in a selected supported tab. New tab creation is T025; new spreadsheet/Docs file creation, rich formatting and arbitrary batch requests remain unsupported. Unsupported structures/suggestions fail closed for editing; see the capability spec for actual limits.
+Generic Sheets grids are read-only by default; T027 permits explicitly bounded literal edits. Docs editing currently covers plain-text append and one exact case-sensitive replacement in a selected supported tab. New tab creation is T025; new spreadsheet/Docs file creation, rich formatting and arbitrary batch requests remain unsupported. Unsupported structures/suggestions fail closed for editing; see the capability spec for actual limits.
 
 ## Workspace and continuation
 
@@ -92,11 +92,13 @@ Qualified disposable environment: `/private/tmp/secretary-qualified-3xjcv7r_` (p
 
 Workbook `docs/Persiapan Nikah.xlsx` remains unchanged: SHA-256 `b24351dbda4c69a7cbf5f14d9b18d7fbbc983deff406e8dad3607f6bcd196de3`.
 
-Continue from material unresolved gates using target-specific evidence. Do not invent custom memory work or treat SDK package validation as live activation. Current local capability implementation includes T025; target-host qualification remains T007.
+Continue from material unresolved gates using target-specific evidence. Do not invent custom memory work or treat SDK package validation as live activation. Current local capability implementation includes T027; target-host qualification remains T007.
 
 
 ## Current continuation — publication verified, T027 selected
 
-GitHub API inspection verified both main and integration/secretary-mvp at `30d4dfae68547684e5e02999b94051e9f9b05e9d` following the operator's push. Hosted workflow https://github.com/gdochadipa/ciel/actions/runs/40629373802 was observed in progress; source checks passed, full verify was still running at inspection. This supersedes earlier publication-pending entries, without establishing a final CI pass.
+GitHub API inspection verified both main and integration/secretary-mvp at `30d4dfae68547684e5e02999b94051e9f9b05e9d` following the operator's push. Hosted workflow https://github.com/gdochadipa/ciel/actions/runs/40629373802 completed with failure: source checks and local-behavior verification passed, but the Google-only simulation step exited 1. The public annotation provides no detailed cause; investigation remains open. This supersedes earlier publication-pending entries and does not establish a CI pass.
 
-The owner explicitly deferred VPS cloning/installation and selected [T027](.scratch/secretary-mvp/T027.md), controlled edits of registered grid cells/ranges, for local development. Its initial bounds and safety requirements are recorded; implementation/tests have not started. Existing generic grids remain read-only. No production flags or external targets changed.
+The owner explicitly deferred VPS cloning/installation and selected [T027](.scratch/secretary-mvp/T027.md), controlled edits of registered grid cells/ranges, for local development. T027 is implemented and accepted locally using the owner-confirmed public Core/HTTP, Google adapter/provider simulation and plugin approval seams. Grid writes require explicit operator writable_range; unchanged registrations remain read-only. One rectangle (<=100 cells) accepts typed literals and explicit null clearing, protects formulas/merges/headers/structured views, and uses immutable approval plus the shared journal/FSM. Replay and ambiguous responses never resend a provider write. Reconciliation validates provider spreadsheet identity before interpreting cell state. No production flags or external targets changed.
+
+Final qualified Linux verification passed: 23 Python, 41 Rust (seven new grid HTTP/adapter/journal regressions), 44 TypeScript checks (40 plugin + four acceptance configuration), formatting/Clippy with warnings denied, and actual locked SDK type/build/validation (valid: true, no errors). All seven Postman scenarios passed sequentially; the Workspace scenario then passed again after the recovery-identity fix. Built-entry SDK approval exercised literal edits through real Core and synthetic Google with exactly three intended grid sends (ordinary, lost response/reconcile, SDK entry), no duplicates. Standards review found one P2 recovery-identity gap; a failing regression proved it and the fix passed seven grid tests/Clippy/full suite. Spec review found no material issues; final Standards/Spec rechecks found no remaining material issues. Raw logs remain private. This does not qualify live Google, host approval UI or VPS activation; the prior published CI simulation failure remains open.

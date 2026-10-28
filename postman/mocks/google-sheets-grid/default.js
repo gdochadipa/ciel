@@ -14,10 +14,22 @@ http.createServer(async(req,res)=>{
  try {
  const state=JSON.parse(JSON.stringify((await pm.state.get(STATE))||{book:original,creates:0,lose:false}));
  const book=state.book;
- if(url.pathname==='/__fixture/stats')return send(200,{creates:state.creates});
+ if(url.pathname==='/__fixture/stats')return send(200,{creates:state.creates,gridWrites:state.gridWrites||0});
  if(req.method==='POST'&&url.pathname==='/__fixture/lose-next-response'){await pending;state.lose=true;await pm.state.set(STATE,state);return send(200,{ok:true});}
  if(req.method==='POST'&&url.pathname==='/v4/spreadsheets/generic-spreadsheet:batchUpdate'){
   const body=await pending;
+  const u=body.requests?.[0]?.updateCells;
+  if(u && body.requests.length===1 && u.start?.sheetId===7){
+   if(u.fields!=='userEnteredValue'||u.start.rowIndex<3||u.start.rowIndex>7||u.start.columnIndex<1||u.start.columnIndex>3||!Array.isArray(u.rows)||u.start.rowIndex+u.rows.length>8)return send(400,{error:{code:400}});
+   const rows=book.sheets[0].data[0].rowData;
+   for(let r=0;r<u.rows.length;r++){
+    const values=u.rows[r].values;if(!Array.isArray(values)||u.start.columnIndex+values.length>4)return send(400,{error:{code:400}});
+    const index=u.start.rowIndex+r-1;while(rows.length<=index)rows.push({values:[]});
+    for(let c=0;c<values.length;c++){const cell=values[c];if(cell.userEnteredValue?.formulaValue!==undefined)return send(400,{error:{code:400}});const col=u.start.columnIndex+c-1;while(rows[index].values.length<=col)rows[index].values.push({});rows[index].values[col]=cell;}
+   }
+   state.gridWrites=(state.gridWrites||0)+1;const lose=state.lose;state.lose=false;await pm.state.set(STATE,state);
+   if(lose){res.writeHead(200,{'content-type':'application/json'});return res.end('{incomplete');}return send(200,{replies:[{}]});
+  }
   const requests=body.requests,p=requests?.[0]?.addSheet?.properties;
   if(!p||!Number.isInteger(p.sheetId)||p.sheetId<0||p.sheetType!=='GRID'||p.gridProperties?.rowCount<1||p.gridProperties.rowCount>1000||p.gridProperties.columnCount<1||p.gridProperties.columnCount>26||p.gridProperties.rowCount*p.gridProperties.columnCount>10000||book.sheets.some(s=>s.properties.sheetId===p.sheetId||s.properties.title.toLowerCase()===p.title.toLowerCase())||requests.length>2)return send(400,{error:{code:400}});
   const sheet={properties:p};

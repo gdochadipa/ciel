@@ -76,7 +76,14 @@ export async function runWorkspaceAcceptance(coreUrl:string,docsUrl:string) {
  await operator(lostTab.operation_id,'approval',{decision:'approve',preview_digest:lostTabPreview.data.preview_digest});await sheetFixture('/__fixture/lose-next-response',true);
  assert.equal((await tool('sheets_create_tab',{operation_id:lostTab.operation_id})).data.state,'uncertain');assert.equal((await tool('sheets_create_tab',{operation_id:lostTab.operation_id})).ok,false);
  assert.equal((await operator(lostTab.operation_id,'reconcile',{})).data.state,'applied');assert.equal((await sheetFixture('/__fixture/stats')).creates,2);
- const {runEntryAcceptance}=await import('./acceptance-entry');await runEntryAcceptance(coreUrl,'docs');await runEntryAcceptance(coreUrl,'tabs');
+ const gridChange={operation_id:'grid-set-one',spreadsheet:'operations',view:'overview',action:'update',fields:{range:'B4:C4',values:[['=literal',null]]}};
+ const gridPreview=await tool('sheets_preview_change',gridChange);assert.equal(gridPreview.ok,true);assert.equal(gridPreview.data.resource_kind,'sheets_grid');
+ const gridApproval=(await bridge.prepareApproval('sheets_update',{operation_id:gridChange.operation_id},owner))!;assert(gridApproval.description.includes(JSON.stringify(gridPreview.data,null,2)));await gridApproval.onResolution('allow-once');
+ assert.equal((await tool('sheets_update',{operation_id:gridChange.operation_id})).data.state,'applied');assert.equal((await tool('sheets_update',{operation_id:gridChange.operation_id})).data.state,'applied');assert.equal((await sheetFixture('/__fixture/stats')).gridWrites,1);
+ const lostGrid={...gridChange,operation_id:'grid-set-lost',fields:{range:'B4:C4',values:[[true,42]]}};const lostGridPreview=await tool('sheets_preview_change',lostGrid);assert.equal(lostGridPreview.ok,true);
+ await operator(lostGrid.operation_id,'approval',{decision:'approve',preview_digest:lostGridPreview.data.preview_digest});await sheetFixture('/__fixture/lose-next-response',true);
+ assert.equal((await tool('sheets_update',{operation_id:lostGrid.operation_id})).data.state,'uncertain');assert.equal((await tool('sheets_update',{operation_id:lostGrid.operation_id})).ok,false);assert.equal((await operator(lostGrid.operation_id,'reconcile',{})).data.state,'applied');assert.equal((await sheetFixture('/__fixture/stats')).gridWrites,2);
+ const {runEntryAcceptance}=await import('./acceptance-entry');await runEntryAcceptance(coreUrl,'docs');await runEntryAcceptance(coreUrl,'tabs');await runEntryAcceptance(coreUrl,'grid');assert.equal((await sheetFixture('/__fixture/stats')).gridWrites,3);
  assert.equal((await fixture('/__fixture/stats')).applies,4);
- console.log(JSON.stringify({acceptance:'passed',scenario:'workspace',scope:'generic Sheets + tab creation + controlled Docs through actual SDK/bridge/Core; only Google simulated, no live Docs authorization'}));
+ console.log(JSON.stringify({acceptance:'passed',scenario:'workspace',scope:'generic Sheets + controlled grid edits + tab creation + controlled Docs through actual SDK/bridge/Core; only Google simulated, no live Docs authorization'}));
 }

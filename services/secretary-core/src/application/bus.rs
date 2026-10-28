@@ -44,12 +44,12 @@ impl CommandBus {
             Command::DocsDescribe(p) => super::documents::describe(self, &p.document).await,
             Command::DocsRead(p) => super::documents::read(self, p).await,
             Command::List => Ok(
-                json!({"spreadsheets":self.registry.spreadsheets.iter().filter(|s|s.readable).map(|s|json!({"spreadsheet":s.alias,"id":s.id,"readable":true,"create_tabs":s.create_tabs && self.writes.as_ref().is_some_and(|w|w.enabled),"writable":self.writes.as_ref().is_some_and(|w|w.enabled)&&s.views.iter().any(|v|v.structured())})).collect::<Vec<_>>(),"mapping_version":self.registry.version}),
+                json!({"spreadsheets":self.registry.spreadsheets.iter().filter(|s|s.readable).map(|s|json!({"spreadsheet":s.alias,"id":s.id,"readable":true,"create_tabs":s.create_tabs && self.writes.as_ref().is_some_and(|w|w.enabled),"writable":self.writes.as_ref().is_some_and(|w|w.enabled)&&s.views.iter().any(|v|v.structured() || v.writable_range.is_some())})).collect::<Vec<_>>(),"mapping_version":self.registry.version}),
             ),
             Command::Describe(p) => {
                 let s = self.registry.lookup(&p.spreadsheet)?;
                 Ok(
-                    json!({"spreadsheet":s.alias,"id":s.id,"mapping_version":self.registry.version,"views":s.views,"create_tabs":s.create_tabs && self.writes.as_ref().is_some_and(|w|w.enabled),"writable":self.writes.as_ref().is_some_and(|w|w.enabled)&&s.views.iter().any(|v|v.structured())}),
+                    json!({"spreadsheet":s.alias,"id":s.id,"mapping_version":self.registry.version,"views":s.views,"create_tabs":s.create_tabs && self.writes.as_ref().is_some_and(|w|w.enabled),"writable":self.writes.as_ref().is_some_and(|w|w.enabled)&&s.views.iter().any(|v|v.structured() || v.writable_range.is_some())}),
                 )
             }
             Command::Read(p) => read(self, &p.spreadsheet, &p.view, None, p.limit, p.cursor).await,

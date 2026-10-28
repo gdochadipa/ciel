@@ -32,6 +32,8 @@ pub struct Spreadsheet {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct View {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub writable_range: Option<String>,
     pub name: String,
     pub sheet_id: i64,
     pub title: String,
@@ -203,6 +205,16 @@ impl Registry {
             let mut names = std::collections::HashSet::new();
             for v in &s.views {
                 v.validate_write_schema()?;
+                if let Some(range) = &v.writable_range {
+                    if !s.readable
+                        || v.kind != Kind::Grid
+                        || !crate::domain::grids::contains(&v.range, range)
+                    {
+                        return Err(
+                            "grid writable range must be contained in a readable grid".into()
+                        );
+                    }
+                }
                 let expected = match v.kind {
                     Kind::Grid => v.range.as_str(),
                     Kind::WeddingCosts => "A1:G63",

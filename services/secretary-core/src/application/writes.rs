@@ -78,6 +78,9 @@ impl Writes {
                     .iter()
                     .find(|v| v.name == c.view)
                     .ok_or_else(CoreError::invalid)?;
+                if v.kind == crate::domain::registry::Kind::Grid {
+                    return self.grid_preview(state, c).await;
+                }
                 write_model::validate_fields(v, &c.fields, c.action == "append")?;
                 let book = state.source.read(s).await?;
                 projection::validate(s, &book)?;
@@ -108,8 +111,10 @@ impl Writes {
                     return Err(CoreError::invalid());
                 }
                 let old = self.journal.get(&p.operation_id).await?;
-                if old.preview.resource_kind != ResourceKind::Sheets
-                    || old.preview.actor.as_str() != state.owner.as_ref()
+                if !matches!(
+                    old.preview.resource_kind,
+                    ResourceKind::Sheets | ResourceKind::SheetsGrid
+                ) || old.preview.actor.as_str() != state.owner.as_ref()
                     || old.preview.action != action
                 {
                     return Err(CoreError(ErrorKind::Conflict, "operation_action_mismatch"));
@@ -118,7 +123,11 @@ impl Writes {
                     return Ok(old.preview.public("applied"));
                 }
                 let operation = self.journal.begin_apply(&p.operation_id).await?;
-                let outcome = self.apply(state, &operation.preview).await;
+                let outcome = if operation.preview.resource_kind == ResourceKind::SheetsGrid {
+                    self.apply_grid(state, &operation.preview).await
+                } else {
+                    self.apply(state, &operation.preview).await
+                };
                 let finished = self.journal.finish(&p.operation_id, outcome).await?;
                 Ok(finished.preview.public(finished.state.as_str()))
             }
@@ -239,6 +248,8 @@ impl Writes {
             self.observe_document(state, &op.preview).await
         } else if op.preview.resource_kind == ResourceKind::SheetsTab {
             self.observe_tab(state, &op.preview).await
+        } else if op.preview.resource_kind == ResourceKind::SheetsGrid {
+            self.observe_grid(state, &op.preview).await
         } else {
             self.observe(state, &op.preview).await
         };

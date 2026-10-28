@@ -17,6 +17,14 @@ pub enum WriteOutcome {
 
 /// Source access: implementations own protocol, authentication and bounded IO.
 pub trait WorkspacePort: Send + Sync {
+    fn write_grid<'a>(
+        &'a self,
+        _s: &'a Spreadsheet,
+        _p: &'a Preview,
+    ) -> PortFuture<'a, WriteOutcome> {
+        Box::pin(async { WriteOutcome::Rejected })
+    }
+
     fn tab_catalog<'a>(&'a self, _s: &'a Spreadsheet) -> PortFuture<'a, Result<Value, CoreError>> {
         Box::pin(async { Err(CoreError::upstream()) })
     }

@@ -6,7 +6,7 @@ import {getToolPluginMetadata} from 'openclaw/plugin-sdk/tool-plugin';
 import type {AnyAgentTool,OpenClawPluginApi} from 'openclaw/plugin-sdk/plugin-entry';
 import {acceptanceConfiguration,syntheticOwner,syntheticToken} from './acceptance';
 
-export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'tabs'='sheets') {
+export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'tabs'|'grid'='sheets') {
  const base=acceptanceConfiguration(coreUrl,'writes');
  const saved={core:process.env.SECRETARY_CORE_TOKEN,approval:process.env.SECRETARY_APPROVAL_TOKEN};
  delete process.env.SECRETARY_CORE_TOKEN;delete process.env.SECRETARY_APPROVAL_TOKEN;
@@ -53,7 +53,7 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
   let current=true;
   const owner={requesterSenderId:syntheticOwner,senderIsOwner:true,assertInvocationCurrent(){assert(current,'INVOCATION_EXPIRED');}};
   const list=first.tool('sheets_list',owner);
-  const commitName=kind==='tabs'?'sheets_create_tab':kind==='docs'?'docs_apply':'sheets_append';
+  const commitName=kind==='grid'?'sheets_update':kind==='tabs'?'sheets_create_tab':kind==='docs'?'docs_apply':'sheets_append';
   const previewTool=first.tool(kind==='tabs'?'sheets_preview_create_tab':kind==='docs'?'docs_preview_change':'sheets_preview_change',owner);
   const append=first.tool(commitName,owner);
   // Both registration and concrete factory construction succeeded without secrets/runtime.
@@ -70,14 +70,14 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
   current=false;
   assert.equal((await execute(list,{})).error.code,'INVOCATION_EXPIRED');
   current=true;
-  const change=kind==='tabs'?{operation_id:'acceptance-sdk-tab-entry',spreadsheet:'operations',title:'SDK plan',rows:10,columns:2,headers:['Task','Owner']}:kind==='docs'?{operation_id:'acceptance-sdk-docs-entry',document:'notes',tab_id:'t.0',action:'append_text',fields:{text:' SDK appended'}}:{operation_id:'acceptance-sdk-entry',spreadsheet:'wedding-demo',view:'tasks',action:'append',fields:{title:'Synthetic SDK entry task',status:'todo'}};
+  const change=kind==='grid'?{operation_id:'acceptance-sdk-grid-entry',spreadsheet:'operations',view:'overview',action:'update',fields:{range:'B5:C5',values:[['SDK',false]]}}:kind==='tabs'?{operation_id:'acceptance-sdk-tab-entry',spreadsheet:'operations',title:'SDK plan',rows:10,columns:2,headers:['Task','Owner']}:kind==='docs'?{operation_id:'acceptance-sdk-docs-entry',document:'notes',tab_id:'t.0',action:'append_text',fields:{text:' SDK appended'}}:{operation_id:'acceptance-sdk-entry',spreadsheet:'wedding-demo',view:'tasks',action:'append',fields:{title:'Synthetic SDK entry task',status:'todo'}};
   const preview=await execute(previewTool,change);assert.equal(preview.ok,true);
   const immutable=structuredClone(preview.data);
-  if(kind==='docs')preview.data.after.text='Model-altered text';else preview.data.after.title='Model-altered text';preview.data.preview_digest='model-altered';
+  if(kind==='grid')preview.data.after[0][0].stringValue='model-altered';else if(kind==='docs')preview.data.after.text='Model-altered text';else preview.data.after.title='Model-altered text';preview.data.preview_digest='model-altered';
   const requester={senderId:syntheticOwner,senderIsOwner:true};
   assert.equal((await first.before(commitName,{operation_id:change.operation_id})).block,true);
   assert.equal((await first.before(commitName,{operation_id:change.operation_id},{senderId:'other',senderIsOwner:true})).block,true);
-  assert.equal((await first.before('sheets_update',{operation_id:change.operation_id},requester)).block,true);
+  assert.equal((await first.before(kind==='grid'?'sheets_append':'sheets_update',{operation_id:change.operation_id},requester)).block,true);
   assert.equal((await second.before(commitName,{operation_id:change.operation_id},requester)).block,true,'Preview must not cross host API instances');
   assert.equal(await first.before('sheets_list',{},requester),undefined,'Read operations must not request approval');
   const decision=await first.before(commitName,{operation_id:change.operation_id},requester);
@@ -92,6 +92,8 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
   if(kind==='docs'){
    const read=await execute(first.tool('docs_read',owner),{document:'notes',tab_id:'t.0'});
    assert.equal(read.data.text.split(' SDK appended').length-1,1);
+  }else if(kind==='grid'){
+   const history=await execute(first.tool('operations_get_history',owner),{operation_id:change.operation_id});assert.deepEqual(history.data.operation.after,immutable.after);
   }else if(kind==='tabs'){
    const history=await execute(first.tool('operations_get_history',owner),{operation_id:change.operation_id});
    assert.equal(history.data.operation.after.registration,'unregistered');

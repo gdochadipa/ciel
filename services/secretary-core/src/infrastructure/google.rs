@@ -258,7 +258,7 @@ impl GoogleClient {
             bounded(response).await
         }).await.map_err(|_| CoreError::upstream())?
     }
-    async fn create_tab(
+    async fn write_batch(
         &self,
         s: &Spreadsheet,
         p: &crate::domain::operation::Preview,
@@ -269,7 +269,13 @@ impl GoogleClient {
                 .client
                 .post(format!("{}/spreadsheets/{}:batchUpdate", self.base, s.id))
                 .bearer_auth(token)
-                .json(&crate::domain::tabs::requests(p))
+                .json(
+                    &if p.resource_kind == crate::domain::operation::ResourceKind::SheetsGrid {
+                        crate::domain::grids::requests(p)
+                    } else {
+                        crate::domain::tabs::requests(p)
+                    },
+                )
                 .send()
                 .await
                 .map_err(|_| CoreError::upstream())?;
@@ -437,6 +443,14 @@ fn raw(value: &Value) -> Value {
 }
 
 impl crate::application::ports::WorkspacePort for GoogleClient {
+    fn write_grid<'a>(
+        &'a self,
+        s: &'a Spreadsheet,
+        p: &'a crate::domain::operation::Preview,
+    ) -> crate::application::ports::PortFuture<'a, WriteOutcome> {
+        Box::pin(self.write_batch(s, p))
+    }
+
     fn tab_catalog<'a>(
         &'a self,
         s: &'a Spreadsheet,
@@ -492,7 +506,7 @@ impl crate::application::ports::WorkspacePort for GoogleClient {
         s: &'a Spreadsheet,
         p: &'a crate::domain::operation::Preview,
     ) -> crate::application::ports::PortFuture<'a, WriteOutcome> {
-        Box::pin(self.create_tab(s, p))
+        Box::pin(self.write_batch(s, p))
     }
     fn read_document<'a>(
         &'a self,

@@ -63,7 +63,7 @@
                               },
                               "writable": {
                                 "type": "boolean",
-                                "description": "True only when writes globally enabled and at least one explicit structured schema is registered."
+                                "description": "Global writes enabled and at least one structured schema or explicit grid writable_range is registered."
                               },
                               "create_tabs": {
                                 "type": "boolean",
@@ -232,7 +232,7 @@
                         },
                         "writable": {
                           "type": "boolean",
-                          "description": "True only when writes globally enabled and at least one explicit structured schema is registered."
+                          "description": "Global writes enabled and at least one structured schema or explicit grid writable_range is registered."
                         },
                         "create_tabs": {
                           "type": "boolean",
@@ -920,7 +920,7 @@
     "/v1/tools/sheets_preview_change": {
       "post": {
         "operationId": "sheets_preview_change",
-        "description": "Immutable five-minute owner-bound preview. Only registered AI_Tasks/AI_Payments schemas; legacy views always read-only. Append omits record_id; update requires a stable record_id. Fields must satisfy registered allowlist/types; actor/approval/coordinates are rejected. Same operation ID and exact input replay original preview/state; changed input conflicts.",
+        "description": "Immutable five-minute owner-bound preview. Only registered AI_Tasks/AI_Payments schemas; legacy views always read-only. Append omits record_id; update requires a stable record_id. Fields must satisfy registered allowlist/types; actor/approval/coordinates are rejected. Same operation ID and exact input replay original preview/state; changed input conflicts. Grid update: omit record_id and provide fields {range,values}, one complete A1 rectangle contained in explicit view writable_range; at most100 cells and16KiB serialized entered values per before/after. Values literal text(max2048 UTF-8 bytes)/safe finite number/boolean/null(clear). No formulas, merged/protected headers or structured-view targets. No automatic registration or write grant.",
         "security": [
           {
             "CoreBearer": []
@@ -3225,6 +3225,10 @@
               "fields"
             ],
             "additionalProperties": false
+          },
+          "writable_range": {
+            "type": "string",
+            "description": "Optional grid-only writable A1 rectangle contained in the registered read range. Absent means read-only; each edit max100 cells. Headers/formulas and structured-view targets remain protected."
           }
         },
         "additionalProperties": false
@@ -3434,6 +3438,9 @@
           },
           {
             "$ref": "#/components/schemas/TabPreview"
+          },
+          {
+            "$ref": "#/components/schemas/GridPreview"
           }
         ]
       },
@@ -3520,6 +3527,105 @@
         ],
         "additionalProperties": false,
         "description": "record_id is the once-allocated sheet ID; view is the requested title. after includes spreadsheet_id, sheet_id, title, rows, columns, literal headers and unregistered/readable=false/writable=false. No resulting tab registry access is granted."
+      },
+      "GridPreview": {
+        "type": "object",
+        "properties": {
+          "operation_id": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "spreadsheet": {
+            "type": "string"
+          },
+          "view": {
+            "type": "string"
+          },
+          "action": {
+            "const": "update"
+          },
+          "record_id": {
+            "type": "string",
+            "description": "Immutable spreadsheet ID and numeric sheet ID, joined by colon."
+          },
+          "fields": {
+            "type": "object"
+          },
+          "before": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            }
+          },
+          "after": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            }
+          },
+          "mapping_version": {
+            "type": "string"
+          },
+          "source_revision": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "preview_digest": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "previewed",
+              "approved",
+              "rejected",
+              "expired",
+              "conflict",
+              "applying",
+              "applied",
+              "known_failure",
+              "uncertain",
+              "reconciliation"
+            ]
+          },
+          "resource_kind": {
+            "const": "sheets_grid"
+          }
+        },
+        "required": [
+          "operation_id",
+          "actor",
+          "spreadsheet",
+          "view",
+          "action",
+          "record_id",
+          "fields",
+          "before",
+          "after",
+          "mapping_version",
+          "source_revision",
+          "expires_at",
+          "preview_digest",
+          "state",
+          "resource_kind"
+        ],
+        "additionalProperties": false
       }
     }
   }

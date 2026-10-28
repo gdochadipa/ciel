@@ -86,6 +86,7 @@ export function createSecretary(options: Options) {
     const expected={title:input.title,rows:input.rows,columns:input.columns,headers:input.headers??[]};
     if(preview.resource_kind!=='sheets_tab' || preview.spreadsheet!==input.spreadsheet || preview.action!=='create_tab' || preview.actor!==options.owner || JSON.stringify(Object.entries(object(preview.fields)).sort())!==JSON.stringify(Object.entries(expected).sort())) fail('INVALID_CORE_RESPONSE');
    }
+   if(name==='sheets_preview_change' && (![undefined,'sheets','sheets_grid'].includes(preview.resource_kind as string|undefined) || preview.actor!==options.owner || preview.spreadsheet!==input.spreadsheet || preview.view!==input.view || preview.action!==input.action || JSON.stringify(Object.entries(object(preview.fields)).sort())!==JSON.stringify(Object.entries(object(input.fields)).sort()) || (preview.resource_kind==='sheets_grid' && input.action!=='update'))) fail('INVALID_CORE_RESPONSE');
    rememberPreview(String(input.operation_id),preview);
   }
   return result;

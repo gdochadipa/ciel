@@ -236,3 +236,12 @@ test('tab preview rejects target/owner substitution and bounded input violations
   expect(transport).not.toHaveBeenCalled();
  }finally{transport.mockRestore();}
 });
+
+test('grid update approval captures the full rectangle and rejects substituted fields',async()=>{
+ const input={operation_id:'grid-approval',spreadsheet:'demo',view:'plan',action:'update',fields:{range:'B2:C2',values:[['=literal',null]]}};
+ const p={...input,resource_kind:'sheets_grid',actor:owner.requesterSenderId,record_id:'grid-demo:7',before:[[{numberValue:12},null]],after:[[{stringValue:'=literal'},null]],preview_digest:'grid-digest',expires_at:'2099-01-01T00:00:00Z'};
+ const requests:Request[]=[];const transport=spyOn(globalThis,'fetch').mockImplementation(async(url,init)=>{requests.push(new Request(url,init));return Response.json({ok:true,data:requests.length===1?p:{state:'approved'}});});
+ try{const bridge=createSecretary(options);const shown=await bridge.execute('sheets_preview_change',input,owner) as any;shown.data.after[0][0].stringValue='altered';const approval=(await bridge.prepareApproval('sheets_update',{operation_id:input.operation_id},owner))!;expect(approval.description).toContain(JSON.stringify(p,null,2));await approval.onResolution('allow-once');expect(await requests[1].json()).toEqual({decision:'approve',preview_digest:'grid-digest'});}finally{transport.mockRestore();}
+ const bad=spyOn(globalThis,'fetch').mockResolvedValue(Response.json({ok:true,data:{...p,fields:{range:'B3:C3',values:input.fields.values}}}));
+ try{await expect(createSecretary(options).execute('sheets_preview_change',input,owner)).rejects.toThrow('INVALID_CORE_RESPONSE');}finally{bad.mockRestore();}
+});

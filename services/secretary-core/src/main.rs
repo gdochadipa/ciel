@@ -32,7 +32,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 GoogleAccess::None
             } else if enabled
                 && registry.spreadsheets.iter().any(|s| {
-                    s.readable && (s.create_tabs || s.views.iter().any(|v| v.structured()))
+                    s.readable
+                        && (s.create_tabs
+                            || s.views
+                                .iter()
+                                .any(|v| v.structured() || v.writable_range.is_some()))
                 })
             {
                 GoogleAccess::Write
