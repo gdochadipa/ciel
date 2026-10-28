@@ -93,3 +93,10 @@ Qualified disposable environment: `/private/tmp/secretary-qualified-3xjcv7r_` (p
 Workbook `docs/Persiapan Nikah.xlsx` remains unchanged: SHA-256 `b24351dbda4c69a7cbf5f14d9b18d7fbbc983deff406e8dad3607f6bcd196de3`.
 
 Continue from material unresolved gates using target-specific evidence. Do not invent custom memory work or treat SDK package validation as live activation. Current local capability implementation includes T025; target-host qualification remains T007.
+
+
+## Current continuation — publication verified, T027 selected
+
+GitHub API inspection verified both main and integration/secretary-mvp at `30d4dfae68547684e5e02999b94051e9f9b05e9d` following the operator's push. Hosted workflow https://github.com/gdochadipa/ciel/actions/runs/40629373802 was observed in progress; source checks passed, full verify was still running at inspection. This supersedes earlier publication-pending entries, without establishing a final CI pass.
+
+The owner explicitly deferred VPS cloning/installation and selected [T027](.scratch/secretary-mvp/T027.md), controlled edits of registered grid cells/ranges, for local development. Its initial bounds and safety requirements are recorded; implementation/tests have not started. Existing generic grids remain read-only. No production flags or external targets changed.
