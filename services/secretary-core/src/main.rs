@@ -1,7 +1,16 @@
 use secretary_core::google::GoogleAccess;
 use secretary_core::{router, AppState, GoogleClient, Registry};
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    if !args.is_empty() {
+        let (body, status) = secretary_core::presentation::registry_cli::run(&args);
+        println!("{body}");
+        std::process::exit(status);
+    }
+    serve()
+}
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn serve() -> Result<(), Box<dyn std::error::Error>> {
     let registry: Registry =
         serde_json::from_slice(&std::fs::read(std::env::var("SECRETARY_CONFIG")?)?)?;
     let enabled = std::env::var("SECRETARY_WRITES_ENABLED").as_deref() == Ok("true");

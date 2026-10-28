@@ -107,3 +107,7 @@ git -C /private/tmp/openclaw-secretary-implementation.on4Zt7 push -u origin --at
 ```
 
 Verify the actual remote SHAs after a successful push before treating the local revision as published. This command does not clone/install on the VPS or qualify live capabilities.
+
+## Offline registry preparation
+
+The native Core binary supports registry init --output PATH and registry check --config PATH before any runtime environment/credential loading. Init creates a new inactive draft (never replacing an existing file); check uses the same Rust registry rules as service startup and reports only aggregate counts. Neither command starts/activates/installs/reloads anything or verifies live Google access. Use [offline registry setup](registry-setup.md); preflight and T007 gates remain mandatory for a later authorized host installation.

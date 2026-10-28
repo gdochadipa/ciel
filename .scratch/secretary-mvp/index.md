@@ -6,6 +6,7 @@ User instruction: implement locally using medium-effort agents; subsequently rev
 
 | Ticket | Depends on | Status | Outcome |
 | --- | --- | --- | --- |
+| T030 Offline registry setup | T023,T026,T029 | accepted locally: full suite + seven scenarios + Standards/Spec review; live T007 open | Shared Rust validator, sanitized summaries and inactive non-overwriting template; no live actions. |
 | T029 Case-insensitive Docs search | T028 | accepted locally: full suite + seven scenarios + Standards/Spec review; live T007 open | Optional Unicode case folding; preserve original spans and legacy default/cursors; no live actions. |
 | T028 Registered Docs text search | T023 | accepted locally: full suite + seven scenarios + Standards/Spec review; live T007 open | Bounded read-only literal search, source-bound pages and snippets; CI/VPS deferred. |
 | T027 Controlled grid edits | T023, T025 | accepted locally: full suite + seven scenarios + Standards/Spec review; live T007 open | Explicit bounded write registration; literal update through shared preview/approval/FSM; preserve formulas/merges; no live actions. |
