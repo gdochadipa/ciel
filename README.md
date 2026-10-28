@@ -20,3 +20,5 @@ The Rust Core now uses domain/application/infrastructure/presentation layers wit
 Use [the generic workspace example](config/workspace.example.json) for registered grids and Docs. The first Docs edit capabilities are approved append text and one-match text replacement on a selected supported tab. [Capability notes](docs/specs/workspace-capabilities.md) document bounds, compatibility and live qualification still required.
 
 T025 adds preview/approval-based tab creation inside registered spreadsheets (`create_tabs` defaults false). New tabs remain unregistered for reads/writes until the operator explicitly configures bounded access. No new spreadsheet files are created; see [Workspace capabilities](docs/specs/workspace-capabilities.md).
+
+For the owner-selected GitHub → VPS checkout → installer flow, see [installation](docs/installation.md). The CLI stages a reviewed native release and installs inactive files separately; it never starts services, activates plugins or changes production qualification flags.

@@ -51,8 +51,10 @@ The SDK archive is under the disposable checkout's `plugins/secretary-tools/dist
 
 This session's approved direct Docker commands worked, while Docker invoked from a sandboxed shell wrapper could not reach the daemon. A user terminal with Docker access can use the helper above; agents may need equivalent direct Docker invocations. Native macOS registry DNS/loopback restrictions were not changed.
 
-The verification script includes 13 Python operator CLI tests; the Rust suite includes a real Core WAL backup/restore check. These use disposable local files and never require live credentials.
+The verification script includes 23 Python CLI tests (13 operator + ten installer); the Rust suite includes a real Core WAL backup/restore check. These use disposable local files and never require live credentials.
 
 Full local checks passed; live VPS/Google OAuth, trusted owner approval UI, native scheduler persistence, WhatsApp routing, backup/restore and hosted CI remain separate gates in [implementation status](implementation-status.md). Memory remains owned by OpenClaw and all live capability flags remain off.
 
 The repository's full CI job now installs Postman CLI1.75.0 with lifecycle scripts disabled and runs the same `scripts/acceptance-all.sh` gate after local verification. It requires no Postman login, API key or live credentials, and publishes nothing. The acceptance step has a ten-minute ceiling; the job has a thirty-minute ceiling. Local sequential execution passed in T023; hosted CI remains unobserved.
+
+T026 adds a real installer exercise using a disposable clone of the retained history, the same actual frozen dependency cache and no external network. Staging explicitly selects the Rust host target, then native file installation runs only under a disposable `--root`; config/state preservation, hash verification and replay pass. The installed host/Systemd/Google are not qualified. See [installation](installation.md) and [T026](../.scratch/secretary-mvp/T026.md) for exact CLI boundaries and evidence.

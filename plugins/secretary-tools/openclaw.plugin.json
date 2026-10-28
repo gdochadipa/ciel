@@ -42,6 +42,8 @@
       "docs_preview_change",
       "docs_apply",
       "operations_get_history",
+      "sheets_preview_create_tab",
+      "sheets_create_tab",
       "sheets_list",
       "sheets_describe",
       "sheets_read",
@@ -58,9 +60,7 @@
       "reminders_pause",
       "reminders_resume",
       "reminders_cancel",
-      "reminders_history",
-      "sheets_preview_create_tab",
-      "sheets_create_tab"
+      "reminders_history"
     ]
   }
 }
