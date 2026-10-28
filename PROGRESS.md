@@ -53,6 +53,12 @@ The T025 runtime was rebuilt and packed with the actual SDK: 25 tools, three reg
 
 The owner supplied a session SSH target for read-only inventory and requires dynamic operator selection. No target IP/user/key is written into source or runtime configuration. Plugin → Core stays loopback on the installed VPS (`coreUrl` configurable); SSH is only operator transport. The agent's SSH attempt was blocked locally (`Operation not permitted`) before authentication, so no host command ran. Git remote/hosted runner is still absent. T007 remains open; no live capability flag changed. Low-effort review of this documentation/evidence commit passed both Standards and Spec with no material findings. No runtime code changed; verification used the actual CLI pack/schema/archive exercises above plus local-link/JSON/whitespace and artifact-content checks, rather than rerunning unchanged application suites.
 
+## Operator-reported VPS runtime evidence
+
+On 2026-10-28 the owner ran the requested read-only checks on the selected VPS and reported Node `v24.22.1`, OpenClaw `2026.10.7 (157d8c2)`, and `openclaw config validate --json` with `valid: true`, `warnings: []`. The versions match the pinned local runtime; the active host configuration passes schema validation. This is operator-reported target execution, not agent SSH access or a local fixture. No config contents, credentials or tokens were supplied.
+
+This partially advances T007 runtime prerequisites only. It does not establish installation/loading/activation of `secretary-tools`, its 25 tools or trusted hook, Core service availability, model entitlement, effective owner/outbound/memory policy, Google integration or scheduler/recovery/delivery. Next: metadata-only `openclaw plugins inspect secretary-tools --json` (omit `--runtime`) and Core service load/active/substate inspection. No installation, reload, service start or capability activation is implied. The qualification example and production write/approval/scheduler defaults remain unchanged.
+
 ## Remaining live gates
 
 1. Qualify the actual VPS, pinned plugin activation (25 tools), model entitlement and disposable Sheets/Docs scopes/API/ACL/read/write preservation. Docs qualification must include explicit tabs, required revisions and reconciliation before activation.
