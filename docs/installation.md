@@ -94,3 +94,16 @@ The operator's publication of 30d4dfa is verified on GitHub main and integration
 A clean clone of 5d6e135 passed actual offline/locked native Linux ARM64 staging/verification/reuse and disposable-root installation/replay, preserving synthetic config/state and MIT notices. Format 2 contains eleven hashed payloads and a three-file, 25-tool plugin archive (37889 bytes; SHA-256 acd1ccf1ab1304cbd8f526d8062bce45af39bd78c4136d1a5fd3623b1fb4959c). The private receipt binds that code revision; a later documentation-only commit does not change its provenance. This is local evidence only; build natively for the selected VPS and retain all T007 gates.
 
 T028 adds read-only docs_search as the 26th registered tool. Current installer validation requires that tool/count and retains disabled approval/scheduler defaults. Historical25-tool receipts above remain bound to their tested code; they do not prove the new package.
+
+## Current owner instruction: publish with Actions deferred
+
+The owner authorized publication after T028 and continues to defer GitHub Actions. A separate documentation commit containing [skip ci] preserves that choice for the checked-in push/pull_request workflow without changing workflow or protection configuration. GitHub documents this mechanism in [Skipping workflow runs](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/skip-workflow-runs). It does not claim CI success or bypass required branch checks; if a policy blocks the non-force update, use the repository's permitted review flow and retain its protections.
+
+Native Git currently fails DNS resolution and gh authentication is invalid in the agent session. When publication cannot run there, use an already authenticated normal operator terminal on this development computer, with Git's normal credential helper; never paste tokens or private keys into a message. The prepared command is:
+
+```sh
+git -C /private/tmp/openclaw-secretary-implementation.on4Zt7 push -u origin --atomic \
+  integration/secretary-mvp integration/secretary-mvp:main
+```
+
+Verify the actual remote SHAs after a successful push before treating the local revision as published. This command does not clone/install on the VPS or qualify live capabilities.
