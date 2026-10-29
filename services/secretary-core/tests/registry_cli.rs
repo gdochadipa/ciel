@@ -597,3 +597,219 @@ fn addition_inputs_and_complete_candidates_remain_bounded_and_sanitized() {
     );
     assert!(!candidate.exists());
 }
+
+#[test]
+fn add_grid_view_registers_a_new_tab_without_changing_parent_permissions_or_old_views() {
+    for readable in [true, false] {
+        let f = Fixture::new();
+        let base = f.0.join("base.json");
+        let mut original: Value =
+            serde_json::from_str(include_str!("../../../config/workspace.example.json")).unwrap();
+        original["spreadsheets"][0]["readable"] = json!(readable);
+        original["spreadsheets"][0]["create_tabs"] = json!(readable);
+        if readable {
+            original["spreadsheets"][0]["views"][0]["writable_range"] = json!("B2:C8");
+        }
+        let before = original.to_string();
+        std::fs::write(&base, &before).unwrap();
+        let addition = f.0.join("PRIVATE_ADDITION_CANARY.json");
+        let intent = json!({"version":"PRIVATE_NEW_VERSION_CANARY","resource":{"kind":"grid_view","spreadsheet":"operations","view":{"name":"PRIVATE_VIEW_CANARY","sheet_id":8,"title":"PRIVATE_TITLE_CANARY","range":"A1:D20"}}}).to_string();
+        std::fs::write(&addition, &intent).unwrap();
+        let candidate = f.0.join("candidate.json");
+        let result = f.add(&base, &addition, &candidate);
+        assert!(result.status.success(), "{}", data(&result));
+        let body = data(&result);
+        assert_eq!(body["summary"]["spreadsheets"], 1);
+        assert_eq!(body["summary"]["views"], 2);
+        assert_eq!(
+            body["summary"]["readable_spreadsheets"],
+            if readable { 1 } else { 0 }
+        );
+        assert_eq!(
+            body["summary"]["configured_write_permissions"]["grid_ranges"],
+            if readable { 1 } else { 0 }
+        );
+        assert_eq!(body["activation_changed"], false);
+        assert_eq!(body["live_access_checked"], false);
+        assert!(result.stderr.is_empty());
+        assert!(!String::from_utf8_lossy(&result.stdout).contains("CANARY"));
+        let draft: Value = serde_json::from_slice(&std::fs::read(&candidate).unwrap()).unwrap();
+        let mut expected = original;
+        expected["version"] = json!("PRIVATE_NEW_VERSION_CANARY");
+        expected["spreadsheets"][0]["views"].as_array_mut().unwrap().push(json!({"name":"PRIVATE_VIEW_CANARY","sheet_id":8,"title":"PRIVATE_TITLE_CANARY","range":"A1:D20","kind":"grid","headers":{},"merges":[],"formulas":{}}));
+        assert_eq!(draft, expected);
+        assert_eq!(std::fs::read_to_string(&base).unwrap(), before);
+        assert_eq!(std::fs::read_to_string(&addition).unwrap(), intent);
+        assert!(f
+            .run(&["registry", "check", "--config", candidate.to_str().unwrap()])
+            .status
+            .success());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(candidate).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+    }
+}
+
+#[test]
+fn add_grid_view_rejects_missing_parents_and_conflicting_tab_mappings_without_creating_output() {
+    let f = Fixture::new();
+    let base = f.0.join("base.json");
+    let before = include_str!("../../../config/workspace.example.json");
+    std::fs::write(&base, before).unwrap();
+    let addition = f.0.join("addition.json");
+    let candidate = f.0.join("candidate.json");
+    for (alias, id, title, code) in [
+        (
+            "PRIVATE_MISSING_CANARY",
+            8,
+            "Stock",
+            "registry_spreadsheet_not_found",
+        ),
+        ("notes", 8, "Stock", "registry_spreadsheet_not_found"),
+        (
+            "operations",
+            7,
+            "PRIVATE_CHANGED_TITLE_CANARY",
+            "registry_view_identity_conflict",
+        ),
+        (
+            "operations",
+            8,
+            "Operations",
+            "registry_view_identity_conflict",
+        ),
+        (
+            "operations",
+            8,
+            "operations",
+            "registry_view_identity_conflict",
+        ),
+    ] {
+        let intent = json!({"version":"v2","resource":{"kind":"grid_view","spreadsheet":alias,"view":{"name":"new","sheet_id":id,"title":title,"range":"A1:D20"}}}).to_string();
+        std::fs::write(&addition, &intent).unwrap();
+        let result = f.add(&base, &addition, &candidate);
+        assert_eq!(result.status.code(), Some(1));
+        assert_eq!(data(&result)["error"]["code"], code);
+        assert!(!candidate.exists());
+        assert_eq!(std::fs::read_to_string(&base).unwrap(), before);
+        assert_eq!(std::fs::read_to_string(&addition).unwrap(), intent);
+        assert!(result.stderr.is_empty());
+        assert!(!String::from_utf8_lossy(&result.stdout).contains("CANARY"));
+    }
+}
+
+#[test]
+fn add_grid_view_accepts_another_range_on_the_same_tab_and_refuses_replay_or_overwrite() {
+    let f = Fixture::new();
+    let base = f.0.join("base.json");
+    let before = include_str!("../../../config/workspace.example.json");
+    std::fs::write(&base, before).unwrap();
+    let addition = f.0.join("addition.json");
+    let mut intent = json!({"version":"v2","resource":{"kind":"grid_view","spreadsheet":"operations","view":{"name":"second-range","sheet_id":7,"title":"Operations","range":"A1:A2"}}});
+    std::fs::write(&addition, intent.to_string()).unwrap();
+    let candidate = f.0.join("candidate.json");
+    assert!(f.add(&base, &addition, &candidate).status.success());
+    let bytes = std::fs::read(&candidate).unwrap();
+    let draft: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(draft["spreadsheets"][0]["views"][1]["range"], "A1:A2");
+    assert_eq!(draft["spreadsheets"][0]["views"][1]["sheet_id"], 7);
+    assert_eq!(
+        data(&f.add(&base, &addition, &candidate))["error"]["code"],
+        "output_exists"
+    );
+    for path in [&base, &addition] {
+        assert_eq!(
+            data(&f.add(&base, &addition, path))["error"]["code"],
+            "output_exists"
+        );
+    }
+    #[cfg(unix)]
+    {
+        let link = f.0.join("link.json");
+        std::os::unix::fs::symlink(&base, &link).unwrap();
+        assert_eq!(
+            data(&f.add(&base, &addition, &link))["error"]["code"],
+            "output_exists"
+        );
+        assert!(std::fs::symlink_metadata(link)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+    }
+    assert_eq!(std::fs::read(&candidate).unwrap(), bytes);
+    assert_eq!(std::fs::read_to_string(&base).unwrap(), before);
+    intent["version"] = json!("v3");
+    std::fs::write(&addition, intent.to_string()).unwrap();
+    let next = f.0.join("next.json");
+    assert_eq!(
+        data(&f.add(&candidate, &addition, &next))["error"]["code"],
+        "registry_invalid_view"
+    );
+    assert!(!next.exists());
+}
+
+#[test]
+fn add_grid_view_obeys_shared_view_bounds_and_cannot_inject_permissions_or_provider_fields() {
+    let f = Fixture::new();
+    let base = f.0.join("base.json");
+    let original: Value =
+        serde_json::from_str(include_str!("../../../config/workspace.example.json")).unwrap();
+    std::fs::write(&base, original.to_string()).unwrap();
+    let addition = f.0.join("addition.json");
+    let candidate = f.0.join("candidate.json");
+    let valid = json!({"version":"v2","resource":{"kind":"grid_view","spreadsheet":"operations","view":{"name":"second","sheet_id":7,"title":"Operations","range":"A1:A2"}}});
+    for (field, value, code) in [
+        ("name", json!("overview"), "registry_invalid_view"),
+        ("sheet_id", json!(-1), "registry_invalid_view"),
+        ("range", json!("A1:Z10000"), "registry_invalid_grid_range"),
+        ("writable_range", json!("A1:A2"), "registry_schema_invalid"),
+        (
+            "write_schema",
+            json!({"PRIVATE_CANARY":true}),
+            "registry_schema_invalid",
+        ),
+        ("readable", json!(true), "registry_schema_invalid"),
+        ("kind", json!("structured_tasks"), "registry_schema_invalid"),
+        (
+            "sheet_id",
+            json!("PRIVATE_CANARY"),
+            "registry_schema_invalid",
+        ),
+    ] {
+        let mut intent = valid.clone();
+        intent["resource"]["view"][field] = value;
+        // Use a distinct title for invalid negative ID to isolate the Core ID rule.
+        if field == "sheet_id" && intent["resource"]["view"]["sheet_id"] == -1 {
+            intent["resource"]["view"]["title"] = json!("New");
+        }
+        std::fs::write(&addition, intent.to_string()).unwrap();
+        let result = f.add(&base, &addition, &candidate);
+        assert_eq!(data(&result)["error"]["code"], code);
+        assert!(!candidate.exists());
+        assert!(result.stderr.is_empty());
+        assert!(!String::from_utf8_lossy(&result.stdout).contains("CANARY"));
+    }
+    let mut full = original;
+    for n in 1..10 {
+        let mut view = full["spreadsheets"][0]["views"][0].clone();
+        view["name"] = json!(format!("old-{n}"));
+        full["spreadsheets"][0]["views"]
+            .as_array_mut()
+            .unwrap()
+            .push(view);
+    }
+    let before = full.to_string();
+    std::fs::write(&base, &before).unwrap();
+    std::fs::write(&addition, valid.to_string()).unwrap();
+    assert_eq!(
+        data(&f.add(&base, &addition, &candidate))["error"]["code"],
+        "registry_invalid_spreadsheet"
+    );
+    assert!(!candidate.exists());
+    assert_eq!(std::fs::read_to_string(&base).unwrap(), before);
+}

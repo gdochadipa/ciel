@@ -145,6 +145,10 @@ enum Resource {
         id: String,
         views: Vec<GridRegistration>,
     },
+    GridView {
+        spreadsheet: String,
+        view: GridRegistration,
+    },
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -153,6 +157,22 @@ struct GridRegistration {
     sheet_id: i64,
     title: String,
     range: String,
+}
+impl GridRegistration {
+    fn into_read_only_view(self) -> View {
+        View {
+            name: self.name,
+            sheet_id: self.sheet_id,
+            title: self.title,
+            range: self.range,
+            kind: Kind::Grid,
+            headers: Default::default(),
+            merges: Vec::new(),
+            formulas: Default::default(),
+            writable_range: None,
+            write_schema: None,
+        }
+    }
 }
 fn add(base: &Path, resource: &Path, output: &Path) -> Result<Registry, &'static str> {
     let mut registry = load(base)?;
@@ -178,20 +198,24 @@ fn add(base: &Path, resource: &Path, output: &Path) -> Result<Registry, &'static
             create_tabs: false,
             views: views
                 .into_iter()
-                .map(|grid| View {
-                    name: grid.name,
-                    sheet_id: grid.sheet_id,
-                    title: grid.title,
-                    range: grid.range,
-                    kind: Kind::Grid,
-                    headers: Default::default(),
-                    merges: Vec::new(),
-                    formulas: Default::default(),
-                    writable_range: None,
-                    write_schema: None,
-                })
+                .map(GridRegistration::into_read_only_view)
                 .collect(),
         }),
+        Resource::GridView { spreadsheet, view } => {
+            let parent = registry
+                .spreadsheets
+                .iter_mut()
+                .find(|s| s.alias == spreadsheet)
+                .ok_or("registry_spreadsheet_not_found")?;
+            if parent.views.iter().any(|existing| {
+                (existing.sheet_id == view.sheet_id && existing.title != view.title)
+                    || (existing.sheet_id != view.sheet_id
+                        && existing.title.eq_ignore_ascii_case(&view.title))
+            }) {
+                return Err("registry_view_identity_conflict");
+            }
+            parent.views.push(view.into_read_only_view());
+        }
     }
     registry
         .validate()

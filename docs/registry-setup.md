@@ -2,7 +2,7 @@
 
 Use the same secretary-core binary to prepare/check a local registry without credentials, environment files, Google access, a journal or a listener. These are one-shot operator commands, separate from no-argument service startup and production preflight. The plugin still has 26 tools; it does not receive a configuration-editing tool.
 
-Init/check require a reviewed Core build from T030 or later; add requires T031 or later. Verify the checkout/release receipt before execution: historical T027/T029 native artifacts do not establish CLI support. Older Core builds ignore command arguments and must not be probed with these offline commands. From a reviewed current checkout, `cargo run --offline --locked -p secretary-core -- registry ...` selects the current source build.
+Init/check require a reviewed Core build from T030 or later; new-resource add requires T031 or later; grid_view additions require T032 or later. Verify the checkout/release receipt before execution: historical T027/T029 native artifacts do not establish CLI support. Older Core builds ignore command arguments and must not be probed with these offline commands. From a reviewed current checkout, `cargo run --offline --locked -p secretary-core -- registry ...` selects the current source build.
 
 A reviewed 42f18d5 Linux ARM64 release has now passed staging/hash verification, disposable installation and installed registry init/check exercises without valid credentials or runtime state. This confirms CLI support only for that tested native artifact; verify the independently selected release receipt and target CPU/libc before use. It is not a VPS installation or live qualification.
 
@@ -65,11 +65,37 @@ secretary-core registry add \
 secretary-core registry check --config "$secretary_registry_dir/candidate.json"
 ```
 
-Version must be nonblank and differ from the base. The candidate preserves existing resources/permissions semantically and appends one new resource; it does not reformat or modify the source files. New Docs are readable=false/writable=false; new Sheets are readable=false/create_tabs=false, with generic grid views and no write permissions. Permission fields in the addition are rejected rather than silently accepted. Existing init placeholders remain in a base created by init; edit/remove those synthetic placeholders deliberately before selecting a draft for real use. An empty base `{"version":"workspace-v1","spreadsheets":[],"documents":[]}` is also valid.
+Version must be nonblank and differ from the base. For document/spreadsheet additions, the candidate preserves existing resources/permissions semantically and appends one new resource; it does not reformat or modify the source files. New Docs are readable=false/writable=false; new Sheets are readable=false/create_tabs=false, with generic grid views and no write permissions. Permission fields in the addition are rejected rather than silently accepted. Existing init placeholders remain in a base created by init; edit/remove those synthetic placeholders deliberately before selecting a draft for real use. An empty base `{"version":"workspace-v1","spreadsheets":[],"documents":[]}` is also valid.
 
 Both input files use the same bounded safe reads as check. The entire candidate is validated and capped at 1 MiB before an exclusive 0600-or-stricter output is created. Existing paths, including either input and final symlinks, cannot be overwritten. Repeating the same output returns output_exists; adding the same resource to a later candidate is rejected by version/uniqueness rules. To add another resource, use the previous candidate as --config, a fresh version and a fresh --output path. A disk/write failure can leave a partial new output, as with init.
 
-Aliases and IDs must be unique across Sheets and Docs; view names must be unique within each spreadsheet. There is no merge/replace/suffix behavior. To add a tab view to an already registered spreadsheet, edit that draft explicitly and increment its version; add currently registers new resources only. No Google file/tab is created. Review the candidate locally before separately authorized installation or permission changes. Readable Docs still requires its own T007 evidence; Sheets evidence does not qualify Docs. The older 42f18d5 release receipt covers init/check only, not add.
+Aliases and IDs must be unique across Sheets and Docs; view names must be unique within each spreadsheet. There is no merge/replace/suffix behavior. T032 also supports adding a grid view to an existing spreadsheet as described below. No Google file/tab is created. Review the candidate locally before separately authorized installation or permission changes. Readable Docs still requires its own T007 evidence; Sheets evidence does not qualify Docs. The older 42f18d5 release receipt covers init/check only, not add.
+
+## Add a tab/range view to an existing draft spreadsheet
+
+With a reviewed T032-or-later Core, use the same registry add command and save this shape in the private addition.json file (synthetic values):
+
+```json
+{
+  "version": "workspace-v4",
+  "resource": {
+    "kind": "grid_view",
+    "spreadsheet": "inventory",
+    "view": {
+      "name": "incoming-stock",
+      "sheet_id": 8,
+      "title": "Incoming",
+      "range": "A1:D20"
+    }
+  }
+}
+```
+
+Select the exact existing spreadsheet alias, not its Google ID, URL or a Docs alias. The parent may be readable or inactive. One new generic grid view is appended; its parent's ID/readable/create_tabs flags, previous views, Docs and existing write grants remain unchanged. No writable_range/write_schema or permission fields are accepted. The view inherits the parent's readable flag in the candidate: adding it to a readable parent explicitly registers the bounded range for reads if that candidate is later installed. Adding it to an inactive parent keeps it inaccessible. There is no separate per-view readable switch. Existing write permissions on overlapping views remain as declared; this operation adds none.
+
+A new tab identity is allowed. Another named range on an already mapped tab is also allowed when its numeric sheet_id and exact title agree. The CLI rejects same ID/different title and same ASCII-case-insensitive title/different ID, without guessing a rename. Duplicate view names and more than ten views are rejected by Core. No old view is replaced or silently renamed. These local checks do not prove that the tab exists or matches live metadata; verify it separately. This command creates no Google tab, file or cells.
+
+Use a changed version, the draft containing that spreadsheet as --config, and a fresh --output path. The same safe input, candidate validation/size/privacy and no-overwrite rules apply. Replaying into the same output fails; reapplying the same view name to a later candidate fails instead of duplicating it. The active configuration is never edited/reloaded. Older T030/T031 artifacts do not qualify grid_view support, and no T032 native installed-release receipt is claimed.
 
 ## Check a draft
 
@@ -82,6 +108,8 @@ The JSON response reports offline validity and aggregate resource/readable/confi
 | Exit 0, ok:true | Local validation passed, or a new draft/candidate was created (existing grants may be retained). |
 | Exit 1, registry_json_invalid | Invalid/incomplete JSON; inspect the private file locally. |
 | Exit 1, registry_schema_invalid | Wrong field/type/unknown or duplicate key; use the documented input structure. |
+| Exit 1, registry_spreadsheet_not_found | grid_view must select an existing spreadsheet alias. |
+| Exit 1, registry_view_identity_conflict | New view contradicts an existing tab ID/title mapping; inspect the private draft locally. |
 | Exit 1, registry_version_unchanged | Choose a different candidate version. |
 | Exit 1, registry_bounds | Empty version or too many resources; add also rejects whitespace-only versions. |
 | Exit 1, registry_invalid_document/spreadsheet/view/grid_write_range/grid_range or registry_invalid | Existing Core registry rules rejected registration; inspect uniqueness, bounds and permission relationships. |
