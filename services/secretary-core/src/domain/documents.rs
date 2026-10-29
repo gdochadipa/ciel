@@ -179,6 +179,9 @@ pub fn snapshot(doc: &Document, value: &Value) -> Result<Snapshot, CoreError> {
         fingerprint: fingerprint(value),
     })
 }
+pub fn read_binding(snapshot: &Snapshot, tab_id: &str, version: &str) -> String {
+    fingerprint(&json!([snapshot.id, tab_id, snapshot.fingerprint, version]))
+}
 pub fn matches(p: &Preview, c: &DocChange, owner: &str) -> bool {
     p.resource_kind == ResourceKind::GoogleDocs
         && p.operation_id == c.operation_id

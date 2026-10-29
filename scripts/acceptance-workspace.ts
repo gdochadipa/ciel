@@ -31,6 +31,7 @@ export async function runWorkspaceAcceptance(coreUrl:string,docsUrl:string) {
  assert.equal((await tool('docs_describe',{document:'not-registered'})).error.code,'document_not_registered');
  await assert.rejects(bridge.execute('docs_read',{document:'notes',tab_id:'t.0'},{}),/OWNER_REQUIRED/);
  const described=await tool('docs_describe',{document:'notes'});assert.equal(described.data.tabs.length,2);
+ const context=await tool('docs_read',{document:'notes',mode:'summary_context',max_characters:100});assert.equal(context.ok,true);assert.equal(context.data.excerpts[0].excerpt_id,'S1');assert.equal(context.data.excerpts[0].text,'Hello sample\n');assert.equal(context.data.coverage.projected_text_complete,true);assert.equal(context.data.source.document_id,'demo-document');assert.equal(context.data.content_role,'untrusted_source_data');
  const first=await tool('docs_read',{document:'notes',tab_id:'t.0',limit:2});assert.equal(first.data.text,'He');assert(first.data.next_cursor);
  const next=await tool('docs_read',{document:'notes',tab_id:'t.0',limit:2,cursor:first.data.next_cursor});assert.equal(next.data.text,'ll');
  const found=await tool('docs_search',{document:'notes',query:'e',limit:1});assert.equal(found.ok,true);assert(found.data.next_cursor);assert.equal(found.data.matches[0].tab_id,'t.0');

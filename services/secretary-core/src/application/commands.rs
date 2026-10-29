@@ -7,6 +7,7 @@ pub enum Command {
     DocsList,
     DocsDescribe(DocumentRequest),
     DocsRead(DocumentRead),
+    DocsSummary(DocumentSummary),
     DocsSearch(DocumentSearch),
     List,
     Describe(Describe),
@@ -37,6 +38,25 @@ pub enum MutationCommand {
 #[serde(deny_unknown_fields)]
 pub struct DocumentRequest {
     pub document: String,
+}
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum DocumentReadRequest {
+    Tab(DocumentRead),
+    Summary(DocumentSummary),
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SummaryContextMode {
+    SummaryContext,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DocumentSummary {
+    pub document: String,
+    pub mode: SummaryContextMode,
+    #[serde(default, deserialize_with = "non_null_option")]
+    pub max_characters: Option<usize>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

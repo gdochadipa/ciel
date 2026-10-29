@@ -2282,7 +2282,7 @@
     "/v1/tools/docs_read": {
       "post": {
         "operationId": "docs_read",
-        "description": "Read at most limit Unicode characters of body text, default 2000. Cursor binds document/tab, registry version and source fingerprint; source changes cause stale_cursor. Non-text/layout/headers are not reproduced.",
+        "description": "Read at most limit Unicode characters of body text, default 2000. Cursor binds document/tab, registry version and source fingerprint; source changes cause stale_cursor. Non-text/layout/headers are not reproduced. For source-backed summaries use mode summary_context with document and optional max_characters100\u201310000(default6000), omitting tab_id/limit/cursor. Core returns bounded untrusted source data, not generated prose; OpenClaw uses its existing model. Fairly allocate prefix excerpts across every nonempty projected body tab, redistribute unused allocations, return S1..Sn citation labels, source identities/revision/fingerprint/mapping/retrieval evidence, original Unicode-scalar offsets, and legacy docs_read continuation cursors for partial tabs. Explicit projected-body coverage/omissions; no layout/header/footer/non-text completeness claim. Packet <=256KiB, error rather than truncate evidence. No model endpoint, scope, memory, journal, mutation or extra tool.",
         "security": [
           {
             "CoreBearer": []
@@ -2315,13 +2315,67 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 8192
+                  },
+                  "mode": {
+                    "const": "summary_context"
+                  },
+                  "max_characters": {
+                    "type": "integer",
+                    "minimum": 100,
+                    "maximum": 10000,
+                    "default": 6000,
+                    "description": "Global projected Unicode-scalar excerpt budget for summary_context; omit tab_id/limit/cursor."
                   }
                 },
                 "required": [
-                  "document",
-                  "tab_id"
+                  "document"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "required": [
+                      "tab_id"
+                    ],
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "mode"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "max_characters"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "required": [
+                      "mode"
+                    ],
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "tab_id"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "limit"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "cursor"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
               }
             }
           }
@@ -2338,7 +2392,231 @@
                       "const": true
                     },
                     "data": {
-                      "type": "object"
+                      "oneOf": [
+                        {
+                          "type": "object"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "const": "summary_context"
+                            },
+                            "content_role": {
+                              "const": "untrusted_source_data"
+                            },
+                            "context_id": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{64}$"
+                            },
+                            "source": {
+                              "type": "object",
+                              "properties": {
+                                "document": {
+                                  "type": "string"
+                                },
+                                "document_id": {
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "type": "string",
+                                  "maxLength": 200
+                                },
+                                "revision_id": {
+                                  "type": "string"
+                                },
+                                "source_fingerprint": {
+                                  "type": "string"
+                                },
+                                "mapping_version": {
+                                  "type": "string"
+                                },
+                                "retrieved_at": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "document",
+                                "document_id",
+                                "title",
+                                "revision_id",
+                                "source_fingerprint",
+                                "mapping_version",
+                                "retrieved_at"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "tabs": {
+                              "type": "array",
+                              "minItems": 1,
+                              "maxItems": 100,
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "tab_id": {
+                                    "type": "string",
+                                    "maxLength": 200
+                                  },
+                                  "title": {
+                                    "type": "string",
+                                    "maxLength": 200
+                                  },
+                                  "total_characters": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 131072
+                                  },
+                                  "included_characters": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 10000
+                                  },
+                                  "truncated": {
+                                    "type": "boolean"
+                                  },
+                                  "excerpt_id": {
+                                    "oneOf": [
+                                      {
+                                        "type": "string",
+                                        "pattern": "^S[1-9][0-9]*$",
+                                        "maxLength": 4
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "tab_id",
+                                  "title",
+                                  "total_characters",
+                                  "included_characters",
+                                  "truncated",
+                                  "excerpt_id"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "excerpts": {
+                              "type": "array",
+                              "maxItems": 100,
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "excerpt_id": {
+                                    "type": "string",
+                                    "pattern": "^S[1-9][0-9]*$",
+                                    "maxLength": 4
+                                  },
+                                  "text": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 10000
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "tab_id": {
+                                        "type": "string",
+                                        "maxLength": 200
+                                      },
+                                      "start_character": {
+                                        "const": 0
+                                      },
+                                      "end_character": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 10000
+                                      },
+                                      "next_cursor": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "tab_id",
+                                      "start_character",
+                                      "end_character",
+                                      "next_cursor"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "excerpt_id",
+                                  "text",
+                                  "source"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "coverage": {
+                              "type": "object",
+                              "properties": {
+                                "scope": {
+                                  "const": "projected_body_text_only"
+                                },
+                                "total_characters": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 131072
+                                },
+                                "included_characters": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 10000
+                                },
+                                "omitted_characters": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 131072
+                                },
+                                "total_tabs": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 100
+                                },
+                                "included_tabs": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 100
+                                },
+                                "projected_text_complete": {
+                                  "type": "boolean"
+                                },
+                                "can_summarize": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "additionalProperties": false,
+                              "required": [
+                                "scope",
+                                "total_characters",
+                                "included_characters",
+                                "omitted_characters",
+                                "total_tabs",
+                                "included_tabs",
+                                "projected_text_complete",
+                                "can_summarize"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "mode",
+                            "content_role",
+                            "context_id",
+                            "source",
+                            "tabs",
+                            "excerpts",
+                            "coverage"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
                     }
                   },
                   "required": [

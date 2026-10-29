@@ -1,7 +1,9 @@
 //! Google Docs queries and controlled mutations through the shared bus and journal.
 use super::{
     bus::CommandBus,
-    commands::{DocumentRead, DocumentSearch, MultiDocumentSearch, SingleDocumentSearch},
+    commands::{
+        DocumentRead, DocumentSearch, DocumentSummary, MultiDocumentSearch, SingleDocumentSearch,
+    },
     ports::WriteOutcome,
     writes::Writes,
 };
@@ -23,6 +25,31 @@ pub async fn describe(bus: &CommandBus, alias: &str) -> Result<Value, CoreError>
         json!({"document":alias,"document_id":snapshot.id,"title":snapshot.title,"revision_id":snapshot.revision,"tabs":snapshot.tabs.iter().map(|t|json!({"tab_id":t.id,"title":t.title,"editable_structure":t.editable,"characters":t.text.chars().count()})).collect::<Vec<_>>(),"mapping_version":bus.registry.version,"source_fingerprint":snapshot.fingerprint}),
     )
 }
+pub async fn summary_context(bus: &CommandBus, p: DocumentSummary) -> Result<Value, CoreError> {
+    let budget = p.max_characters.unwrap_or(6000);
+    if !(100..=10000).contains(&budget) {
+        return Err(CoreError::invalid());
+    }
+    let snapshot = load(bus, &p.document).await?;
+    let packet = crate::domain::document_summary::context(
+        &snapshot,
+        &p.document,
+        &bus.registry.version,
+        budget,
+        &chrono::Utc::now().to_rfc3339(),
+    );
+    if serde_json::to_vec(&packet)
+        .map_err(|_| CoreError::invalid())?
+        .len()
+        > 262144
+    {
+        return Err(CoreError(
+            ErrorKind::PayloadTooLarge,
+            "document_summary_context_too_large",
+        ));
+    }
+    Ok(packet)
+}
 pub async fn read(bus: &CommandBus, p: DocumentRead) -> Result<Value, CoreError> {
     let limit = p.limit.unwrap_or(2000);
     if !(1..=10000).contains(&limit) || !documents::valid_tab(&p.tab_id) {
@@ -34,12 +61,7 @@ pub async fn read(bus: &CommandBus, p: DocumentRead) -> Result<Value, CoreError>
         .iter()
         .find(|t| t.id == p.tab_id)
         .ok_or(CoreError(ErrorKind::NotFound, "document_tab_not_found"))?;
-    let binding = fingerprint(&json!([
-        snapshot.id,
-        p.tab_id,
-        snapshot.fingerprint,
-        bus.registry.version
-    ]));
+    let binding = documents::read_binding(&snapshot, &p.tab_id, &bus.registry.version);
     let offset = if let Some(cursor) = p.cursor {
         let (revision, offset) = cursor.split_once(':').ok_or_else(CoreError::invalid)?;
         if revision != binding {

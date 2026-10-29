@@ -90,6 +90,8 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
   assert.equal((await execute(append,{operation_id:change.operation_id})).data.state,'applied');
   assert.equal((await execute(append,{operation_id:change.operation_id})).data.state,'applied');
   if(kind==='docs'){
+   const context=await execute(first.tool('docs_read',owner),{document:'notes',mode:'summary_context',max_characters:100});assert.equal(context.data.excerpts[0].excerpt_id,'S1');assert.equal(context.data.coverage.projected_text_complete,true);assert(context.data.excerpts[0].text.includes(' SDK appended'));
+   const readParameters=first.tool('docs_read',owner).parameters as any;assert.equal(readParameters.properties.max_characters.maximum,10000);assert.equal(readParameters.oneOf.length,2);
    const read=await execute(first.tool('docs_read',owner),{document:'notes',tab_id:'t.0'});
    assert.equal(read.data.text.split(' SDK appended').length-1,1);
    const found=await execute(first.tool('docs_search',owner),{document:'notes',query:'SDK appended'});assert.equal(found.data.matches.length,1);assert.equal(found.data.matches[0].tab_id,'t.0');

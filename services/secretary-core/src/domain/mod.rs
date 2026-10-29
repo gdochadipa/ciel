@@ -1,3 +1,4 @@
+pub mod document_summary;
 pub mod documents;
 pub mod error;
 pub mod grids;

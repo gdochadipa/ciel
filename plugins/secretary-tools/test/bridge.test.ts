@@ -367,3 +367,29 @@ test('available asynchronous Gateway preserves invocation checks before schedule
   expect(await bridge.prepareApproval('sheets_search',{},owner)).toBeUndefined();expect(calls).toBe(1);
  }finally{server.stop(true);}
 });
+
+(process.env.SECRETARY_HTTP_TESTS==='1'?test:test.skip)('Docs summary context forwards bounded source-only requests without approval or model credentials',async()=>{
+ let calls=0;
+ const {server,options}=setup(async request=>{
+  calls++;expect(new URL(request.url).pathname).toBe('/v1/tools/docs_read');
+  expect(await request.json()).toEqual({document:'notes',mode:'summary_context',max_characters:6000});
+  return Response.json({ok:true,data:{mode:'summary_context',content_role:'untrusted_source_data',excerpts:[{excerpt_id:'S1',text:'Source text'}]}});
+ });
+ try {
+  const bridge=createSecretary(options);
+  await expect(bridge.execute('docs_read',{document:'notes',mode:'summary_context'},{})).rejects.toThrow('OWNER_REQUIRED');
+  const result=await bridge.execute('docs_read',{document:'notes',mode:'summary_context',max_characters:6000},owner) as any;
+  expect(result.data.excerpts[0].excerpt_id).toBe('S1');expect(await bridge.prepareApproval('docs_read',{},owner)).toBeUndefined();
+  for(const input of [
+   {document:'notes',mode:'summary_context',max_characters:99},
+   {document:'notes',mode:'summary_context',max_characters:10001},
+   {document:'notes',mode:'summary_context',max_characters:null},
+   {document:'notes',mode:'summary_context',tab_id:'t.0'},
+   {document:'notes',mode:'summary_context',limit:100},
+   {document:'notes',mode:'summary_context',cursor:'cursor'},
+   {document:'notes',mode:'summary_context',model:'paid-model'},
+   {document:'notes',mode:'summary'}, {document:'notes',max_characters:1000},
+  ]) await expect(bridge.execute('docs_read',input,owner)).rejects.toThrow('INVALID_INPUT');
+  expect(calls).toBe(1);
+ }finally{server.stop(true);}
+});
