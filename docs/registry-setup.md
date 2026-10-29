@@ -2,7 +2,7 @@
 
 Use the same secretary-core binary to prepare/check a local registry without credentials, environment files, Google access, a journal or a listener. These are one-shot operator commands, separate from no-argument service startup and production preflight. The plugin still has 26 tools; it does not receive a configuration-editing tool.
 
-Init/check require a reviewed Core build from T030 or later; new-resource add requires T031 or later; grid_view additions require T032 or later. Verify the checkout/release receipt before execution: historical T027/T029 native artifacts do not establish CLI support. Older Core builds ignore command arguments and must not be probed with these offline commands. From a reviewed current checkout, `cargo run --offline --locked -p secretary-core -- registry ...` selects the current source build.
+Init/check require a reviewed Core build from T030 or later; new-resource add requires T031 or later; grid_view additions require T032 or later; diff requires T034 or later. Verify the checkout/release receipt before execution: historical T027/T029 native artifacts do not establish CLI support. Older Core builds ignore command arguments and must not be probed with these offline commands. From a reviewed current checkout, `cargo run --offline --locked -p secretary-core -- registry ...` selects the current source build.
 
 A reviewed 42f18d5 Linux ARM64 release has now passed staging/hash verification, disposable installation and installed registry init/check exercises without valid credentials or runtime state. This confirms CLI support only for that tested native artifact; verify the independently selected release receipt and target CPU/libc before use. It is not a VPS installation or live qualification.
 
@@ -97,6 +97,27 @@ A new tab identity is allowed. Another named range on an already mapped tab is a
 
 Use a changed version, the draft containing that spreadsheet as --config, and a fresh --output path. The same safe input, candidate validation/size/privacy and no-overwrite rules apply. Replaying into the same output fails; reapplying the same view name to a later candidate fails instead of duplicating it. The active configuration is never edited/reloaded. Older T030/T031 artifacts do not qualify grid_view support, and no T032 native installed-release receipt is claimed.
 
+## Compare two drafts privately
+
+With a reviewed T034-or-later Core, compare the original and candidate before separately choosing any installation:
+
+```sh
+secretary-core registry diff \
+  --before "$secretary_registry_file" \
+  --after "$secretary_registry_dir/candidate.json" \
+  --output "$secretary_registry_dir/review.json"
+```
+
+Both inputs must pass the same actual Rust registry validation as check. Nothing is installed, reloaded, approved or activated. The command creates a new private report (Unix 0600 or stricter); input bytes/modes stay unchanged. Use options in the shown order. Existing output paths, either input path and final symlinks cannot be overwritten. Exit0 means the report was written, not that the candidate is qualified to run.
+
+Terminal JSON includes aggregate added/removed/modified counts for spreadsheets, documents and views, plus version_changed, mappings_changed and version_change_required. configuration_changed=false, report_created=true, live_access_checked=false and activation_changed=false. Private aliases, IDs, titles, ranges, paths and version values are never printed. Read the report locally in a trusted editor: do not paste it into logs or commit it.
+
+The JSON report has format_version1, before_version, after_version, summary and changes.spreadsheets/documents. Each changed resource includes key (alias), change (added/removed/modified), and before/after full normalized registrations; a missing side is null. This exposes changed IDs, tab identities, ranges, read/write flags and schemas for deliberate review. Views are sorted by name inside registrations. Counts for views describe view definitions; changing a parent's readable flag changes inherited access even if its view definitions/counts are unchanged. Global write enablement, approval qualification, effective Google ACLs and running-host configuration are not checked.
+
+Resources match by exact alias, views by spreadsheet alias + view name. Only ordering of resource/view lists and JSON object keys is ignored; other fields and arrays are compared exactly. Defaults are normalized by the typed parser, so omitted writable/create_tabs=false fields do not create false changes. Renaming an alias/view name is removal+addition, with no rename inference. Equal-version inputs are allowed for review: changed mappings without a version change set version_change_required=true. Version-only changes produce no resource/view changes; even a no-op produces a new report.
+
+Each input and the complete serialized report is capped at 1 MiB. Before/after registrations can make a report larger than either input; overflow fails with registry_too_large before creating output, without truncating private changes. A disk/write failure may leave a partial new report, as with init/add. The report is private configuration data, not an immutable mutation preview or approval token. Review it alongside the original candidate; it does not authorize provider writes or host activation. Historical T030 native receipts cover init/check only, not diff.
+
 ## Check a draft
 
 Check reuses the exact Rust Registry deserialization/validator used by Core. It accepts a regular file up to 1 MiB, refuses final symlinks, and uses no-follow/nonblocking Unix reads before checking the opened file type. It neither reads credential files selected by environment variables nor opens Core state. Only macOS/Linux-style Unix offline setup is supported; other platforms fail closed for these commands.
@@ -114,7 +135,7 @@ The JSON response reports offline validity and aggregate resource/readable/confi
 | Exit 1, registry_bounds | Empty version or too many resources; add also rejects whitespace-only versions. |
 | Exit 1, registry_invalid_document/spreadsheet/view/grid_write_range/grid_range or registry_invalid | Existing Core registry rules rejected registration; inspect uniqueness, bounds and permission relationships. |
 | Exit 1, registry_unavailable/unsafe_file/too_large | Input is unavailable, unsafe or exceeds the offline byte cap. |
-| Exit 1, output_exists/unavailable/write_failed | Init/add refused an existing target or could not finish a new draft. |
+| Exit 1, output_exists/unavailable/write_failed | Init/add/diff refused an existing target or could not finish a new output. |
 | Exit 2, usage | Invalid/incomplete arguments; no service is started. |
 
 JSON error codes are diagnostic categories; they deliberately omit private values. No-argument secretary-core retains the existing environment-configured service behavior. Do not mistake offline check success for authorization to start it or edit live resources. See [deployment](deployment.md), [installation](installation.md) and [T007](../.scratch/secretary-mvp/T007.md).

@@ -8,6 +8,7 @@ Current owner priority (2026-10-29): feature development first. Target amd64 bui
 
 | Ticket | Depends on | Status | Outcome |
 | --- | --- | --- | --- |
+| T034 Private registry comparison | T030,T031,T032 | accepted locally: full suite + Standards/Spec review; live T007 open | Normalized target/permission differences in an exclusive private report; counts-only terminal output, no activation. |
 | T033 Cross-document Docs search | T028,T029,T032 | accepted locally: full suite + seven scenarios + SDK pack + Standards/Spec review; live T007 open | Explicit bounded selection, global pages/source-bound cursors, no partial failures; retain 26 tools. |
 | T032 Draft grid-view additions | T031 | accepted locally: full suite + Standards/Spec review; live T007 open | Append a bounded read-only grid view to an existing draft spreadsheet; preserve parent grants and reject conflicting mappings. |
 | T031 Draft resource additions | T030 | accepted locally: full suite + Standards/Spec review; live T007 open | Simplified private Docs/Sheets inputs; new inactive registrations, immutable base and exclusive candidate output. |

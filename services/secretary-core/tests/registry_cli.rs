@@ -813,3 +813,284 @@ fn add_grid_view_obeys_shared_view_bounds_and_cannot_inject_permissions_or_provi
     assert!(!candidate.exists());
     assert_eq!(std::fs::read_to_string(&base).unwrap(), before);
 }
+
+impl Fixture {
+    fn diff(
+        &self,
+        before: &std::path::Path,
+        after: &std::path::Path,
+        report: &std::path::Path,
+    ) -> Output {
+        self.run(&[
+            "registry",
+            "diff",
+            "--before",
+            before.to_str().unwrap(),
+            "--after",
+            after.to_str().unwrap(),
+            "--output",
+            report.to_str().unwrap(),
+        ])
+    }
+}
+
+#[test]
+fn diff_creates_private_review_of_permission_target_and_range_changes_without_disclosing_values() {
+    let f = Fixture::new();
+    let before = f.0.join("PRIVATE_BEFORE_CANARY.json");
+    let original: Value =
+        serde_json::from_str(include_str!("../../../config/workspace.example.json")).unwrap();
+    std::fs::write(&before, original.to_string()).unwrap();
+    let after = f.0.join("after.json");
+    let mut candidate = original.clone();
+    candidate["version"] = json!("PRIVATE_VERSION_CANARY");
+    candidate["documents"][0]["id"] = json!("PRIVATE_ID_CANARY");
+    candidate["documents"][0]["writable"] = json!(true);
+    candidate["spreadsheets"][0]["views"][0]["writable_range"] = json!("B2:C8");
+    let mut new_view = candidate["spreadsheets"][0]["views"][0].clone();
+    new_view["name"] = json!("PRIVATE_VIEW_CANARY");
+    new_view["sheet_id"] = json!(8);
+    new_view["title"] = json!("PRIVATE_TITLE_CANARY");
+    new_view["range"] = json!("A1:D20");
+    new_view.as_object_mut().unwrap().remove("writable_range");
+    candidate["spreadsheets"][0]["views"]
+        .as_array_mut()
+        .unwrap()
+        .push(new_view);
+    std::fs::write(&after, candidate.to_string()).unwrap();
+    let report = f.0.join("PRIVATE_REPORT_CANARY.json");
+    let result = f.diff(&before, &after, &report);
+    assert!(result.status.success(), "{}", data(&result));
+    let body = data(&result);
+    assert_eq!(
+        body["summary"],
+        json!({"spreadsheets":{"added":0,"removed":0,"modified":1},"documents":{"added":0,"removed":0,"modified":1},"views":{"added":1,"removed":0,"modified":1},"version_changed":true,"mappings_changed":true,"version_change_required":false})
+    );
+    assert_eq!(body["configuration_changed"], false);
+    assert_eq!(body["report_created"], true);
+    assert_eq!(body["activation_changed"], false);
+    assert_eq!(body["live_access_checked"], false);
+    assert!(result.stderr.is_empty());
+    let output = String::from_utf8_lossy(&result.stdout);
+    for private in [
+        "CANARY",
+        "operations",
+        "notes",
+        before.to_str().unwrap(),
+        after.to_str().unwrap(),
+        report.to_str().unwrap(),
+    ] {
+        assert!(!output.contains(private));
+    }
+    let details: Value = serde_json::from_slice(&std::fs::read(&report).unwrap()).unwrap();
+    assert_eq!(details["format_version"], 1);
+    assert_eq!(details["summary"], body["summary"]);
+    assert_eq!(details["changes"]["documents"][0]["key"], "notes");
+    assert_eq!(details["changes"]["documents"][0]["change"], "modified");
+    assert_eq!(
+        details["changes"]["documents"][0]["before"],
+        original["documents"][0]
+    );
+    assert_eq!(
+        details["changes"]["documents"][0]["after"],
+        candidate["documents"][0]
+    );
+    assert_eq!(
+        details["changes"]["spreadsheets"][0]["after"]["views"][0]["name"],
+        "PRIVATE_VIEW_CANARY"
+    );
+    assert_eq!(
+        details["changes"]["spreadsheets"][0]["after"]["views"][1]["writable_range"],
+        "B2:C8"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&before).unwrap(),
+        original.to_string()
+    );
+    assert_eq!(
+        std::fs::read_to_string(&after).unwrap(),
+        candidate.to_string()
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(report).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+}
+
+#[test]
+fn diff_ignores_named_list_order_and_defaults_but_flags_same_version_mapping_changes() {
+    let f = Fixture::new();
+    let before = f.0.join("before.json");
+    let after = f.0.join("after.json");
+    let mut original: Value =
+        serde_json::from_str(include_str!("../../../config/workspace.example.json")).unwrap();
+    let mut second_view = original["spreadsheets"][0]["views"][0].clone();
+    second_view["name"] = json!("other");
+    original["spreadsheets"][0]["views"]
+        .as_array_mut()
+        .unwrap()
+        .push(second_view);
+    let mut second_sheet = original["spreadsheets"][0].clone();
+    second_sheet["alias"] = json!("second");
+    second_sheet["id"] = json!("second-id");
+    original["spreadsheets"]
+        .as_array_mut()
+        .unwrap()
+        .push(second_sheet);
+    original["documents"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"alias":"second-doc","id":"second-doc-id","readable":false,"writable":false}));
+    let bytes = original.to_string();
+    std::fs::write(&before, &bytes).unwrap();
+    let mut reordered = original.clone();
+    reordered["spreadsheets"].as_array_mut().unwrap().reverse();
+    reordered["documents"].as_array_mut().unwrap().reverse();
+    for s in reordered["spreadsheets"].as_array_mut().unwrap() {
+        s.as_object_mut().unwrap().remove("create_tabs");
+        s["views"].as_array_mut().unwrap().reverse();
+    }
+    for d in reordered["documents"].as_array_mut().unwrap() {
+        d.as_object_mut().unwrap().remove("writable");
+    }
+    for (n, version, mappings, version_changed, required) in [
+        (0, "generic-workspace-v1", false, false, false),
+        (1, "v2", false, true, false),
+        (2, "generic-workspace-v1", true, false, true),
+    ] {
+        let mut candidate = reordered.clone();
+        candidate["version"] = json!(version);
+        if mappings {
+            candidate["spreadsheets"][0]["views"][0]["range"] = json!("A1:C3");
+        }
+        std::fs::write(&after, candidate.to_string()).unwrap();
+        let report = f.0.join(format!("report-{n}.json"));
+        let result = f.diff(&before, &after, &report);
+        assert!(result.status.success(), "{}", data(&result));
+        let body = data(&result);
+        assert_eq!(body["summary"]["mappings_changed"], mappings);
+        assert_eq!(body["summary"]["version_changed"], version_changed);
+        assert_eq!(body["summary"]["version_change_required"], required);
+        assert_eq!(
+            body["summary"]["views"],
+            json!({"added":0,"removed":0,"modified":if mappings {1} else {0}})
+        );
+        if !mappings {
+            let details: Value = serde_json::from_slice(&std::fs::read(report).unwrap()).unwrap();
+            assert_eq!(
+                details["changes"],
+                json!({"spreadsheets":[],"documents":[]})
+            );
+        }
+    }
+    assert_eq!(std::fs::read_to_string(before).unwrap(), bytes);
+}
+
+#[test]
+fn diff_treats_alias_renames_as_removals_and_additions_without_guessing_identity() {
+    let f = Fixture::new();
+    let before = f.0.join("before.json");
+    let after = f.0.join("after.json");
+    let original: Value =
+        serde_json::from_str(include_str!("../../../config/workspace.example.json")).unwrap();
+    std::fs::write(&before, original.to_string()).unwrap();
+    let mut candidate = original.clone();
+    candidate["version"] = json!("v2");
+    candidate["spreadsheets"][0]["alias"] = json!("renamed-sheet");
+    candidate["documents"][0]["alias"] = json!("renamed-doc");
+    std::fs::write(&after, candidate.to_string()).unwrap();
+    let report = f.0.join("report.json");
+    let result = f.diff(&before, &after, &report);
+    assert!(result.status.success(), "{}", data(&result));
+    let body = data(&result);
+    for kind in ["spreadsheets", "documents", "views"] {
+        assert_eq!(
+            body["summary"][kind],
+            json!({"added":1,"removed":1,"modified":0})
+        );
+    }
+    let details: Value = serde_json::from_slice(&std::fs::read(report).unwrap()).unwrap();
+    let docs = details["changes"]["documents"].as_array().unwrap();
+    assert_eq!(docs[0]["key"], "notes");
+    assert_eq!(docs[0]["change"], "removed");
+    assert!(docs[0]["after"].is_null());
+    assert_eq!(docs[1]["key"], "renamed-doc");
+    assert_eq!(docs[1]["change"], "added");
+    assert!(docs[1]["before"].is_null());
+    assert_eq!(docs[1]["after"]["id"], docs[0]["before"]["id"]);
+}
+
+#[test]
+fn diff_rejects_invalid_inputs_and_output_replay_aliases_without_overwriting_anything() {
+    let f = Fixture::new();
+    let before = f.config();
+    let bytes = std::fs::read(&before).unwrap();
+    let after = f.0.join("after.json");
+    let report = f.0.join("report.json");
+    std::fs::write(&after, b"{PRIVATE_INVALID_CANARY").unwrap();
+    for (left, right) in [(&before, &after), (&after, &before)] {
+        let result = f.diff(left, right, &report);
+        assert_eq!(data(&result)["error"]["code"], "registry_json_invalid");
+        assert!(!report.exists());
+        assert!(result.stderr.is_empty());
+        assert!(!String::from_utf8_lossy(&result.stdout).contains("CANARY"));
+    }
+    std::fs::write(&after, &bytes).unwrap();
+    assert!(f.diff(&before, &after, &report).status.success());
+    let report_bytes = std::fs::read(&report).unwrap();
+    for output in [&before, &after, &report] {
+        assert_eq!(
+            data(&f.diff(&before, &after, output))["error"]["code"],
+            "output_exists"
+        );
+    }
+    #[cfg(unix)]
+    {
+        let link = f.0.join("link");
+        std::os::unix::fs::symlink(&before, &link).unwrap();
+        assert_eq!(
+            data(&f.diff(&before, &after, &link))["error"]["code"],
+            "output_exists"
+        );
+        let next = f.0.join("next.json");
+        for (left, right) in [(&link, &after), (&before, &link)] {
+            assert_eq!(
+                data(&f.diff(left, right, &next))["error"]["code"],
+                "registry_unsafe_file"
+            );
+            assert!(!next.exists());
+        }
+        assert!(std::fs::symlink_metadata(link)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+    }
+    assert_eq!(std::fs::read(&before).unwrap(), bytes);
+    assert_eq!(std::fs::read(&after).unwrap(), bytes);
+    assert_eq!(std::fs::read(&report).unwrap(), report_bytes);
+}
+
+#[test]
+fn diff_caps_complete_private_report_and_never_truncates_or_creates_an_unusable_report() {
+    let f = Fixture::new();
+    let before = f.0.join("before.json");
+    let after = f.0.join("after.json");
+    let report = f.0.join("report.json");
+    let registry =
+        json!({"version":"v".repeat(600_000),"spreadsheets":[],"documents":[]}).to_string();
+    assert!(registry.len() < 1024 * 1024);
+    std::fs::write(&before, &registry).unwrap();
+    std::fs::write(&after, &registry).unwrap();
+    let result = f.diff(&before, &after, &report);
+    assert_eq!(result.status.code(), Some(1));
+    assert_eq!(data(&result)["error"]["code"], "registry_too_large");
+    assert!(!report.exists());
+    assert!(result.stderr.is_empty());
+    assert!(result.stdout.len() < 512);
+    assert_eq!(std::fs::read_to_string(before).unwrap(), registry);
+    assert_eq!(std::fs::read_to_string(after).unwrap(), registry);
+}

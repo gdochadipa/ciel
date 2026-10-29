@@ -103,7 +103,11 @@ fn initialize(path: &Path) -> Result<Registry, &'static str> {
     write_candidate(path, registry)
 }
 fn write_candidate(path: &Path, registry: Registry) -> Result<Registry, &'static str> {
-    let mut bytes = serde_json::to_vec_pretty(&registry).map_err(|_| "registry_schema_invalid")?;
+    write_private(path, &registry)?;
+    Ok(registry)
+}
+fn write_private(path: &Path, value: &impl serde::Serialize) -> Result<(), &'static str> {
+    let mut bytes = serde_json::to_vec_pretty(value).map_err(|_| "registry_schema_invalid")?;
     bytes.push(b'\n');
     if bytes.len() > MAX_BYTES {
         return Err("registry_too_large");
@@ -125,7 +129,7 @@ fn write_candidate(path: &Path, registry: Registry) -> Result<Registry, &'static
     file.write_all(&bytes)
         .and_then(|_| file.sync_all())
         .map_err(|_| "output_write_failed")?;
-    Ok(registry)
+    Ok(())
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -222,6 +226,18 @@ fn add(base: &Path, resource: &Path, output: &Path) -> Result<Registry, &'static
         .map_err(|reason| validation_code(&reason))?;
     write_candidate(output, registry)
 }
+fn success(summary: Value, changed: bool) -> Value {
+    json!({"ok":true,"mode":"offline","summary":summary,"configuration_changed":changed,"live_access_checked":false,"activation_changed":false})
+}
+fn diff(before: &Path, after: &Path, output: &Path) -> Result<Value, &'static str> {
+    let before = load(before)?;
+    let after = load(after)?;
+    let report = crate::domain::registry_diff::compare(&before, &after);
+    write_private(output, &report)?;
+    let mut body = success(report["summary"].clone(), false);
+    body["report_created"] = json!(true);
+    Ok(body)
+}
 pub fn run(args: &[OsString]) -> (Value, i32) {
     if cfg!(not(unix)) {
         return (
@@ -234,10 +250,10 @@ pub fn run(args: &[OsString]) -> (Value, i32) {
         && args[1] == "check"
         && args[2] == "--config"
     {
-        load(Path::new(&args[3])).map(|registry| (registry, false))
+        load(Path::new(&args[3])).map(|registry| success(summary(&registry), false))
     } else if args.len() == 4 && args[0] == "registry" && args[1] == "init" && args[2] == "--output"
     {
-        initialize(Path::new(&args[3])).map(|registry| (registry, true))
+        initialize(Path::new(&args[3])).map(|registry| success(summary(&registry), true))
     } else if args.len() == 8
         && args[0] == "registry"
         && args[1] == "add"
@@ -250,18 +266,27 @@ pub fn run(args: &[OsString]) -> (Value, i32) {
             Path::new(&args[5]),
             Path::new(&args[7]),
         )
-        .map(|registry| (registry, true))
+        .map(|registry| success(summary(&registry), true))
+    } else if args.len() == 8
+        && args[0] == "registry"
+        && args[1] == "diff"
+        && args[2] == "--before"
+        && args[4] == "--after"
+        && args[6] == "--output"
+    {
+        diff(
+            Path::new(&args[3]),
+            Path::new(&args[5]),
+            Path::new(&args[7]),
+        )
     } else {
         return (
-            json!({"ok":false,"mode":"offline","error":{"code":"usage","message":"Use registry check --config PATH, registry init --output PATH, or registry add --config BASE --resource ADDITION --output NEW."},"live_access_checked":false,"activation_changed":false}),
+            json!({"ok":false,"mode":"offline","error":{"code":"usage","message":"Use registry check --config PATH, registry init --output PATH, registry add --config BASE --resource ADDITION --output NEW, or registry diff --before BASE --after CANDIDATE --output REPORT."},"live_access_checked":false,"activation_changed":false}),
             2,
         );
     };
     match operation {
-        Ok((registry, changed)) => (
-            json!({"ok":true,"mode":"offline","summary":summary(&registry),"configuration_changed":changed,"live_access_checked":false,"activation_changed":false}),
-            0,
-        ),
+        Ok(body) => (body, 0),
         Err(code) => (
             json!({"ok":false,"mode":"offline","error":{"code":code},"live_access_checked":false,"activation_changed":false}),
             1,
