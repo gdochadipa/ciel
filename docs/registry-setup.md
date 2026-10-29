@@ -4,6 +4,8 @@ Use the same secretary-core binary to prepare/check a local registry without cre
 
 These commands require a reviewed Core build from T030 or later. Verify the checkout/release receipt before execution: historical T027/T029 native artifacts do not establish CLI support. Older Core builds ignore command arguments and must not be probed with these offline commands. From a reviewed current checkout, `cargo run --offline --locked -p secretary-core -- registry ...` selects the current source build.
 
+A reviewed 42f18d5 Linux ARM64 release has now passed staging/hash verification, disposable installation and installed registry init/check exercises without valid credentials or runtime state. This confirms CLI support only for that tested native artifact; verify the independently selected release receipt and target CPU/libc before use. It is not a VPS installation or live qualification.
+
 ## Create an inactive draft
 
 Choose a new private directory outside the checkout. For a disposable draft on macOS/Linux:

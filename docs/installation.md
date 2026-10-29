@@ -111,3 +111,11 @@ Verify the actual remote SHAs after a successful push before treating the local 
 ## Offline registry preparation
 
 The native Core binary supports registry init --output PATH and registry check --config PATH before any runtime environment/credential loading. Init creates a new inactive draft (never replacing an existing file); check uses the same Rust registry rules as service startup and reports only aggregate counts. Neither command starts/activates/installs/reloads anything or verifies live Google access. Use [offline registry setup](registry-setup.md); preflight and T007 gates remain mandatory for a later authorized host installation.
+
+## Verified local native release with offline CLI
+
+A clean clone of 42f18d52705a8d2a285a0756f236f0895d7cc6c9 passed real locked/offline native Linux ARM64 staging/verify/reuse and disposable-root install/replay. Format 2 has eleven hashed payloads and 26 SDK tools. The installed Core was verified against its receipt before registry init/check exercised inactive 0600 drafts, no-overwrite/symlink/schema rejection and sanitized output, even with poisoned runtime environment. Synthetic config/state bytes/mode were preserved and the clone stayed clean.
+
+Core is 10090640 bytes, SHA-256 e503aa79ab13f27f808af596ebd1d5c39d41c1c94028b480d9db8b995f92ad52, target aarch64-unknown-linux-gnu. Plugin is 38194 bytes, SHA-256 4b400a24c5fd02c8f9f3aa75e9af3ad0346e9d5396b948a335531705c8b0b3ce, with three regular runtime files and MIT notices preserved. Receipt/artifacts stay private under qualified runs/t030-release-phv4h5c8/. A later documentation-only commit does not change the tested code provenance.
+
+This verifies local native staging and inactive file placement, not the VPS CPU/libc/runtime or production qualification. Build natively for the selected target under the separately authorized workflow; no activation/reload/start, credential transfer, paid service or automatic publication is implied.
