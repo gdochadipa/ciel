@@ -4,6 +4,8 @@ Spec: `docs/specs/openclaw-personal-secretary.md`
 Workbook mapping: `docs/spreadsheet-assessment.md`  
 User instruction: implement locally using medium-effort agents; subsequently review at low effort and fix the findings. Production changes require the documented activation checks.
 
+Current owner priority (2026-10-29): feature development first. Target amd64 build/resource qualification, hosted Actions and VPS operations are deferred; server specifications remain context in PROGRESS.md/T007. Necessary local feature checks still use actual dependencies.
+
 | Ticket | Depends on | Status | Outcome |
 | --- | --- | --- | --- |
 | T030 Offline registry setup | T023,T026,T029 | accepted locally: full suite + seven scenarios + Standards/Spec review; live T007 open | Shared Rust validator, sanitized summaries and inactive non-overwriting template; no live actions. |

@@ -1,16 +1,20 @@
 # OpenClaw Secretary — Progress and continuation
 
-Updated: 2026-10-28 · Asia/Makassar
+Updated: 2026-10-29 · Asia/Makassar
 
 ## Current position
 
-[T025](.scratch/secretary-mvp/T025.md) implements bounded tab creation inside an existing registered spreadsheet through the shared preview/approval/command bus/FSM/journal. It adds `sheets_preview_create_tab` and `sheets_create_tab`, bringing the plugin to 25 tools. Creation requires explicit `create_tabs` permission (default false) and global writes. The resulting tab stays unregistered/readable=false/writable=false until separate operator configuration. T023 generic grid reads and controlled Docs edits remain supported; wedding profiles are optional and personal memory belongs to OpenClaw.
+**Owner priority: feature development first.** Defer target amd64 image/build/qualification, target resource profiling, GitHub Actions investigation/runs and VPS clone/install/activation until the owner resumes that work. Keep necessary local feature tests with actual locks/SDK; restoring a local test tool environment is separate from deferred server qualification. The earlier amd64 preparation command is background context, not the next active task.
+
+Current accepted local capabilities include [T030](.scratch/secretary-mvp/T030.md) offline registry init/check, [T029](.scratch/secretary-mvp/T029.md) optional case-insensitive Docs search, [T027](.scratch/secretary-mvp/T027.md) controlled grid edits and [T025](.scratch/secretary-mvp/T025.md) bounded tab creation. The plugin has 26 tools. New tabs remain unregistered until explicit operator configuration; all provider mutations retain preview/approval/shared FSM/journal. Generic Workspace resources remain independent of the optional wedding profile, and OpenClaw owns personal memory.
+
+Latest executed local suite: 57 Rust, 29 Python, 46 TypeScript checks plus seven sequential Google-only simulations, actual locked SDK and native Linux ARM64 staging/installed offline-CLI exercises. This is not a target amd64 or live pass. Server context retained: Tencent Singapore, 2 vCPU, 2 GB RAM, 40 GB allocated disk, x86_64, Ubuntu 24.04.5 LTS, glibc 2.39 (operator-reported); free resources/workload peaks remain unverified. Prior ARM64 artifacts must not be selected as native target packages. Previous publication remains unverified beyond the recorded 30d4dfa baseline.
 
 The owner retained a lightweight single in-process command bus + durable SQLite operation FSM. No CQRS buses, broker, replicated read store, projection worker or extra daemon. [ADR0001](docs/adr/0001-lightweight-command-bus-and-operation-fsm.md) and [ADR0002](docs/adr/0002-workspace-capabilities-and-optional-domain-profiles.md) record these decisions. Docs shares the existing owner/approval/journal/coordinator; legacy Sheets preview JSON and request digests remain compatible.
 
 **Live activation remains T007 and is not accepted.** `approvalTransportQualified` and `schedulerQualified` remain false; production writes remain disabled. No deployment, live Google mutation, real native job or WhatsApp send occurred. No additional paid service, billing activation or quota upgrade is authorized.
 
-## Current verification evidence
+## Historical T023/T024 verification evidence
 
 [T024](.scratch/secretary-mvp/T024.md) closes an operator-gate gap after T023: any readable Docs registration requires separate `google_disposable_docs` evidence, even when writes are disabled. Missing/blank/non-string evidence and malformed flags fail closed. Sheets-only/unreadable Docs registries preserve the old contract. Thirteen operator CLI tests pass on macOS and qualified Linux. This checks private local attestations, not live provider behavior; T007 remains open.
 
@@ -20,7 +24,7 @@ The owner retained a lightweight single in-process command bus + durable SQLite 
 - Six workspace Rust tests passed again after adding a known legacy Sheets digest assertion. T022's explicit last-Journal-owner unlock and clone-exclusion regressions remain included. T018's real Core WAL backup/restore and ten operator checks remain included.
 - Previous T023 SDK pack produced a three-runtime-file archive, 36400 bytes, SHA-256 `ce65b2245846abd2491aebe785ecc9350c1b2d308bc0919963aab6d5d24b1d4d`, at ignored `plugins/secretary-tools/dist/secretary-tools.tgz`. No activation receipt/install/reload/publish was executed.
 
-Qualified runtime: Linux arm64, Node 24.22.1, Bun 1.2.21, Rust 1.95.0, OpenClaw 2026.10.7, TypeScript 7.0.2 and Postman CLI 1.75.0. The actual SDK requires Node `>=24.22.1 <25 || >=26.12.1`. Actual Cargo/Bun locks and full production dependencies are retained; never substitute SDK declarations or dependency graphs. Hosted CI is configured for the seven-scenario gate but remains unobserved pending authenticated publication; the selected origin is gdochadipa/ciel.
+Qualified runtime: Linux arm64, Node 24.22.1, Bun 1.2.21, Rust 1.95.0, OpenClaw 2026.10.7, TypeScript 7.0.2 and Postman CLI 1.75.0. The actual SDK requires Node `>=24.22.1 <25 || >=26.12.1`. Actual Cargo/Bun locks and full production dependencies are retained; never substitute SDK declarations or dependency graphs. The published 30d4dfa hosted simulation step later failed; further hosted work is deferred. The selected origin is gdochadipa/ciel; historical tool-image success does not establish current image availability or amd64 qualification.
 
 ## Read these first
 
@@ -164,3 +168,9 @@ The owner supplied command output reporting x86_64, Ubuntu 24.04.5 LTS (Noble Nu
 Read-only local Docker inspection reports amd64 build support; the unchanged pinned Node/Bun/Rust base-image indexes each contain linux/amd64 manifests. The current Docker daemon does not contain secretary-verification:2026.10.7. No x86 tool image, dependencies, Core/SDK build or qualification suite was executed in this step. Rebuild a separately tagged amd64 tool image and use a fresh sanitized checkout/architecture-specific dependency and target directories before claiming a platform pass. Historical ARM64 receipts remain valid for their original environment only; build/ELF/libc/runtime and resource qualification on the selected host remain T007. No VPS, paid service/quota, secret, production setting, hosted Actions or publication changed.
 
 This documentation/platform-inventory increment passed low-effort Standards/Spec review with no material findings. No build/test pass is inferred from image manifests or reported host versions.
+
+## Priority steering — 2026-10-29
+
+The owner explicitly redirects work to feature development and asks to retain deployment specifications as context. Target amd64 build/test preparation and resource qualification are deferred alongside CI/VPS work. The target remains Tencent Singapore, 2 vCPU/2 GB RAM/40 GB disk, x86_64 Ubuntu 24.04.5 LTS/glibc 2.39. No additional server inventory, image build, deployment or activation is requested by this steering. Local feature verification with real dependencies remains required. Next feature selection is being requested; no new capability scope is assumed yet.
+
+The feature-first context update passed low-effort Standards/Spec review with no material findings; no runtime tests or environment changes were needed for this documentation-only change.
