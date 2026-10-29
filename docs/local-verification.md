@@ -66,3 +66,18 @@ On failure, the launcher retains private raw logs in its disposable run director
 Six external-command CLI regressions cover startup stdout errors, build/parser/client failures, exit preservation, owned-process cleanup, successful output and malformed/oversized log handling. They use synthetic canaries to check that raw content does not enter the safe summary; actual Core/Google behavior still requires the separate seven-scenario suite. These diagnostics improve future evidence and do not establish why the earlier hosted simulation step failed.
 
 T030 adds seven Rust integration checks against the actual emitted Core executable and disposable files. They cover offline/no-runtime-env behavior, sanitized output, the shared validator, configured-grant summaries, inactive Unix 0600 drafts, no-overwrite/symlink/FIFO/byte bounds and safe argument routing. Final full local verification passes 57 Rust, 29 Python and 46 TypeScript checks; all seven service scenarios pass after the no-argument startup preservation change. This is Linux CLI/service evidence, not a new native release or VPS installation receipt. Use the [registry guide](registry-setup.md) only with a reviewed T030-or-later Core build.
+
+## Preparing a separate amd64 verification environment
+
+The reported VPS is x86_64 Ubuntu 24.04.5 LTS/glibc 2.39, while the retained executed build/test/staging evidence above is Linux ARM64. On2026-10-29 Docker inspection confirmed that all three immutable base indexes in deploy/Dockerfile.verify include linux/amd64. Local buildx advertises amd64 support, but the previous secretary-verification:2026.10.7 image is absent from the current daemon. Manifest inspection is not an image build or a Core/SDK platform pass.
+
+To prepare the architecture-specific tool image, use the existing pinned Dockerfile and isolated deploy-only context:
+
+```sh
+docker buildx build --builder default --platform linux/amd64 --load \
+  -f deploy/Dockerfile.verify -t secretary-verification:2026.10.7-amd64 deploy
+```
+
+This preparation command has not been executed/qualified in the current step. Use a fresh sanitized disposable checkout and separate node_modules, Cargo target/cache and home/run directories for the amd64 suite; do not reuse ARM-native optional JavaScript packages or binaries. Run containers with explicit --platform linux/amd64 and the new image tag, retaining the existing no-home/no-credential/no-workbook mounting rules. Populate real locked dependencies, then run the documented verification and seven simulations; record emulation versus native execution and inspect the resulting native target/ELF/library requirements. The pinned Bookworm lab is not the exact Ubuntu host.
+
+Resource qualification must separately measure OS/OpenClaw/Core and build/runtime peaks against the reported 2-GB allocation; the source suite's earlier build-job setting is not a proven fit for this server. Do not infer VPS readiness, model capacity, free disk or ABI compatibility from manifest support or existing ARM64 receipts. No image build, hosted CI, target deployment or live provider action was performed to document this preparation path.
