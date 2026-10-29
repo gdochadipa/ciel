@@ -102,8 +102,30 @@ pub struct Read {
     pub cursor: Option<String>,
 }
 #[derive(Deserialize)]
+#[serde(untagged)]
+pub enum Search {
+    One(SingleSearch),
+    Many(SelectedSearch),
+}
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Search {
+pub struct SearchTarget {
+    pub spreadsheet: String,
+    pub view: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SelectedSearch {
+    pub targets: Vec<SearchTarget>,
+    pub query: String,
+    #[serde(default, deserialize_with = "non_null_option")]
+    pub limit: Option<usize>,
+    #[serde(default, deserialize_with = "non_null_option")]
+    pub cursor: Option<String>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SingleSearch {
     pub spreadsheet: String,
     pub view: String,
     pub query: String,

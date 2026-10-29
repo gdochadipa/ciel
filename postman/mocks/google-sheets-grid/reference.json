@@ -1,0 +1,38 @@
+{
+  "spreadsheetId": "reference-spreadsheet",
+  "sheets": [
+    {
+      "properties": {
+        "sheetId": 8,
+        "title": "Archive"
+      },
+      "data": [
+        {
+          "startRow": 1,
+          "startColumn": 1,
+          "rowData": [
+            {
+              "values": [
+                {
+                  "effectiveValue": {
+                    "stringValue": "Independent archive"
+                  }
+                },
+                {
+                  "effectiveValue": {
+                    "numberValue": 5
+                  }
+                },
+                {
+                  "effectiveValue": {
+                    "boolValue": false
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

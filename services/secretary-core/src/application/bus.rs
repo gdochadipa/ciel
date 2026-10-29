@@ -1,4 +1,8 @@
-use super::{commands::Command, ports::WorkspacePort, writes::Writes};
+use super::{
+    commands::{Command, Search},
+    ports::WorkspacePort,
+    writes::Writes,
+};
 use crate::domain::{
     error::{CoreError, ErrorKind},
     projection,
@@ -54,7 +58,8 @@ impl CommandBus {
                 )
             }
             Command::Read(p) => read(self, &p.spreadsheet, &p.view, None, p.limit, p.cursor).await,
-            Command::Search(p) => {
+            Command::Search(Search::Many(p)) => super::sheets_search::search(self, p).await,
+            Command::Search(Search::One(p)) => {
                 if p.query.is_empty() || p.query.len() > 256 {
                     return Err(CoreError::invalid());
                 }
@@ -150,7 +155,7 @@ async fn read(
     )
 }
 
-fn literal_match(value: &Value, query: &str) -> bool {
+pub(super) fn literal_match(value: &Value, query: &str) -> bool {
     match value {
         Value::String(s) => s.to_lowercase().contains(query),
         Value::Number(n) => n.to_string().contains(query),

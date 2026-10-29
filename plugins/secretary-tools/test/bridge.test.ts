@@ -343,3 +343,27 @@ test('available asynchronous Gateway preserves invocation checks before schedule
   expect(calls).toBe(1);
  }finally{server.stop(true);}
 });
+
+(process.env.SECRETARY_HTTP_TESTS==='1'?test:test.skip)('selected Sheets search forwards explicit view pairs and rejects ambiguous or unbounded requests',async()=>{
+ let calls=0;
+ const targets=[{spreadsheet:'operations',view:'overview'},{spreadsheet:'archive',view:'items'}];
+ const {server,options}=setup(async request=>{
+  calls++;expect(new URL(request.url).pathname).toBe('/v1/tools/sheets_search');
+  expect(await request.json()).toEqual({targets,query:'meeting',limit:2});
+  return Response.json({ok:true,data:{records:[{spreadsheet:'archive',view:'items',fields:{A:'Meeting'}}],sources:[],next_cursor:null}});
+ });
+ try {
+  const bridge=createSecretary(options);
+  await expect(bridge.execute('sheets_search',{targets,query:'meeting'},{})).rejects.toThrow('OWNER_REQUIRED');
+  expect((await bridge.execute('sheets_search',{targets,query:'meeting',limit:2},owner) as any).data.records[0].spreadsheet).toBe('archive');
+  for(const input of [
+   {targets:[],query:'cat'},{targets:[targets[0],targets[0]],query:'cat'},
+   {targets:[...targets,...targets],query:'cat'},{targets:[null],query:'cat'},
+   {targets:[{...targets[0],range:'A1:Z99'}],query:'cat'},
+   {targets,spreadsheet:'operations',view:'overview',query:'cat'},
+   {targets:[{spreadsheet:'x'.repeat(101),view:'all'}],query:'cat'},
+   {targets,query:'é'.repeat(129)},{spreadsheet:'operations',query:'cat'},
+  ]) await expect(bridge.execute('sheets_search',input,owner)).rejects.toThrow('INVALID_INPUT');
+  expect(await bridge.prepareApproval('sheets_search',{},owner)).toBeUndefined();expect(calls).toBe(1);
+ }finally{server.stop(true);}
+});

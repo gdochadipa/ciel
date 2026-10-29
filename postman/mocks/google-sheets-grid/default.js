@@ -1,5 +1,5 @@
 // Official Sheets get/addSheet/updateCells subset; synthetic data only.
-const http=require('http');
+const http=require('http');const reference=require('./reference.json');
 const fields='spreadsheetId,sheets(properties(sheetId,title),merges,data(startRow,startColumn,rowData(values(userEnteredValue,effectiveValue,formattedValue))))';
 const original={spreadsheetId:'generic-spreadsheet',sheets:[{properties:{sheetId:7,title:'Operations',sheetType:'GRID',gridProperties:{rowCount:100,columnCount:10}},data:[{startRow:1,startColumn:1,rowData:[{values:[{effectiveValue:{stringValue:'Independent'}},{effectiveValue:{numberValue:12}},{effectiveValue:{boolValue:true}}]},{values:[{effectiveValue:{stringValue:'Another'}},{userEnteredValue:{formulaValue:'=2*3'},effectiveValue:{numberValue:6}}]}]}]}]};
 const STATE='google-sheets-grid:create-state';
@@ -37,6 +37,10 @@ http.createServer(async(req,res)=>{
   book.sheets.push(sheet);state.creates++;const lose=state.lose;state.lose=false;await pm.state.set(STATE,state);
   if(lose){res.writeHead(200,{'content-type':'application/json'});return res.end('{incomplete');}
   return send(200,{replies:requests.map((_,i)=>i===0?{addSheet:{properties:p}}:{})});
+ }
+ if(req.method==='GET'&&url.pathname==='/v4/spreadsheets/reference-spreadsheet') {
+  if(url.searchParams.get('includeGridData')!=='true'||url.searchParams.get('fields')!==fields||url.searchParams.getAll('ranges').length!==1||url.searchParams.get('ranges')!=="'Archive'!B2:D8")return send(400,{error:{code:400}});
+  return send(200,reference);
  }
  if(req.method!=='GET'||url.pathname!=='/v4/spreadsheets/generic-spreadsheet')return send(501,{error:{code:501,message:'Endpoint not modeled'}});
  if(url.searchParams.get('includeGridData')==='false'&&url.searchParams.get('fields')==='spreadsheetId,sheets(properties(sheetId,title,sheetType,gridProperties(rowCount,columnCount)))')return send(200,{spreadsheetId:book.spreadsheetId,sheets:book.sheets.map(s=>({properties:s.properties}))});

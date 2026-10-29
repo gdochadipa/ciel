@@ -4,7 +4,7 @@ Created 2026-10-28 from official Sheets spreadsheets.get and Docs documents.get/
 
 ## Purpose
 
-Synthetic generic grid reads, bounded tab creation, controlled Docs text edits and explicit selected-Docs search. Sheets and Docs are the only members; actual bridge, Rust Core and SQLite journal run outside the simulation.
+Synthetic generic grid reads, bounded tab creation, controlled Docs text edits and explicit selected-Docs/Sheets-view search. Sheets and Docs are the only members; actual bridge, Rust Core and SQLite journal run outside the simulation.
 
 ## Execution
 
@@ -18,6 +18,7 @@ Run `bash scripts/acceptance.sh workspace` in the qualified environment. The lau
 ## Observations
 
 <!-- begin:observations -->
+2026-10-29 (T035, after review correction): Both members served traffic (53 Docs/48 Sheets events), including5 independent reference-spreadsheet GET path events. Actual built-SDK selected-view global pagination and target-order cursor rejection passed. Reference Sheet is a separate static read-only seed; whole-page optional-profile projection errors are additionally exercised by the public HTTP regression, not modeled as a new Google endpoint.
 2026-10-29 (T033): Both members served traffic (53 Docs/38 Sheets request events); Docs included five reference-document path events alongside the mutable primary. Real bridge/Core and built-SDK selected-doc global pagination passed. The second Doc is an independent static read-only seed; no atomic snapshot or live provider behavior is modeled.
 2026-10-28: Both Google Sheets and Google Docs members served traffic. Actual bridge/Core generic values, Docs preview/approval/append/replace, stale revision rejection, uncertain-response reconciliation and built-entry callback assertions passed; other tabs remained unchanged.
 <!-- end:observations -->

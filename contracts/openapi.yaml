@@ -506,7 +506,7 @@
     "/v1/tools/sheets_search": {
       "post": {
         "operationId": "sheets_search",
-        "description": "Case-insensitive literal scalar-value search over one registered view. No query language or executable formulas. query maximum is 256 UTF-8 bytes.",
+        "description": "Case-insensitive literal scalar-value search over one registered view. No query language or executable formulas. query maximum is 256 UTF-8 bytes. Alternatively select targets: 1\u20133 distinct ordered registered spreadsheet/view pairs, mutually exclusive with spreadsheet/view. All registrations checked before provider IO; sequential distinct-workbook reads with four-second aggregate deadline. Global limit default50/max100, query nonblank <=256 UTF-8 bytes, names <=100 UTF-8 bytes. Existing literal lowercase matching, no Unicode normalization/full folding/regex. Sources evidence includes all selected views; records add aliases. Cursor binds ordered targets, exact query, mode/version and every full workbook fingerprint. Multi serialized data <=128KiB; fail whole page on overflow/provider errors, never truncate records. Overlapping distinct views can return the same cells separately. Independent workbook reads are not atomic.",
         "security": [
           {
             "CoreBearer": []
@@ -538,14 +538,71 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 256
+                  },
+                  "targets": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "spreadsheet": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "view": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        }
+                      },
+                      "required": [
+                        "spreadsheet",
+                        "view"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "description": "Ordered distinct registered readable spreadsheet/view pairs; names additionally <=100 UTF-8 bytes."
                   }
                 },
                 "required": [
-                  "spreadsheet",
-                  "view",
                   "query"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "required": [
+                      "spreadsheet",
+                      "view"
+                    ],
+                    "not": {
+                      "required": [
+                        "targets"
+                      ]
+                    }
+                  },
+                  {
+                    "required": [
+                      "targets"
+                    ],
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "spreadsheet"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "view"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
               }
             }
           }
@@ -562,40 +619,149 @@
                       "const": true
                     },
                     "data": {
-                      "type": "object",
-                      "properties": {
-                        "records": {
-                          "type": "array",
-                          "maxItems": 100,
-                          "items": {
-                            "$ref": "#/components/schemas/Record"
-                          }
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "records": {
+                              "type": "array",
+                              "maxItems": 100,
+                              "items": {
+                                "$ref": "#/components/schemas/Record"
+                              }
+                            },
+                            "next_cursor": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "source_revision": {
+                              "type": "string"
+                            },
+                            "mapping_version": {
+                              "type": "string"
+                            },
+                            "retrieved_at": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          },
+                          "required": [
+                            "records",
+                            "next_cursor",
+                            "source_revision",
+                            "mapping_version",
+                            "retrieved_at"
+                          ],
+                          "additionalProperties": false
                         },
-                        "next_cursor": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "source_revision": {
-                          "type": "string"
-                        },
-                        "mapping_version": {
-                          "type": "string"
-                        },
-                        "retrieved_at": {
-                          "type": "string",
-                          "format": "date-time"
+                        {
+                          "type": "object",
+                          "properties": {
+                            "records": {
+                              "type": "array",
+                              "maxItems": 100,
+                              "items": {
+                                "type": "object",
+                                "required": [
+                                  "fields",
+                                  "source",
+                                  "spreadsheet",
+                                  "view"
+                                ],
+                                "properties": {
+                                  "fields": {
+                                    "type": "object",
+                                    "description": "Projection-specific fields preserve source text and explicit null/unknown/shared states. Legacy records have no stable record_id."
+                                  },
+                                  "source": {
+                                    "$ref": "#/components/schemas/Source"
+                                  },
+                                  "spreadsheet": {
+                                    "type": "string",
+                                    "maxLength": 100
+                                  },
+                                  "view": {
+                                    "type": "string",
+                                    "maxLength": 100
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "sources": {
+                              "type": "array",
+                              "minItems": 1,
+                              "maxItems": 3,
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "spreadsheet": {
+                                    "type": "string",
+                                    "maxLength": 100
+                                  },
+                                  "view": {
+                                    "type": "string",
+                                    "maxLength": 100
+                                  },
+                                  "spreadsheet_id": {
+                                    "type": "string"
+                                  },
+                                  "sheet_id": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "registered_range": {
+                                    "type": "string"
+                                  },
+                                  "source_revision": {
+                                    "type": "string"
+                                  },
+                                  "mapping_version": {
+                                    "type": "string"
+                                  },
+                                  "retrieved_at": {
+                                    "type": "string",
+                                    "format": "date-time"
+                                  }
+                                },
+                                "additionalProperties": false,
+                                "required": [
+                                  "spreadsheet",
+                                  "view",
+                                  "spreadsheet_id",
+                                  "sheet_id",
+                                  "registered_range",
+                                  "source_revision",
+                                  "mapping_version",
+                                  "retrieved_at"
+                                ]
+                              }
+                            },
+                            "next_cursor": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "coverage": {
+                              "const": "registered_views_only"
+                            },
+                            "match_mode": {
+                              "const": "literal_case_insensitive_lowercase"
+                            }
+                          },
+                          "required": [
+                            "records",
+                            "sources",
+                            "next_cursor",
+                            "coverage",
+                            "match_mode"
+                          ],
+                          "additionalProperties": false
                         }
-                      },
-                      "required": [
-                        "records",
-                        "next_cursor",
-                        "source_revision",
-                        "mapping_version",
-                        "retrieved_at"
-                      ],
-                      "additionalProperties": false
+                      ]
                     }
                   },
                   "required": [

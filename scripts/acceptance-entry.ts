@@ -100,6 +100,10 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
    const parameters=selected.parameters as any;assert.equal(parameters.required.includes('document'),false);assert.equal(parameters.properties.documents.maxItems,3);assert.equal(parameters.oneOf.length,2);
   }else if(kind==='grid'){
    const history=await execute(first.tool('operations_get_history',owner),{operation_id:change.operation_id});assert.deepEqual(history.data.operation.after,immutable.after);
+   const selected=first.tool('sheets_search',owner),targets=[{spreadsheet:'operations',view:'overview'},{spreadsheet:'archive',view:'overview'}];
+   const cross=await execute(selected,{targets,query:'independent',limit:1});assert.equal(cross.data.sources.length,2);assert.equal(cross.data.records[0].spreadsheet,'operations');assert(cross.data.next_cursor);
+   const next=await execute(selected,{targets,query:'independent',limit:1,cursor:cross.data.next_cursor});assert.equal(next.data.records[0].spreadsheet,'archive');assert.equal(next.data.next_cursor,null);
+   const parameters=selected.parameters as any;assert.equal(parameters.properties.targets.maxItems,3);assert.equal(parameters.oneOf.length,2);
   }else if(kind==='tabs'){
    const history=await execute(first.tool('operations_get_history',owner),{operation_id:change.operation_id});
    assert.equal(history.data.operation.after.registration,'unregistered');

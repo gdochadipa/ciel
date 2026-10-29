@@ -22,6 +22,10 @@ export async function runWorkspaceAcceptance(coreUrl:string,docsUrl:string) {
  const grid=await tool('sheets_read',{spreadsheet:'operations',view:'overview',limit:2});
  assert.equal(grid.ok,true);assert.deepEqual(grid.data.records[0].fields,{B:'Independent',C:12,D:true});assert.equal(grid.data.records[1].fields.C,6);
  assert.equal((await tool('sheets_search',{spreadsheet:'operations',view:'overview',query:'true'})).data.records.length,1);
+ const targets=[{spreadsheet:'operations',view:'overview'},{spreadsheet:'archive',view:'overview'}];
+ const cross=await tool('sheets_search',{targets,query:'INDEPENDENT',limit:1});assert.equal(cross.ok,true);assert.equal(cross.data.sources.length,2);assert.equal(cross.data.records[0].spreadsheet,'operations');assert(cross.data.next_cursor);
+ const crossNext=await tool('sheets_search',{targets,query:'INDEPENDENT',limit:1,cursor:cross.data.next_cursor});assert.equal(crossNext.data.records[0].spreadsheet,'archive');assert.equal(crossNext.data.records[0].fields.C,5);assert.equal(crossNext.data.next_cursor,null);
+ assert.equal((await tool('sheets_search',{targets:targets.toReversed(),query:'INDEPENDENT',cursor:cross.data.next_cursor})).error.code,'stale_cursor');
  assert.equal((await tool('reports_wedding',{spreadsheet:'operations'})).ok,false,'Domain profile must not be required for generic reads');
  const list=await tool('docs_list',{});assert.equal(list.data.documents[0].document,'notes');
  assert.equal((await tool('docs_describe',{document:'not-registered'})).error.code,'document_not_registered');

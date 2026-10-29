@@ -19,6 +19,24 @@
         }
       ],
       "create_tabs": true
+    },
+    {
+      "alias": "archive",
+      "id": "reference-spreadsheet",
+      "readable": true,
+      "create_tabs": false,
+      "views": [
+        {
+          "name": "overview",
+          "sheet_id": 8,
+          "title": "Archive",
+          "kind": "grid",
+          "range": "B2:D8",
+          "headers": {},
+          "merges": [],
+          "formulas": {}
+        }
+      ]
     }
   ],
   "documents": [
