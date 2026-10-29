@@ -35,6 +35,9 @@ export async function runWorkspaceAcceptance(coreUrl:string,docsUrl:string) {
  assert.equal((await tool('docs_search',{document:'notes',query:'absent phrase'})).data.matches.length,0);
  const insensitive=await tool('docs_search',{document:'notes',query:'HELLO',case_sensitive:false});assert.equal(insensitive.data.matches.length,1);assert.equal(insensitive.data.matches[0].text,'Hello sample\n');assert.equal(insensitive.data.match_mode,'literal_case_insensitive');
  assert.equal((await tool('docs_search',{document:'notes',query:'HELLO'})).data.matches.length,0);
+ const many=await tool('docs_search',{documents:['notes','reference'],query:'HELLO',case_sensitive:false,limit:1});assert.equal(many.ok,true);assert.equal(many.data.sources.length,2);assert.equal(many.data.matches[0].document,'notes');assert(many.data.next_cursor);
+ const manyNext=await tool('docs_search',{documents:['notes','reference'],query:'HELLO',case_sensitive:false,limit:1,cursor:many.data.next_cursor});assert.equal(manyNext.data.matches[0].document,'reference');assert.equal(manyNext.data.next_cursor,null);
+ assert.equal((await tool('docs_search',{documents:['reference','notes'],query:'HELLO',case_sensitive:false,cursor:many.data.next_cursor})).error.code,'stale_cursor');
  const mixedPage=await tool('docs_search',{document:'notes',query:'E',case_sensitive:false,limit:1});assert(mixedPage.data.next_cursor);
  assert.equal((await tool('docs_search',{document:'notes',query:'E',cursor:mixedPage.data.next_cursor})).error.code,'stale_cursor');
  assert.equal((await fixture('/__fixture/stats')).applies,0);

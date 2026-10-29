@@ -7,7 +7,7 @@ export const coreTools = [...docsTools,'sheets_preview_create_tab','sheets_creat
 export const reminderTools = ['create','list','get','reschedule','pause','resume','cancel','history'].map(action=>`reminders_${action}`);
 export const secretaryToolNames = [...coreTools,...reminderTools];
 const fields: Record<string, [string[], string[]]> = {
- docs_list:[[],[]],docs_describe:[['document'],[]],docs_read:[['document','tab_id'],['limit','cursor']],docs_search:[['document','query'],['tab_id','limit','cursor','case_sensitive']],docs_preview_change:[['operation_id','document','tab_id','action','fields'],[]],docs_apply:[['operation_id'],[]],operations_get_history:[[],['operation_id','limit','cursor']],
+ docs_list:[[],[]],docs_describe:[['document'],[]],docs_read:[['document','tab_id'],['limit','cursor']],docs_search:[['query'],['document','documents','tab_id','limit','cursor','case_sensitive']],docs_preview_change:[['operation_id','document','tab_id','action','fields'],[]],docs_apply:[['operation_id'],[]],operations_get_history:[[],['operation_id','limit','cursor']],
  sheets_preview_create_tab:[['operation_id','spreadsheet','title','rows','columns'],['headers']],sheets_create_tab:[['operation_id'],[]],
  sheets_list:[[],[]], sheets_describe:[['spreadsheet'],[]], sheets_read:[['spreadsheet','view'],['limit','cursor']], sheets_search:[['spreadsheet','view','query'],['limit','cursor']],
  sheets_preview_change:[['operation_id','spreadsheet','view','action','fields'],['record_id']], sheets_append:[['operation_id'],[]], sheets_update:[['operation_id'],[]], sheets_get_history:[[],['operation_id','limit','cursor']], reports_wedding:[['spreadsheet'],[]],
@@ -67,7 +67,12 @@ export function createSecretary(options: Options) {
   if (name.startsWith('reminders_')) return reminder(name, value, identity);
   if (!fields[name]) fail('UNKNOWN_TOOL');
   const input = shape(value,...fields[name]);
+  if(name==='docs_search' && (('document' in input)===('documents' in input) || ('documents' in input && 'tab_id' in input))) fail('INVALID_INPUT');
   for (const [key,val] of Object.entries(input)) {
+   if(key==='documents') {
+    if(!Array.isArray(val) || val.length<1 || val.length>3 || new Set(val).size!==val.length || val.some(alias=>typeof alias!=='string' || !alias.trim() || new TextEncoder().encode(alias).length>100)) fail('INVALID_INPUT');
+    continue;
+   }
    if (key==='rows' || key==='columns') {if(!Number.isInteger(val) || Number(val)<1 || Number(val)>(key==='rows'?1000:26)) fail('INVALID_INPUT');continue;}
    if(key==='headers') {if(!Array.isArray(val) || val.length>Number(input.columns) || val.some(h=>typeof h!=='string' || new TextEncoder().encode(h).length>256 || /[\x00-\x1f\x7f-\x9f]/.test(h))) fail('INVALID_INPUT');continue;}
    if(key==='case_sensitive') {if(typeof val!=='boolean') fail('INVALID_INPUT');continue;}

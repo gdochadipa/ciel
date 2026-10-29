@@ -27,6 +27,12 @@
       "id": "demo-document",
       "readable": true,
       "writable": true
+    },
+    {
+      "alias": "reference",
+      "id": "reference-document",
+      "readable": true,
+      "writable": false
     }
   ]
 }

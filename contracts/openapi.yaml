@@ -3052,7 +3052,7 @@
     "/v1/tools/docs_search": {
       "post": {
         "operationId": "docs_search",
-        "description": "Read-only literal search in one registered Google Doc body, all projected tabs or optional tab_id. Query nonblank <=256 UTF-8 bytes; nonoverlapping matches, no regex/normalization. Snippets include <=80 Unicode scalar values each side; titles capped at200 scalars. Cursor binds document identity, full source fingerprint, registry version, exact query and tab selection. Offsets are projected Unicode scalars, not native Google edit indices. case_sensitive defaults true; false uses locale-independent full Unicode case folding (unicase 2.10.0). Matches must align to whole original Unicode scalars, including expansions; no normalization or Turkish-specific rules. Cursor binds matching mode and exact query; default/true retain legacy binding. No Drive discovery.",
+        "description": "Read-only literal search in one registered Google Doc body, all projected tabs or optional tab_id. Query nonblank <=256 UTF-8 bytes; nonoverlapping matches, no regex/normalization. Snippets include <=80 Unicode scalar values each side; titles capped at200 scalars. Cursor binds document identity, full source fingerprint, registry version, exact query and tab selection. Offsets are projected Unicode scalars, not native Google edit indices. case_sensitive defaults true; false uses locale-independent full Unicode case folding (unicase 2.10.0). Matches must align to whole original Unicode scalars, including expansions; no normalization or Turkish-specific rules. Cursor binds matching mode and exact query; default/true retain legacy binding. No Drive discovery. Alternatively pass documents (1\u20133 distinct readable registered aliases), mutually exclusive with document/tab_id. Sequential reads, overall four-second Core IO deadline, no partial successful results. Global limit, order by selected documents then tab/text order. Each match includes document alias; sources evidence lists all selected documents. Multi cursor binds ordered selection, exact query/mode, mapping version and every source identity/fingerprint, even unreturned sources. Separate reads are not an atomic provider snapshot.",
         "security": [
           {
             "CoreBearer": []
@@ -3096,13 +3096,55 @@
                     "type": "boolean",
                     "default": true,
                     "description": "false uses full Unicode case folding; snippets/offsets retain original text. No normalization."
+                  },
+                  "documents": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    "description": "Explicit ordered readable registered aliases, additionally <=100 UTF-8 bytes each. Mutually exclusive with document and tab_id."
                   }
                 },
                 "required": [
-                  "document",
                   "query"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "required": [
+                      "document"
+                    ],
+                    "not": {
+                      "required": [
+                        "documents"
+                      ]
+                    }
+                  },
+                  {
+                    "required": [
+                      "documents"
+                    ],
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "document"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "tab_id"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
               }
             }
           }
@@ -3119,120 +3161,250 @@
                       "const": true
                     },
                     "data": {
-                      "type": "object",
-                      "properties": {
-                        "matches": {
-                          "type": "array",
-                          "maxItems": 50,
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "tab_id": {
-                                "type": "string"
-                              },
-                              "tab_title": {
-                                "type": "string",
-                                "maxLength": 200
-                              },
-                              "text": {
-                                "type": "string",
-                                "maxLength": 416
-                              },
-                              "start_character": {
-                                "type": "integer",
-                                "minimum": 0
-                              },
-                              "end_character": {
-                                "type": "integer",
-                                "minimum": 0
-                              },
-                              "snippet_start_character": {
-                                "type": "integer",
-                                "minimum": 0
-                              },
-                              "snippet_end_character": {
-                                "type": "integer",
-                                "minimum": 0
-                              }
-                            },
-                            "required": [
-                              "tab_id",
-                              "tab_title",
-                              "text",
-                              "start_character",
-                              "end_character",
-                              "snippet_start_character",
-                              "snippet_end_character"
-                            ],
-                            "additionalProperties": false
-                          }
-                        },
-                        "next_cursor": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "source": {
+                      "oneOf": [
+                        {
                           "type": "object",
                           "properties": {
-                            "document": {
-                              "type": "string"
+                            "matches": {
+                              "type": "array",
+                              "maxItems": 50,
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "tab_id": {
+                                    "type": "string"
+                                  },
+                                  "tab_title": {
+                                    "type": "string",
+                                    "maxLength": 200
+                                  },
+                                  "text": {
+                                    "type": "string",
+                                    "maxLength": 416
+                                  },
+                                  "start_character": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "end_character": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "snippet_start_character": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "snippet_end_character": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": [
+                                  "tab_id",
+                                  "tab_title",
+                                  "text",
+                                  "start_character",
+                                  "end_character",
+                                  "snippet_start_character",
+                                  "snippet_end_character"
+                                ],
+                                "additionalProperties": false
+                              }
                             },
-                            "document_id": {
-                              "type": "string"
+                            "next_cursor": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
                             },
-                            "title": {
-                              "type": "string",
-                              "maxLength": 200
+                            "source": {
+                              "type": "object",
+                              "properties": {
+                                "document": {
+                                  "type": "string"
+                                },
+                                "document_id": {
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "type": "string",
+                                  "maxLength": 200
+                                },
+                                "revision_id": {
+                                  "type": "string"
+                                },
+                                "source_fingerprint": {
+                                  "type": "string"
+                                },
+                                "mapping_version": {
+                                  "type": "string"
+                                },
+                                "retrieved_at": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "document",
+                                "document_id",
+                                "title",
+                                "revision_id",
+                                "source_fingerprint",
+                                "mapping_version",
+                                "retrieved_at"
+                              ],
+                              "additionalProperties": false
                             },
-                            "revision_id": {
-                              "type": "string"
+                            "coverage": {
+                              "const": "body_text_only"
                             },
-                            "source_fingerprint": {
-                              "type": "string"
+                            "match_mode": {
+                              "enum": [
+                                "literal_case_sensitive",
+                                "literal_case_insensitive"
+                              ]
                             },
-                            "mapping_version": {
-                              "type": "string"
-                            },
-                            "retrieved_at": {
-                              "type": "string",
-                              "format": "date-time"
+                            "offset_unit": {
+                              "const": "unicode_scalar"
                             }
                           },
                           "required": [
-                            "document",
-                            "document_id",
-                            "title",
-                            "revision_id",
-                            "source_fingerprint",
-                            "mapping_version",
-                            "retrieved_at"
+                            "matches",
+                            "next_cursor",
+                            "source",
+                            "coverage",
+                            "match_mode",
+                            "offset_unit"
                           ],
                           "additionalProperties": false
                         },
-                        "coverage": {
-                          "const": "body_text_only"
-                        },
-                        "match_mode": {
-                          "enum": [
-                            "literal_case_sensitive",
-                            "literal_case_insensitive"
-                          ]
-                        },
-                        "offset_unit": {
-                          "const": "unicode_scalar"
+                        {
+                          "type": "object",
+                          "properties": {
+                            "matches": {
+                              "type": "array",
+                              "maxItems": 50,
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "tab_id": {
+                                    "type": "string"
+                                  },
+                                  "tab_title": {
+                                    "type": "string",
+                                    "maxLength": 200
+                                  },
+                                  "text": {
+                                    "type": "string",
+                                    "maxLength": 416
+                                  },
+                                  "start_character": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "end_character": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "snippet_start_character": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "snippet_end_character": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "document": {
+                                    "type": "string",
+                                    "maxLength": 100
+                                  }
+                                },
+                                "required": [
+                                  "tab_id",
+                                  "tab_title",
+                                  "text",
+                                  "start_character",
+                                  "end_character",
+                                  "snippet_start_character",
+                                  "snippet_end_character",
+                                  "document"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "next_cursor": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "coverage": {
+                              "const": "body_text_only"
+                            },
+                            "match_mode": {
+                              "enum": [
+                                "literal_case_sensitive",
+                                "literal_case_insensitive"
+                              ]
+                            },
+                            "offset_unit": {
+                              "const": "unicode_scalar"
+                            },
+                            "sources": {
+                              "type": "array",
+                              "minItems": 1,
+                              "maxItems": 3,
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "document": {
+                                    "type": "string"
+                                  },
+                                  "document_id": {
+                                    "type": "string"
+                                  },
+                                  "title": {
+                                    "type": "string",
+                                    "maxLength": 200
+                                  },
+                                  "revision_id": {
+                                    "type": "string"
+                                  },
+                                  "source_fingerprint": {
+                                    "type": "string"
+                                  },
+                                  "mapping_version": {
+                                    "type": "string"
+                                  },
+                                  "retrieved_at": {
+                                    "type": "string",
+                                    "format": "date-time"
+                                  }
+                                },
+                                "required": [
+                                  "document",
+                                  "document_id",
+                                  "title",
+                                  "revision_id",
+                                  "source_fingerprint",
+                                  "mapping_version",
+                                  "retrieved_at"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "matches",
+                            "next_cursor",
+                            "sources",
+                            "coverage",
+                            "match_mode",
+                            "offset_unit"
+                          ],
+                          "additionalProperties": false
                         }
-                      },
-                      "required": [
-                        "matches",
-                        "next_cursor",
-                        "source",
-                        "coverage",
-                        "match_mode",
-                        "offset_unit"
-                      ],
-                      "additionalProperties": false
+                      ]
                     }
                   },
                   "required": [

@@ -1,5 +1,5 @@
 // Local Google Docs text/revision subset. Never a Core or host approval mock.
-const http=require('http');const seed=require('./fixture.json');
+const http=require('http');const seed=require('./fixture.json');const reference=require('./reference.json');
 const STATE='google-docs-text:state';
 function readJson(req){
  if(req.body!==undefined)return Promise.resolve(req.body);
@@ -21,9 +21,9 @@ http.createServer(async(req,res)=>{
    setText(state.document.tabs[0],body.text);state.document.revisionId=`rev-${++state.revision}`;await pm.state.set(STATE,state);return send(200,{edited:true});
   }
   if(req.method==='GET'&&url.pathname==='/__fixture/stats')return send(200,{applies:state.applies});
-  if(req.method==='GET'&&url.pathname==='/v1/documents/demo-document'){
+  if(req.method==='GET'&&['/v1/documents/demo-document','/v1/documents/reference-document'].includes(url.pathname)){
    if(url.searchParams.get('includeTabsContent')!=='true'||url.searchParams.get('suggestionsViewMode')!=='SUGGESTIONS_INLINE')return send(400,{error:{code:400,message:'Explicit tabs/suggestion view required'}});
-   return send(200,state.document);
+   return send(200,url.pathname.endsWith('/reference-document')?reference:state.document);
   }
   if(req.method==='POST'&&url.pathname==='/v1/documents/demo-document:batchUpdate'){
    const body=await pending;

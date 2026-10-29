@@ -319,3 +319,27 @@ test('available asynchronous Gateway preserves invocation checks before schedule
   expect(calls).toBe(1);
  }finally{server.stop(true);}
 });
+
+(process.env.SECRETARY_HTTP_TESTS==='1'?test:test.skip)('selected Docs search forwards a bounded explicit list and rejects ambiguous selectors before traffic',async()=>{
+ let calls=0;
+ const {server,options}=setup(async request=>{
+  calls++;expect(new URL(request.url).pathname).toBe('/v1/tools/docs_search');
+  expect(await request.json()).toEqual({documents:['notes','plan'],query:'MEETING',case_sensitive:false,limit:2});
+  return Response.json({ok:true,data:{matches:[{document:'plan',text:'Meeting'}],sources:[],next_cursor:null}});
+ });
+ try {
+  const bridge=createSecretary(options);
+  await expect(bridge.execute('docs_search',{documents:['notes'],query:'cat'},{})).rejects.toThrow('OWNER_REQUIRED');
+  const result=await bridge.execute('docs_search',{documents:['notes','plan'],query:'MEETING',case_sensitive:false,limit:2},owner) as any;
+  expect(result.data.matches[0].document).toBe('plan');
+  for(const params of [
+   {documents:[],query:'cat'}, {documents:['a','b','c','d'],query:'cat'},
+   {documents:['notes','notes'],query:'cat'}, {documents:[null],query:'cat'},
+   {documents:['x'.repeat(101)],query:'cat'}, {documents:['notes'],document:'notes',query:'cat'},
+   {documents:['notes'],tab_id:'t.0',query:'cat'}, {documents:null,document:'notes',query:'cat'},
+   {query:'cat'}, {documents:['notes'],query:'é'.repeat(129)},
+  ]) await expect(bridge.execute('docs_search',params,owner)).rejects.toThrow('INVALID_INPUT');
+  expect(await bridge.prepareApproval('docs_search',{},owner)).toBeUndefined();
+  expect(calls).toBe(1);
+ }finally{server.stop(true);}
+});

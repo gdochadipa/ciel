@@ -1,7 +1,7 @@
 //! Google Docs queries and controlled mutations through the shared bus and journal.
 use super::{
     bus::CommandBus,
-    commands::{DocumentRead, DocumentSearch},
+    commands::{DocumentRead, DocumentSearch, MultiDocumentSearch, SingleDocumentSearch},
     ports::WriteOutcome,
     writes::Writes,
 };
@@ -59,6 +59,12 @@ pub async fn read(bus: &CommandBus, p: DocumentRead) -> Result<Value, CoreError>
     )
 }
 pub async fn search(bus: &CommandBus, p: DocumentSearch) -> Result<Value, CoreError> {
+    match p {
+        DocumentSearch::One(p) => search_one(bus, p).await,
+        DocumentSearch::Many(p) => search_many(bus, p).await,
+    }
+}
+async fn search_one(bus: &CommandBus, p: SingleDocumentSearch) -> Result<Value, CoreError> {
     let limit = p.limit.unwrap_or(10);
     if !(1..=50).contains(&limit)
         || p.query.trim().is_empty()
@@ -105,6 +111,114 @@ pub async fn search(bus: &CommandBus, p: DocumentSearch) -> Result<Value, CoreEr
     Ok(
         json!({"matches":matches,"next_cursor":if more {Some(format!("{binding}:{}",offset+limit))} else {None},
         "source":{"document":p.document,"document_id":snapshot.id,"title":snapshot.title.chars().take(200).collect::<String>(),"revision_id":snapshot.revision,"source_fingerprint":snapshot.fingerprint,"mapping_version":bus.registry.version,"retrieved_at":chrono::Utc::now().to_rfc3339()},
+        "coverage":"body_text_only","match_mode":if p.case_sensitive {"literal_case_sensitive"} else {"literal_case_insensitive"},"offset_unit":"unicode_scalar"}),
+    )
+}
+async fn search_many(bus: &CommandBus, p: MultiDocumentSearch) -> Result<Value, CoreError> {
+    let limit = p.limit.unwrap_or(10);
+    if !(1..=50).contains(&limit)
+        || p.query.trim().is_empty()
+        || p.query.len() > 256
+        || p.documents.is_empty()
+        || p.documents.len() > 3
+        || p.cursor
+            .as_ref()
+            .is_some_and(|c| c.is_empty() || c.len() > 8192)
+    {
+        return Err(CoreError::invalid());
+    }
+    let mut unique = std::collections::HashSet::new();
+    for alias in &p.documents {
+        if alias.trim().is_empty() || alias.len() > 100 || !unique.insert(alias) {
+            return Err(CoreError::invalid());
+        }
+        bus.registry.document(alias)?;
+    }
+    tokio::time::timeout(
+        std::time::Duration::from_secs(4),
+        search_selected(bus, &p, limit),
+    )
+    .await
+    .map_err(|_| CoreError(ErrorKind::ProviderUnavailable, "document_search_timeout"))?
+}
+async fn search_selected(
+    bus: &CommandBus,
+    p: &MultiDocumentSearch,
+    limit: usize,
+) -> Result<Value, CoreError> {
+    let mut snapshots = Vec::new();
+    for alias in &p.documents {
+        snapshots.push(load(bus, alias).await?);
+    }
+    let binding = fingerprint(&json!([
+        "docs_search_many_v1",
+        p.documents,
+        p.query,
+        if p.case_sensitive {
+            "literal_case_sensitive"
+        } else {
+            "unicode_casefold_2.10.0"
+        },
+        bus.registry.version,
+        snapshots
+            .iter()
+            .map(|s| json!([s.id, s.fingerprint]))
+            .collect::<Vec<_>>()
+    ]));
+    let (start_document, start_offset) = if let Some(cursor) = &p.cursor {
+        let parts: Vec<_> = cursor.split(':').collect();
+        if parts.len() != 3 {
+            return Err(CoreError::invalid());
+        }
+        if parts[0] != binding {
+            return Err(CoreError(ErrorKind::Conflict, "stale_cursor"));
+        }
+        let document = parts[1]
+            .parse::<usize>()
+            .map_err(|_| CoreError::invalid())?;
+        let offset = parts[2]
+            .parse::<usize>()
+            .map_err(|_| CoreError::invalid())?;
+        if document >= snapshots.len() {
+            return Err(CoreError::invalid());
+        }
+        (document, offset)
+    } else {
+        (0, 0)
+    };
+    let mut matches = Vec::new();
+    let mut next_cursor = None;
+    'selected: for (index, snapshot) in snapshots.iter().enumerate().skip(start_document) {
+        let offset = if index == start_document {
+            start_offset
+        } else {
+            0
+        };
+        let (found, _) = documents::search(
+            snapshot,
+            &p.query,
+            None,
+            offset,
+            limit + 1 - matches.len(),
+            p.case_sensitive,
+        )?;
+        for (rank, mut hit) in found.into_iter().enumerate() {
+            if matches.len() == limit {
+                next_cursor = Some(format!("{binding}:{index}:{}", offset + rank));
+                break 'selected;
+            }
+            hit["document"] = json!(p.documents[index]);
+            matches.push(hit);
+        }
+    }
+    let retrieved_at = chrono::Utc::now().to_rfc3339();
+    let sources: Vec<_> = snapshots.iter().zip(&p.documents).map(|(s,alias)|json!({
+        "document":alias,"document_id":s.id,"title":s.title.chars().take(200).collect::<String>(),
+        "revision_id":s.revision,"source_fingerprint":s.fingerprint,
+        "mapping_version":bus.registry.version,"retrieved_at":retrieved_at
+    })).collect();
+    Ok(
+        json!({"matches":matches,"sources":sources,"next_cursor":next_cursor,
         "coverage":"body_text_only","match_mode":if p.case_sensitive {"literal_case_sensitive"} else {"literal_case_insensitive"},"offset_unit":"unicode_scalar"}),
     )
 }

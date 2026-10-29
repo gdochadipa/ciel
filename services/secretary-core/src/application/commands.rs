@@ -47,8 +47,26 @@ pub struct DocumentRead {
     pub cursor: Option<String>,
 }
 #[derive(Deserialize)]
+#[serde(untagged)]
+pub enum DocumentSearch {
+    One(SingleDocumentSearch),
+    Many(MultiDocumentSearch),
+}
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct DocumentSearch {
+pub struct MultiDocumentSearch {
+    pub documents: Vec<String>,
+    pub query: String,
+    #[serde(default, deserialize_with = "non_null_option")]
+    pub limit: Option<usize>,
+    #[serde(default, deserialize_with = "non_null_option")]
+    pub cursor: Option<String>,
+    #[serde(default = "default_case_sensitive")]
+    pub case_sensitive: bool,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SingleDocumentSearch {
     pub document: String,
     pub query: String,
     pub tab_id: Option<String>,
@@ -56,6 +74,13 @@ pub struct DocumentSearch {
     pub cursor: Option<String>,
     #[serde(default = "default_case_sensitive")]
     pub case_sensitive: bool,
+}
+fn non_null_option<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
 }
 fn default_case_sensitive() -> bool {
     true

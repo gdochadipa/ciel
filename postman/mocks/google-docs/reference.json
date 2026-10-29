@@ -1,0 +1,30 @@
+{
+  "documentId": "reference-document",
+  "title": "Synthetic reference",
+  "revisionId": "reference-1",
+  "tabs": [
+    {
+      "tabProperties": {
+        "tabId": "ref.0",
+        "title": "Reference"
+      },
+      "documentTab": {
+        "body": {
+          "content": [
+            {
+              "paragraph": {
+                "elements": [
+                  {
+                    "textRun": {
+                      "content": "Reference hello SDK appended\n"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

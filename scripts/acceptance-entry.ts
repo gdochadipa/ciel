@@ -94,6 +94,10 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
    assert.equal(read.data.text.split(' SDK appended').length-1,1);
    const found=await execute(first.tool('docs_search',owner),{document:'notes',query:'SDK appended'});assert.equal(found.data.matches.length,1);assert.equal(found.data.matches[0].tab_id,'t.0');
    const folded=await execute(first.tool('docs_search',owner),{document:'notes',query:'sdk APPENDED',case_sensitive:false});assert.equal(folded.data.matches.length,1);assert.equal(folded.data.match_mode,'literal_case_insensitive');
+   const selected=first.tool('docs_search',owner);
+   const many=await execute(selected,{documents:['notes','reference'],query:'SDK appended',case_sensitive:false,limit:1});assert.equal(many.data.sources.length,2);assert.equal(many.data.matches[0].document,'notes');assert(many.data.next_cursor);
+   const following=await execute(selected,{documents:['notes','reference'],query:'SDK appended',case_sensitive:false,limit:1,cursor:many.data.next_cursor});assert.equal(following.data.matches[0].document,'reference');assert.equal(following.data.next_cursor,null);
+   const parameters=selected.parameters as any;assert.equal(parameters.required.includes('document'),false);assert.equal(parameters.properties.documents.maxItems,3);assert.equal(parameters.oneOf.length,2);
   }else if(kind==='grid'){
    const history=await execute(first.tool('operations_get_history',owner),{operation_id:change.operation_id});assert.deepEqual(history.data.operation.after,immutable.after);
   }else if(kind==='tabs'){

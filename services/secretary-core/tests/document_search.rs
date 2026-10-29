@@ -401,3 +401,249 @@ async fn non_boolean_mode_is_rejected_before_any_provider_request() {
     assert_eq!(p.reads.load(Ordering::SeqCst), 0);
     task.abort();
 }
+
+async fn read_selected(
+    State(p): State<Provider>,
+    Query(q): Query<HashMap<String, String>>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let settings = p.book.lock().await.clone();
+    if settings["__fail"] == true {
+        return (
+            axum::http::StatusCode::BAD_GATEWAY,
+            Json(json!({"message":"PRIVATE_PROVIDER_CANARY"})),
+        )
+            .into_response();
+    }
+    if settings["__slow"] == true {
+        tokio::time::sleep(std::time::Duration::from_secs(6)).await;
+    }
+    read(State(p), Query(q)).await.into_response()
+}
+async fn many_fixture() -> (Router, Vec<Provider>, tokio::task::JoinHandle<()>) {
+    let mut provider = Router::new();
+    let mut states = Vec::new();
+    let mut docs = Vec::new();
+    for (alias, id, text) in [
+        ("notes", "first-doc", "😀 cat\n"),
+        ("plan", "second-doc", "cat Straße cat\n"),
+        ("empty", "third-doc", "Nothing here\n"),
+    ] {
+        let p = Provider {
+            book: Arc::new(tokio::sync::Mutex::new(
+                json!({"documentId":id,"title":alias,"revisionId":"rev-1","tabs":[tab("t.0","Main",text)]}),
+            )),
+            reads: Default::default(),
+            writes: Default::default(),
+        };
+        provider = provider
+            .route(
+                &format!("/documents/{id}"),
+                get(read_selected).with_state(p.clone()),
+            )
+            .route(
+                &format!("/documents/{id}:batchUpdate"),
+                post(write).with_state(p.clone()),
+            );
+        states.push(p);
+        docs.push(json!({"alias":alias,"id":id,"readable":true}));
+    }
+    docs.push(json!({"alias":"hidden","id":"hidden-doc","readable":false}));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let task = tokio::spawn(async move { axum::serve(listener, provider).await.unwrap() });
+    let registry: Registry =
+        serde_json::from_value(json!({"version":"many-v1","documents":docs})).unwrap();
+    let app = router(
+        AppState::new(
+            registry,
+            "business-secret".into(),
+            "owner".into(),
+            GoogleClient::static_token(&url, "synthetic").unwrap(),
+        )
+        .unwrap(),
+    );
+    (app, states, task)
+}
+
+#[tokio::test]
+async fn selected_docs_search_pages_in_requested_order_with_per_document_evidence_and_no_writes() {
+    let (app, states, task) = many_fixture().await;
+    let (status, first) = search(
+        &app,
+        json!({"documents":["notes","plan","empty"],"query":"cat","limit":1}),
+    )
+    .await;
+    assert_eq!(status, 200, "{first}");
+    assert_eq!(first["data"]["sources"].as_array().unwrap().len(), 3);
+    assert_eq!(first["data"]["sources"][0]["document_id"], "first-doc");
+    assert_eq!(first["data"]["matches"][0]["document"], "notes");
+    assert_eq!(first["data"]["matches"][0]["start_character"], 2);
+    let (_,second) = search(&app,json!({"documents":["notes","plan","empty"],"query":"cat","limit":1,"cursor":first["data"]["next_cursor"]})).await;
+    assert_eq!(second["data"]["matches"][0]["document"], "plan");
+    assert_eq!(second["data"]["matches"][0]["start_character"], 0);
+    let (_,last) = search(&app,json!({"documents":["notes","plan","empty"],"query":"cat","limit":2,"cursor":second["data"]["next_cursor"]})).await;
+    assert_eq!(last["data"]["matches"].as_array().unwrap().len(), 1);
+    assert_eq!(last["data"]["matches"][0]["start_character"], 11);
+    assert!(last["data"]["next_cursor"].is_null());
+    let (_, reversed) = search(
+        &app,
+        json!({"documents":["plan","notes"],"query":"cat","limit":3}),
+    )
+    .await;
+    assert_eq!(reversed["data"]["matches"][0]["document"], "plan");
+    assert_eq!(reversed["data"]["matches"][2]["document"], "notes");
+    assert_eq!(reversed["data"]["offset_unit"], "unicode_scalar");
+    assert!(states.iter().all(|p| p.writes.load(Ordering::SeqCst) == 0));
+    task.abort();
+}
+
+#[tokio::test]
+async fn selected_docs_rejects_invalid_or_unauthorized_selections_before_provider_reads() {
+    let (app, states, task) = many_fixture().await;
+    for (input, expected) in [
+        (json!({"documents":[],"query":"cat"}), 400),
+        (
+            json!({"documents":["notes","plan","empty","notes"],"query":"cat"}),
+            400,
+        ),
+        (json!({"documents":["notes","notes"],"query":"cat"}), 400),
+        (json!({"documents":["notes","hidden"],"query":"cat"}), 404),
+        (json!({"documents":["notes","missing"],"query":"cat"}), 404),
+        (
+            json!({"documents":["notes"],"document":"notes","query":"cat"}),
+            400,
+        ),
+        (
+            json!({"documents":["notes"],"tab_id":"t.0","query":"cat"}),
+            400,
+        ),
+        (
+            json!({"documents":null,"document":"notes","query":"cat"}),
+            400,
+        ),
+        (json!({"documents":["notes",null],"query":"cat"}), 400),
+        (json!({"documents":[" "],"query":"cat"}), 400),
+        (json!({"documents":["x".repeat(101)],"query":"cat"}), 400),
+        (json!({"documents":["notes"],"query":"é".repeat(129)}), 400),
+        (json!({"documents":["notes"],"query":"  "}), 400),
+        (json!({"documents":["notes"],"query":"cat","limit":51}), 400),
+        (
+            json!({"documents":["notes"],"query":"cat","limit":null}),
+            400,
+        ),
+        (
+            json!({"documents":["notes"],"query":"cat","cursor":null}),
+            400,
+        ),
+        (
+            json!({"documents":["notes"],"query":"cat","case_sensitive":null}),
+            400,
+        ),
+    ] {
+        let (status, body) = search(&app, input).await;
+        assert_eq!(status, expected, "{body}");
+        assert!(states.iter().all(|p| p.reads.load(Ordering::SeqCst) == 0));
+    }
+    task.abort();
+}
+
+#[tokio::test]
+async fn selected_docs_cursors_bind_every_source_selection_query_mode_and_coordinates() {
+    let (app, states, task) = many_fixture().await;
+    let (_, first) = search(
+        &app,
+        json!({"documents":["notes","plan","empty"],"query":"cat","limit":1}),
+    )
+    .await;
+    let cursor = first["data"]["next_cursor"].as_str().unwrap();
+    for input in [
+        json!({"documents":["plan","notes","empty"],"query":"cat","cursor":cursor}),
+        json!({"documents":["notes","plan"],"query":"cat","cursor":cursor}),
+        json!({"documents":["notes","plan","empty"],"query":"Cat","cursor":cursor}),
+        json!({"documents":["notes","plan","empty"],"query":"cat","case_sensitive":false,"cursor":cursor}),
+    ] {
+        assert_eq!(search(&app, input).await.1["error"]["code"], "stale_cursor");
+    }
+    let binding = cursor.split(':').next().unwrap();
+    for suffix in ["3:0", "1:99999", "1:garbage", "1:0:0"] {
+        let (status,_) = search(&app,json!({"documents":["notes","plan","empty"],"query":"cat","cursor":format!("{binding}:{suffix}")})).await;
+        assert_eq!(status, 400);
+    }
+    // Even a source with no matches and no returned snippets participates in binding.
+    states[2].book.lock().await["title"] = json!("Changed, same revision");
+    assert_eq!(
+        search(
+            &app,
+            json!({"documents":["notes","plan","empty"],"query":"cat","cursor":cursor})
+        )
+        .await
+        .1["error"]["code"],
+        "stale_cursor"
+    );
+    task.abort();
+}
+
+#[tokio::test]
+async fn selected_docs_reuses_unicode_folding_original_offsets_and_bounded_no_match_pages() {
+    let (app, states, task) = many_fixture().await;
+    let (status, result) = search(
+        &app,
+        json!({"documents":["notes","plan"],"query":"STRASSE","case_sensitive":false}),
+    )
+    .await;
+    assert_eq!(status, 200, "{result}");
+    let matches = result["data"]["matches"].as_array().unwrap();
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0]["document"], "plan");
+    assert_eq!(matches[0]["start_character"], 4);
+    assert_eq!(matches[0]["end_character"], 10);
+    assert_eq!(matches[0]["text"], "cat Straße cat\n");
+    assert_eq!(result["data"]["match_mode"], "literal_case_insensitive");
+    states[1].book.lock().await["title"] = json!("T".repeat(500));
+    let (_, none) = search(
+        &app,
+        json!({"documents":["notes","plan"],"query":"not found"}),
+    )
+    .await;
+    assert_eq!(none["data"]["matches"], json!([]));
+    assert!(none["data"]["next_cursor"].is_null());
+    assert_eq!(
+        none["data"]["sources"][1]["title"]
+            .as_str()
+            .unwrap()
+            .chars()
+            .count(),
+        200
+    );
+    task.abort();
+}
+
+#[tokio::test]
+async fn selected_docs_provider_failure_identity_drift_and_timeout_never_return_partial_success() {
+    let (app, states, task) = many_fixture().await;
+    let input = json!({"documents":["notes","plan"],"query":"cat"});
+    states[1].book.lock().await["__fail"] = json!(true);
+    let (status, failed) = search(&app, input.clone()).await;
+    assert_eq!(status, 502);
+    assert_eq!(failed["ok"], false);
+    assert!(failed.get("data").is_none());
+    assert!(!failed.to_string().contains("CANARY"));
+    assert!(states[0].reads.load(Ordering::SeqCst) > 0);
+    states[1].book.lock().await["__fail"] = json!(false);
+    states[1].book.lock().await["documentId"] = json!("wrong-doc");
+    let (status, failed) = search(&app, input.clone()).await;
+    assert_eq!(status, 409);
+    assert!(failed.get("data").is_none());
+    states[1].book.lock().await["documentId"] = json!("second-doc");
+    states[1].book.lock().await["__slow"] = json!(true);
+    let (status, failed) =
+        tokio::time::timeout(std::time::Duration::from_secs(6), search(&app, input))
+            .await
+            .expect("aggregate deadline must precede ten-second adapter timeout");
+    assert_eq!(status, 502);
+    assert_eq!(failed["error"]["code"], "document_search_timeout");
+    assert!(failed.get("data").is_none());
+    assert!(states.iter().all(|p| p.writes.load(Ordering::SeqCst) == 0));
+    task.abort();
+}
