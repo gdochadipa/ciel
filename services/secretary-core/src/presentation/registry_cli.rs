@@ -1,5 +1,6 @@
 //! Offline operator setup. No Google client, environment secrets, journal or listener.
-use crate::domain::registry::Registry;
+use crate::domain::registry::{Document, Kind, Registry, Spreadsheet, View};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
     ffi::OsString,
@@ -26,7 +27,7 @@ fn validation_code(reason: &str) -> &'static str {
         _ => "registry_invalid",
     }
 }
-fn load(path: &Path) -> Result<Registry, &'static str> {
+fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, &'static str> {
     let metadata = fs::symlink_metadata(path).map_err(|_| "registry_unavailable")?;
     if !metadata.is_file() {
         return Err("registry_unsafe_file");
@@ -56,13 +57,15 @@ fn load(path: &Path) -> Result<Registry, &'static str> {
     if bytes.len() > MAX_BYTES {
         return Err("registry_too_large");
     }
-    let registry: Registry =
-        serde_json::from_slice(&bytes).map_err(|error| match error.classify() {
-            serde_json::error::Category::Syntax | serde_json::error::Category::Eof => {
-                "registry_json_invalid"
-            }
-            _ => "registry_schema_invalid",
-        })?;
+    serde_json::from_slice(&bytes).map_err(|error| match error.classify() {
+        serde_json::error::Category::Syntax | serde_json::error::Category::Eof => {
+            "registry_json_invalid"
+        }
+        _ => "registry_schema_invalid",
+    })
+}
+fn load(path: &Path) -> Result<Registry, &'static str> {
+    let registry: Registry = read_json(path)?;
     registry
         .validate()
         .map_err(|reason| validation_code(&reason))?;
@@ -97,8 +100,14 @@ fn initialize(path: &Path) -> Result<Registry, &'static str> {
         document.writable = false;
     }
     registry.validate().map_err(|_| "template_invalid")?;
-    let mut bytes = serde_json::to_vec_pretty(&registry).map_err(|_| "template_invalid")?;
+    write_candidate(path, registry)
+}
+fn write_candidate(path: &Path, registry: Registry) -> Result<Registry, &'static str> {
+    let mut bytes = serde_json::to_vec_pretty(&registry).map_err(|_| "registry_schema_invalid")?;
     bytes.push(b'\n');
+    if bytes.len() > MAX_BYTES {
+        return Err("registry_too_large");
+    }
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
@@ -118,6 +127,77 @@ fn initialize(path: &Path) -> Result<Registry, &'static str> {
         .map_err(|_| "output_write_failed")?;
     Ok(registry)
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Addition {
+    version: String,
+    resource: Resource,
+}
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+enum Resource {
+    Document {
+        alias: String,
+        id: String,
+    },
+    Spreadsheet {
+        alias: String,
+        id: String,
+        views: Vec<GridRegistration>,
+    },
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GridRegistration {
+    name: String,
+    sheet_id: i64,
+    title: String,
+    range: String,
+}
+fn add(base: &Path, resource: &Path, output: &Path) -> Result<Registry, &'static str> {
+    let mut registry = load(base)?;
+    let addition: Addition = read_json(resource)?;
+    if addition.version.trim().is_empty() {
+        return Err("registry_bounds");
+    }
+    if addition.version == registry.version {
+        return Err("registry_version_unchanged");
+    }
+    registry.version = addition.version;
+    match addition.resource {
+        Resource::Document { alias, id } => registry.documents.push(Document {
+            alias,
+            id,
+            readable: false,
+            writable: false,
+        }),
+        Resource::Spreadsheet { alias, id, views } => registry.spreadsheets.push(Spreadsheet {
+            alias,
+            id,
+            readable: false,
+            create_tabs: false,
+            views: views
+                .into_iter()
+                .map(|grid| View {
+                    name: grid.name,
+                    sheet_id: grid.sheet_id,
+                    title: grid.title,
+                    range: grid.range,
+                    kind: Kind::Grid,
+                    headers: Default::default(),
+                    merges: Vec::new(),
+                    formulas: Default::default(),
+                    writable_range: None,
+                    write_schema: None,
+                })
+                .collect(),
+        }),
+    }
+    registry
+        .validate()
+        .map_err(|reason| validation_code(&reason))?;
+    write_candidate(output, registry)
+}
 pub fn run(args: &[OsString]) -> (Value, i32) {
     if cfg!(not(unix)) {
         return (
@@ -134,9 +214,22 @@ pub fn run(args: &[OsString]) -> (Value, i32) {
     } else if args.len() == 4 && args[0] == "registry" && args[1] == "init" && args[2] == "--output"
     {
         initialize(Path::new(&args[3])).map(|registry| (registry, true))
+    } else if args.len() == 8
+        && args[0] == "registry"
+        && args[1] == "add"
+        && args[2] == "--config"
+        && args[4] == "--resource"
+        && args[6] == "--output"
+    {
+        add(
+            Path::new(&args[3]),
+            Path::new(&args[5]),
+            Path::new(&args[7]),
+        )
+        .map(|registry| (registry, true))
     } else {
         return (
-            json!({"ok":false,"mode":"offline","error":{"code":"usage","message":"Use registry check --config PATH or registry init --output PATH."},"live_access_checked":false,"activation_changed":false}),
+            json!({"ok":false,"mode":"offline","error":{"code":"usage","message":"Use registry check --config PATH, registry init --output PATH, or registry add --config BASE --resource ADDITION --output NEW."},"live_access_checked":false,"activation_changed":false}),
             2,
         );
     };
