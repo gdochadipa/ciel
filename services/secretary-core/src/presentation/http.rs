@@ -82,6 +82,7 @@ fn decode_tool(name: &str, input: Value) -> Result<Command, CoreError> {
         "docs_read" => match parse(input)? {
             DocumentReadRequest::Tab(p) => Command::DocsRead(p),
             DocumentReadRequest::Summary(p) => Command::DocsSummary(p),
+            DocumentReadRequest::Many(p) => Command::DocsSummaryMany(p),
         },
         "docs_search" => Command::DocsSearch(parse(input)?),
         "docs_preview_change" => Command::Mutation(MutationCommand::DocsPreview(parse(input)?)),

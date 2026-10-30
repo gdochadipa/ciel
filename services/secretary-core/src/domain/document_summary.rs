@@ -17,25 +17,7 @@ pub fn context(
         .map(|t| t.text.chars().count())
         .collect();
     let total: usize = lengths.iter().sum();
-    let mut allocated = vec![0; lengths.len()];
-    let mut remaining = budget.min(total);
-    while remaining > 0 {
-        let active: Vec<_> = lengths
-            .iter()
-            .enumerate()
-            .filter(|(i, n)| allocated[*i] < **n)
-            .map(|(i, _)| i)
-            .collect();
-        let share = (remaining / active.len()).max(1);
-        for i in active {
-            let take = share.min(lengths[i] - allocated[i]).min(remaining);
-            allocated[i] += take;
-            remaining -= take;
-            if remaining == 0 {
-                break;
-            }
-        }
-    }
+    let allocated = allocate(&lengths, budget);
     let context_id = fingerprint(&json!([
         "docs_summary_context_v1",
         alias,
@@ -70,4 +52,64 @@ pub fn context(
     json!({"mode":"summary_context","content_role":"untrusted_source_data","context_id":context_id,
         "source":{"document":alias,"document_id":snapshot.id,"title":snapshot.title.chars().take(200).collect::<String>(),"revision_id":snapshot.revision,"source_fingerprint":snapshot.fingerprint,"mapping_version":version,"retrieved_at":retrieved_at},
         "tabs":tabs,"excerpts":excerpts,"coverage":{"scope":"projected_body_text_only","total_characters":total,"included_characters":included,"omitted_characters":total-included,"total_tabs":snapshot.tabs.len(),"included_tabs":allocated.iter().filter(|n|**n>0).count(),"projected_text_complete":included==total,"can_summarize":can_summarize}})
+}
+
+fn allocate(lengths: &[usize], budget: usize) -> Vec<usize> {
+    let total: usize = lengths.iter().sum();
+    let mut allocated = vec![0; lengths.len()];
+    let mut remaining = budget.min(total);
+    while remaining > 0 {
+        let active: Vec<_> = lengths
+            .iter()
+            .enumerate()
+            .filter(|(i, n)| allocated[*i] < **n)
+            .map(|(i, _)| i)
+            .collect();
+        let share = (remaining / active.len()).max(1);
+        for i in active {
+            let take = share.min(lengths[i] - allocated[i]).min(remaining);
+            allocated[i] += take;
+            remaining -= take;
+            if remaining == 0 {
+                break;
+            }
+        }
+    }
+    allocated
+}
+
+/// Independently captured registered sources; labels are scoped by source_id.
+pub fn selected_context(
+    sources: &[(&str, Snapshot)],
+    version: &str,
+    budget: usize,
+    retrieved_at: &str,
+) -> Value {
+    let lengths: Vec<usize> = sources
+        .iter()
+        .map(|(_, s)| s.tabs.iter().map(|t| t.text.chars().count()).sum())
+        .collect();
+    let allocated = allocate(&lengths, budget);
+    let context_id = fingerprint(&json!([
+        "docs_summary_selected_v1",
+        sources
+            .iter()
+            .map(|(alias, s)| json!([alias, s.id, s.fingerprint]))
+            .collect::<Vec<_>>(),
+        version,
+        budget
+    ]));
+    let documents: Vec<_> = sources.iter().enumerate().map(|(i,(alias,s))|json!({"source_id":format!("D{}",i+1),"context":context(s,alias,version,allocated[i],retrieved_at)})).collect();
+    let total: usize = lengths.iter().sum();
+    let included: usize = allocated.iter().sum();
+    let total_tabs: usize = sources.iter().map(|(_, s)| s.tabs.len()).sum();
+    let included_tabs: u64 = documents
+        .iter()
+        .map(|d| d["context"]["coverage"]["included_tabs"].as_u64().unwrap())
+        .sum();
+    let can_summarize = documents
+        .iter()
+        .any(|d| d["context"]["coverage"]["can_summarize"] == true);
+    json!({"mode":"summary_context","content_role":"untrusted_source_data","context_id":context_id,"documents":documents,
+        "coverage":{"scope":"projected_body_text_only","total_documents":sources.len(),"included_documents":allocated.iter().filter(|n|**n>0).count(),"total_tabs":total_tabs,"included_tabs":included_tabs,"total_characters":total,"included_characters":included,"omitted_characters":total-included,"projected_text_complete":included==total,"can_summarize":can_summarize}})
 }

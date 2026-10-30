@@ -11,3 +11,5 @@ description: Read registered Sheets/Google Docs, coordinate approved edits and r
 6. Return each side effect separately. A saved payment and a failed reminder are partial success; preserve the saved payment and retry only the unresolved reminder when safe.
 
 Use bounded registered tools. Arbitrary shell, vendor communication, recipient changes and credential operations fall outside this Skill. Follow [security boundaries](../../docs/security.md) when a capability is unavailable or authorization is uncertain.
+
+For Docs discovery/initial-summary recall and after approved Docs edits, follow the owner-authorized [seven-day native summary memory workflow](../../docs/docs-summary-memory.md). Mark the previous note stale before apply; after a confirmed applied result/reconciliation reread the source and refresh that same note. Missing native storage must be reported, never replaced with plugin journal/memory.

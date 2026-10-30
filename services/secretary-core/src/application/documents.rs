@@ -2,7 +2,8 @@
 use super::{
     bus::CommandBus,
     commands::{
-        DocumentRead, DocumentSearch, DocumentSummary, MultiDocumentSearch, SingleDocumentSearch,
+        DocumentRead, DocumentSearch, DocumentSummary, MultiDocumentSearch, MultiDocumentSummary,
+        SingleDocumentSearch,
     },
     ports::WriteOutcome,
     writes::Writes,
@@ -25,6 +26,49 @@ pub async fn describe(bus: &CommandBus, alias: &str) -> Result<Value, CoreError>
         json!({"document":alias,"document_id":snapshot.id,"title":snapshot.title,"revision_id":snapshot.revision,"tabs":snapshot.tabs.iter().map(|t|json!({"tab_id":t.id,"title":t.title,"editable_structure":t.editable,"characters":t.text.chars().count()})).collect::<Vec<_>>(),"mapping_version":bus.registry.version,"source_fingerprint":snapshot.fingerprint}),
     )
 }
+pub async fn summary_selected(
+    bus: &CommandBus,
+    p: MultiDocumentSummary,
+) -> Result<Value, CoreError> {
+    let budget = p.max_characters.unwrap_or(6000);
+    if !(300..=10000).contains(&budget) || p.documents.is_empty() || p.documents.len() > 3 {
+        return Err(CoreError::invalid());
+    }
+    let mut unique = std::collections::HashSet::new();
+    for alias in &p.documents {
+        if alias.trim().is_empty() || alias.len() > 100 || !unique.insert(alias) {
+            return Err(CoreError::invalid());
+        }
+        bus.registry.document(alias)?;
+    }
+    tokio::time::timeout(std::time::Duration::from_secs(4), async {
+        let mut sources = Vec::new();
+        for alias in &p.documents {
+            sources.push((alias.as_str(), load(bus, alias).await?));
+        }
+        bounded_summary_packet(crate::domain::document_summary::selected_context(
+            &sources,
+            &bus.registry.version,
+            budget,
+            &chrono::Utc::now().to_rfc3339(),
+        ))
+    })
+    .await
+    .map_err(|_| CoreError(ErrorKind::ProviderUnavailable, "document_summary_timeout"))?
+}
+fn bounded_summary_packet(packet: Value) -> Result<Value, CoreError> {
+    if serde_json::to_vec(&packet)
+        .map_err(|_| CoreError::invalid())?
+        .len()
+        > 262144
+    {
+        return Err(CoreError(
+            ErrorKind::PayloadTooLarge,
+            "document_summary_context_too_large",
+        ));
+    }
+    Ok(packet)
+}
 pub async fn summary_context(bus: &CommandBus, p: DocumentSummary) -> Result<Value, CoreError> {
     let budget = p.max_characters.unwrap_or(6000);
     if !(100..=10000).contains(&budget) {
@@ -38,17 +82,7 @@ pub async fn summary_context(bus: &CommandBus, p: DocumentSummary) -> Result<Val
         budget,
         &chrono::Utc::now().to_rfc3339(),
     );
-    if serde_json::to_vec(&packet)
-        .map_err(|_| CoreError::invalid())?
-        .len()
-        > 262144
-    {
-        return Err(CoreError(
-            ErrorKind::PayloadTooLarge,
-            "document_summary_context_too_large",
-        ));
-    }
-    Ok(packet)
+    bounded_summary_packet(packet)
 }
 pub async fn read(bus: &CommandBus, p: DocumentRead) -> Result<Value, CoreError> {
     let limit = p.limit.unwrap_or(2000);

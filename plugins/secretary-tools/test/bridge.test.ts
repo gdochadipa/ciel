@@ -393,3 +393,30 @@ test('available asynchronous Gateway preserves invocation checks before schedule
   expect(calls).toBe(1);
  }finally{server.stop(true);}
 });
+
+(process.env.SECRETARY_HTTP_TESTS==='1'?test:test.skip)('selected Docs summary requests preserve explicit sources and reject mixed selectors before traffic',async()=>{
+ let requests=0;
+ const {server,options}=setup(async request=>{
+  requests++;
+  expect(await request.json()).toEqual({documents:['notes','plan'],mode:'summary_context',max_characters:300});
+  return Response.json({ok:true,data:{mode:'summary_context',documents:[{source_id:'D1'},{source_id:'D2'}]}});
+ });
+ try {
+  const bridge=createSecretary(options);
+  const result=await bridge.execute('docs_read',{documents:['notes','plan'],mode:'summary_context',max_characters:300},owner) as any;
+  expect(result.data.documents[1].source_id).toBe('D2');
+  for(const input of [
+   {documents:['notes'],mode:'summary_context',document:'notes'},
+   {documents:['notes'],mode:'summary_context',max_characters:299},
+   {documents:[],mode:'summary_context'}, {documents:['notes','notes'],mode:'summary_context'},
+   {documents:['a','b','c','d'],mode:'summary_context'}, {documents:['notes',null],mode:'summary_context'},
+   {documents:['notes'],mode:'summary_context',tab_id:'t.0'},
+   {documents:['notes'],mode:'summary_context',max_characters:null},
+   {documents:['notes'],mode:'summary_context',cursor:'x'},
+   {documents:['notes'],mode:'summary_context',model:'paid'},
+   {documents:['notes'],tab_id:'t.0'},
+  ]) await expect(bridge.execute('docs_read',input,owner)).rejects.toThrow('INVALID_INPUT');
+  await expect(bridge.execute('docs_read',{documents:['notes'],mode:'summary_context'},{})).rejects.toThrow('OWNER_REQUIRED');
+  expect(requests).toBe(1);
+ } finally {server.stop(true);}
+});

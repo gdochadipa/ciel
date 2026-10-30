@@ -25,3 +25,21 @@ When fuller coverage is requested, follow an excerpt cursor with the legacy shap
 Retain the actual returned span as a separate citation. Accept continuation text only if its fingerprint and mapping version match the packet. Changed source returns stale_cursor; fetch a fresh packet or disclose that the source changed, rather than combining revisions. Cursors are retrieval references, not editing indices or approval tokens.
 
 Existing 128KiB projected text/100-tab/2MiB provider bounds apply. Complete serialized packets are capped at256KiB; overflow fails without silently removing evidence. Provider/identity/projection failures return an error rather than partial summary context. No journal, preference store, automatic save, scheduler, message or mutation is involved. Production writes/approval/scheduler flags remain off; natural-language summary quality, effective host skill loading and live Google access still require separately authorized target qualification. Local tests/simulations exercise source preparation and actual SDK calls, without calling a live model.
+
+## Selected Docs
+
+For a combined summary, replace document with documents; never pass both:
+
+```json
+{"documents":["notes","plan"],"mode":"summary_context","max_characters":6000}
+```
+
+Select1–3 distinct readable registered aliases. Multi budgets are300–10000(default6000), shared fairly across documents, with unused short-document allowance redistributed; each document reuses fair per-tab prefixes. The minimum300 ensures every nonempty tab receives a prefix even with3 documents of100tabs. Single-document summary minimum100 remains unchanged.
+
+The multi packet has mode/content_role/context_id, documents:[{source_id:"D1",context:<single packet>},...] in requested order and aggregate coverage with total_documents/included_documents. Each context retains its own source metadata, per-tab coverage, source-bound cursors and local S1..Sn labels. Cite pairs such as [D1:S1], not a bare [S1] in a combined summary. State per-source omissions, empty sources and disagreements. Each source is independently captured: the common packet-preparation time is not a cross-document transaction time.
+
+All registrations are checked before provider IO; one four-second aggregate deadline covers reads. Any provider/identity/projection/deadline error or complete packet over256KiB fails the whole request, with no partial source data. No new tool, model endpoint, scope, store or write. Ordered identities/fingerprints, registry version and global budget bind the multi context ID; continuation uses its source's registered document alias.
+
+## Initial summary memory
+
+The owner subsequently requested short initial per-source summaries in native OpenClaw memory with a seven-day TTL, refreshed after confirmed edits through OpenClaw. Follow [the native memory workflow](docs-summary-memory.md) for discovery reuse, expiry checks, stale marking and fresh-source refresh. This is source guidance for the host model; the plugin does not store generated prose or enforce native TTL/deletion. The earlier no-automatic-save default is superseded only for this bounded owner-authorized workflow. Effective host installation/tools, note persistence/refresh and token savings remain unqualified locally.

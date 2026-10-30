@@ -35,6 +35,10 @@ test('published Docs read response contract accepts legacy and cited packets and
  expect(()=>assertDocsReadResponse(legacy)).not.toThrow();
  const summary={ok:true,data:{mode:'summary_context',content_role:'untrusted_source_data',context_id:'b'.repeat(64),source:{...evidence,document:'notes',title:'Synthetic'},tabs:[{tab_id:'t.0',title:'Main',total_characters:5,included_characters:5,truncated:false,excerpt_id:'S1'}],excerpts:[{excerpt_id:'S1',text:'Hello',source:{tab_id:'t.0',start_character:0,end_character:5,next_cursor:null}}],coverage:{scope:'projected_body_text_only',total_characters:5,included_characters:5,omitted_characters:0,total_tabs:1,included_tabs:1,projected_text_complete:true,can_summarize:true}}};
  expect(()=>assertDocsReadResponse(summary)).not.toThrow();
+ const multiple={ok:true,data:{mode:'summary_context',content_role:'untrusted_source_data',context_id:'c'.repeat(64),documents:[{source_id:'D1',context:summary.data}],coverage:{...summary.data.coverage,total_documents:1,included_documents:1}}};
+ expect(()=>assertDocsReadResponse(multiple)).not.toThrow();
+ expect(()=>assertDocsReadResponse({...multiple,data:{...multiple.data,source:summary.data.source}})).toThrow();
+ expect(()=>assertDocsReadResponse({...multiple,data:{...multiple.data,documents:[{source_id:'D1',context:{...summary.data,coverage:null}}]}})).toThrow();
  const partial={...summary,data:{...summary.data,tabs:[{...summary.data.tabs[0],total_characters:10,truncated:true}],excerpts:[{...summary.data.excerpts[0],source:{...summary.data.excerpts[0].source,next_cursor:'synthetic-cursor'}}],coverage:{...summary.data.coverage,total_characters:10,omitted_characters:5,projected_text_complete:false}}};
  expect(()=>assertDocsReadResponse(partial)).not.toThrow();
  const empty={...summary,data:{...summary.data,excerpts:[],tabs:[{...summary.data.tabs[0],total_characters:0,included_characters:0,excerpt_id:null}],coverage:{...summary.data.coverage,total_characters:0,included_characters:0,included_tabs:0,can_summarize:false}}};

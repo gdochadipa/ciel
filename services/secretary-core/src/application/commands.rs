@@ -8,6 +8,7 @@ pub enum Command {
     DocsDescribe(DocumentRequest),
     DocsRead(DocumentRead),
     DocsSummary(DocumentSummary),
+    DocsSummaryMany(MultiDocumentSummary),
     DocsSearch(DocumentSearch),
     List,
     Describe(Describe),
@@ -44,6 +45,7 @@ pub struct DocumentRequest {
 pub enum DocumentReadRequest {
     Tab(DocumentRead),
     Summary(DocumentSummary),
+    Many(MultiDocumentSummary),
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -54,6 +56,14 @@ pub enum SummaryContextMode {
 #[serde(deny_unknown_fields)]
 pub struct DocumentSummary {
     pub document: String,
+    pub mode: SummaryContextMode,
+    #[serde(default, deserialize_with = "non_null_option")]
+    pub max_characters: Option<usize>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MultiDocumentSummary {
+    pub documents: Vec<String>,
     pub mode: SummaryContextMode,
     #[serde(default, deserialize_with = "non_null_option")]
     pub max_characters: Option<usize>,

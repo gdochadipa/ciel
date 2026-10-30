@@ -8,6 +8,7 @@ Current owner priority (2026-10-29): feature development first. Target amd64 bui
 
 | Ticket | Depends on | Status | Outcome |
 | --- | --- | --- | --- |
+| T037 Selected Docs summaries and native summary-memory guidance | T033,T036 | accepted locally: full suite/seven simulations/SDK pack/medium review; native memory/live T007 open | Global bounded source context with D1:S1 citations; seven-day native initial-summary workflow remains host-qualified. |
 | T036 Cited Docs summary context | T023,T030,T035 | accepted locally: full suite + seven scenarios + SDK pack; later medium review/P2 correction + full suite/Workspace recheck; live T007 open | Bounded source excerpts/coverage and host-model summary workflow; no added model service or tool. |
 | T035 Cross-view Sheets search | T023,T033,T034 | accepted locally: full suite + seven scenarios + SDK pack + Standards/Spec rechecks; live T007 open | Explicit bounded target pairs, global pages/all-source cursor, whole-page failures and existing literal typed matching. |
 | T034 Private registry comparison | T030,T031,T032 | accepted locally: full suite + Standards/Spec review; live T007 open | Normalized target/permission differences in an exclusive private report; counts-only terminal output, no activation. |
