@@ -123,3 +123,54 @@ This verifies local native staging and inactive file placement, not the VPS CPU/
 ## Current reported target platform
 
 The owner reports Tencent Singapore with 2 vCPU/2 GB/40 GB and x86_64 Ubuntu 24.04.5 LTS/glibc 2.39. These are operator-provided command/specification results, not agent inventory or available-capacity measurements. Choose native x86_64-unknown-linux-gnu/linux/amd64; retained ARM64 artifacts do not establish compatibility. The repository installer already selects the actual build host target and binds platform/toolchain/artifact hashes in its receipt. It must still be built/tested for the selected platform before a release is considered target-compatible. No current x86 staging receipt exists. See [platform-specific local verification](local-verification.md); VPS cloning/installation and activation remain deferred.
+
+## Download a native package without cloning
+
+The **Downloadable Ubuntu x86_64 release** Actions workflow builds each main commit
+(or a manually selected ref). Only main publishes a commit-specific prerelease at
+[GitHub Releases](https://github.com/gdochadipa/ciel/releases). Assets contain the
+full source commit in their names; there is no mutable latest-build installer.
+Standard public Ubuntu 24.04 runners are used, with no paid runner or cache. Temporary
+Actions artifacts expire after one day; Release assets remain downloadable.
+
+Select a successful `build-<full-40-character-commit>` release, download its
+`ciel-<commit>-linux-x86_64.tar.gz` and matching `.sha256` into a new operator-owned
+private directory. Copy the exact commit and asset URLs from that Release. On Ubuntu:
+
+```bash
+# Replace this value with the selected Release's exact full commit.
+ciel_revision=FULL_40_CHARACTER_COMMIT
+ciel_archive="ciel-$ciel_revision-linux-x86_64.tar.gz"
+sha256sum -c "$ciel_archive.sha256"
+tar -xzf "$ciel_archive"
+cd "ciel-$ciel_revision"
+python3 install.py verify --revision "$ciel_revision" --release release
+```
+
+Download only from the trusted project Release. SHA256 detects download corruption;
+it does not authenticate a malicious replacement of both package and checksum.
+The inner `release/release.json` binds the source commit, locks, actual tool versions,
+build host and every staged artifact. Installer and payload are bundled together;
+Python 3 is sufficient for verification and file installation. No Git, Rust or Bun
+is needed on the target for those steps. OpenClaw/Node remain runtime prerequisites.
+The package targets Linux x86_64 with glibc 2.39; the installer rejects another native
+host. ARM64 local verification packages must not be installed on the VPS.
+
+After separate authorization for target file installation, the concrete command is:
+
+```bash
+sudo python3 install.py install-files --revision "$ciel_revision" --release release
+```
+
+This copies inactive files only. It preserves existing configuration/state and refuses
+conflicting installations; it does not start/enable services, register/activate the
+plugin, install personal registry data or enable any qualification/write/memory flag.
+Follow the remaining manual configuration and T007 qualification steps in this guide.
+An existing installation of another revision requires explicit upgrade preparation.
+
+The workflow gates packaging on locked source checks, all seven simulated-provider
+scenarios, native staging, clone-free verification and disposable-root installation.
+`smoke.json` records an **offline registry CLI** run with two CPUs and a 2 GiB address
+space limit. It proves that narrow binary/loader smoke only: it does not measure the
+full OpenClaw/model memory load, request concurrency, disk growth or live VPS behavior.
+No remote host address, SSH key, Google credential or deployment secret is required.

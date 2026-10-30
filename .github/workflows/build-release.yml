@@ -1,0 +1,86 @@
+name: Downloadable Ubuntu x86_64 release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: '2'
+      REVISION: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
+        with:
+          toolchain: 1.95.0
+          components: rustfmt, clippy
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.2.21'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24.22.1'
+      - name: Fetch actual locked dependencies
+        run: |
+          cargo fetch --locked
+          bun install --frozen-lockfile
+          echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
+          npm install --global --ignore-scripts postman-cli@1.75.0
+      - name: Verify source and simulated provider integration
+        run: |
+          bash scripts/verify.sh
+          bash scripts/acceptance-all.sh
+      - name: Stage native release and verify clone-free distribution
+        run: |
+          package_root=$(mktemp -d "$RUNNER_TEMP/ciel.XXXXXXXX")
+          chmod 700 "$package_root"
+          python3 scripts/install.py stage --source "$PWD" --revision "$REVISION" --output "$package_root/release" --offline
+          python3 scripts/release-smoke.py --release "$package_root/release" --revision "$REVISION" > "$package_root/smoke.json"
+          mkdir "$package_root/downloads" "$package_root/unpacked" "$package_root/install-root"
+          chmod 700 "$package_root/install-root"
+          archive="ciel-$REVISION-linux-x86_64.tar.gz"
+          python3 scripts/release.py --release "$package_root/release" --revision "$REVISION" --output "$package_root/downloads/$archive"
+          cd "$package_root/downloads"
+          sha256sum -c "$archive.sha256"
+          tar -xzf "$archive" -C "$package_root/unpacked"
+          cd "$package_root/unpacked/ciel-$REVISION"
+          python3 install.py verify --revision "$REVISION" --release release
+          python3 install.py install-files --revision "$REVISION" --release release --root "$package_root/install-root"
+          cp "$package_root/smoke.json" "$package_root/downloads/smoke.json"
+          echo "DOWNLOADS=$package_root/downloads" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ciel-linux-x86_64
+          path: ${{ env.DOWNLOADS }}/*
+          if-no-files-found: error
+          retention-days: 1
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ciel-linux-x86_64
+          path: downloads
+      - name: Publish immutable commit prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REVISION: ${{ github.sha }}
+        run: |
+          cd downloads
+          sha256sum -c "ciel-$REVISION-linux-x86_64.tar.gz.sha256"
+          gh release create "build-$REVISION" --target "$REVISION" --prerelease --title "Ciel Ubuntu x86_64 $REVISION" --notes 'Inactive native package for Ubuntu 24.04 x86_64 / glibc 2.39. Verify SHA256 and release receipt before file installation. No VPS/live qualification or activation. See INSTALLATION.md inside the package.' ./*

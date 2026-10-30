@@ -282,3 +282,28 @@ T039 accepted locally: six new public Core HTTP/actual Google adapter regression
 All seven Google-only scenarios passed sequentially after correcting the initial SDK-entry source-range assertion (the read view starts at B2, while writes begin at B4). Runtime did not change during the harness correction. Final Workspace secretary-acceptance.E5iAEV/ logged70 Docs/51 Sheets request events, including real bridge/Core summary/legacy continuation and built-SDK Sheets source calls plus the existing native-memory scenario. Published response validation accepts exact legacy and summary objects without overlapping variants. Private final logs t039-verify.log and t039-acceptance-final.log; the failed initial t039-acceptance.log is retained separately.
 
 Actual SDK pack/installer archive/MIT checks passed:26tools,3regular runtime files,44793bytes,SHA-25650470ddddb17ca0d41d373da1689318f8b0fac5b53a5d7357352dc3e957dcd14. Private runs/t039-secretary-tools.tgz and t039-pack-receipt.json; prior artifacts retained. This proves source preparation/transport/schema/SDK distribution locally with Google/model boundary fixtures, not generated Sheets prose quality, live host/Google/approval/index behavior or token savings. No new model/dependency/scope/service/memory or source-write permission. Native release/installed receipt remains T030; target amd64/VPS/CI/live gates remain T007. Workbook unchanged, all production/approval/scheduler/native-memory defaults off. T039 retains [skip ci] for normal non-force publication under standing authorization.
+
+## Current development — T040 downloadable native release
+
+Owner resumed x86_64 build/staging and GitHub build workflow so the target can download
+without cloning or compiling. This supersedes the earlier hosted Actions/amd64
+preparation deferral; actual VPS installation/activation and T007 live gates remain
+separate and unauthorized. T040 wraps the unchanged format-2 inactive release with a
+standalone installer and SHA256. Main-only immutable commit prereleases use pinned
+standard public Ubuntu24.04 runners; temporary artifacts retain one day, no paid
+runner/cache/billing change. Full locked verification/seven simulations precede native
+stage, offline CLI smoke under two CPUs/2GiB and clone-free disposable-root installation.
+The narrow smoke is not full OpenClaw/model capacity or live qualification. The existing
+source-only CI job now runs bridge tests directly instead of invoking native tests
+before the bundle exists. See T040 and installation guide. Local and hosted evidence
+will be recorded separately after execution; no hosted/native-target result yet.
+
+T040 local acceptance: full network-disabled Linux ARM64 scripts/verify.sh passed
+99 Rust,32 Python,53 Bun and13 Node tests with actual locked SDK, formatting and
+Clippy warnings denied. Three new public distribution CLI tests cover clone-free
+verification, exclusive outputs, wrong target, tampering, extras and symlinks; the
+primary case failed before implementation. Initial full run exposed Python3.11's
+missing tar extraction filter; tests now copy only validated regular members and the
+final full run passed. actionlint1.7.7 passed both workflows. Medium parallel Standards
+and Spec reviews against22d0a39 found no material findings. Seven local simulations
+and actual hosted x86 staging/release are being executed; no VPS/live claim.
