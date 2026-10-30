@@ -1,6 +1,6 @@
 # OpenClaw Secretary — Progress and continuation
 
-Updated: 2026-10-29 · Asia/Makassar
+Updated: 2026-10-30 · Asia/Makassar
 
 ## Current position
 
@@ -234,3 +234,7 @@ T036 accepted locally: five new public HTTP/Core/real Google-adapter regressions
 All seven Google-only scenarios passed sequentially: read,writes,retry,drift,error,slow,workspace. Workspace secretary-acceptance.uIVKdB/ logged55 Docs/48 Sheets request events, with42 primary-Docs path events; actual built-SDK summary_context/coverage/citation calls passed alongside legacy reads. Private log t036-acceptance.log. No live model call, generated-prose quality test or installed-host skill-loading qualification is claimed; Report Assistant remains a source guide, and the existing OpenClaw model is responsible for prose/citations.
 
 Actual SDK pack/installer archive/MIT checks passed:26 tools,three regular runtime files,39266 bytes,SHA-256 bd1aa0ec6c0b1b13566df444c1db8956832c02dd6de5b08ad68c10f1ece2257b. Private runs/t036-secretary-tools.tgz and t036-pack-receipt.json; prior artifacts preserved. No code review was run, as requested (the earlier medium-review suggestion was superseded). Workbook unchanged, production/approval/scheduler defaults off, no dependency/model/service/billing addition. Native installed/staged receipt remains T030; target amd64/VPS/Google live/scheduler/WhatsApp/recovery gates remain T007. T036 retains [skip ci] for normal non-force publication under existing owner authorization; no hosted Actions result is inferred.
+
+## T036 publication confirmation
+
+Continuation on 2026-10-30 confirmed local remote-tracking refs and both remote reflogs record update by push to b8bca08ff9217ac9538149aa205664e19c2dca0f for main and integration/secretary-mvp. This confirms the previously initiated normal push completed; no new remote read or hosted Actions result is claimed. The integration repository was missing only its HEAD file: existing branch ref, commit object and HEAD reflog agreed on integration/secretary-mvp at that commit. Restored the symbolic HEAD without changing source, index or commit history, then restored upstream to origin/integration/secretary-mvp. Git status was clean. No replacement repository or reset was used. T036 remains locally accepted, without code review or live-host/model qualification. Next feature selection is pending owner response.
