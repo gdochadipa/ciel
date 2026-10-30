@@ -4,11 +4,11 @@ Spec: `docs/specs/openclaw-personal-secretary.md`
 Workbook mapping: `docs/spreadsheet-assessment.md`  
 User instruction: implement locally using medium-effort agents; subsequently review at low effort and fix the findings. Production changes require the documented activation checks.
 
-Current owner priority (2026-10-29): feature development first. Target amd64 build/resource qualification, hosted Actions and VPS operations are deferred; server specifications remain context in PROGRESS.md/T007. Necessary local feature checks still use actual dependencies. Latest owner steering disables code review for current development (T036); older review instructions/evidence are historical until the owner resumes reviews.
+Current owner priority (2026-10-29): feature development first. Target amd64 build/resource qualification, hosted Actions and VPS operations are deferred; server specifications remain context in PROGRESS.md/T007. Necessary local feature checks still use actual dependencies. Owner resumed medium-effort T036 review on2026-10-30; its one Spec P2 is corrected and both axes rechecked with no material findings.
 
 | Ticket | Depends on | Status | Outcome |
 | --- | --- | --- | --- |
-| T036 Cited Docs summary context | T023,T030,T035 | accepted locally: full suite + seven scenarios + SDK pack; no code review per owner; live T007 open | Bounded source excerpts/coverage and host-model summary workflow; no added model service or tool. |
+| T036 Cited Docs summary context | T023,T030,T035 | accepted locally: full suite + seven scenarios + SDK pack; later medium review/P2 correction + full suite/Workspace recheck; live T007 open | Bounded source excerpts/coverage and host-model summary workflow; no added model service or tool. |
 | T035 Cross-view Sheets search | T023,T033,T034 | accepted locally: full suite + seven scenarios + SDK pack + Standards/Spec rechecks; live T007 open | Explicit bounded target pairs, global pages/all-source cursor, whole-page failures and existing literal typed matching. |
 | T034 Private registry comparison | T030,T031,T032 | accepted locally: full suite + Standards/Spec review; live T007 open | Normalized target/permission differences in an exclusive private report; counts-only terminal output, no activation. |
 | T033 Cross-document Docs search | T028,T029,T032 | accepted locally: full suite + seven scenarios + SDK pack + Standards/Spec review; live T007 open | Explicit bounded selection, global pages/source-bound cursors, no partial failures; retain 26 tools. |
