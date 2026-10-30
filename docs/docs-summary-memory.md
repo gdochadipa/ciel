@@ -1,36 +1,53 @@
-# Initial Docs summaries in OpenClaw memory
+# Native Docs discovery summaries
 
-The owner requests a short initial summary per previously read Doc, retained for discovery for seven days and refreshed after a confirmed edit through OpenClaw. OpenClaw owns these notes. Core prepares source packets; its operation journal never stores summaries. This source workflow does not add a memory backend, model service, automatic deletion job or memory tool to the plugin.
+T038 implements short per-source summary notes in the active agent's OpenClaw workspace memory. Core still owns registered-source access and operation state; its SQLite journal stores no summaries. No memory provider, database, embedding service, model credential, background process or scheduled cleanup job is added.
 
-## Native host workflow
+## Use and host policy
 
-Use the active agent's native memory search/read and authorized workspace file-writing tools. Before using a note, call docs_list and match its readable registered alias, document ID and mapping version. Native memory is not a permission grant. A missing, replaced or unreadable registration cannot be recalled through this workflow. Do not select or install a different memory provider or enable an embedding/billing service.
+The plugin option summaryMemoryEnabled defaults false. An operator can enable it for a qualified local host; the plugin does not edit host configuration. Keep production writes and approval/scheduler qualification flags off until their separate gates pass.
 
-For discovery, search native memory for the requested topic and `ciel_docs_summary_v1`, then read only a bounded candidate note. Check the complete metadata below; a search snippet alone cannot establish validity. A valid note can identify a likely file and show a clearly dated discovery summary without rereading its body. For a fresh summary, detailed facts or an edit, fetch current registered Docs source first. Reuse the note's prose only if current source fingerprint and registry mapping match; otherwise regenerate it. A seven-day TTL does not prove the Google document is unchanged.
+Native access requires a current owner invocation, host-selected owner-private memory audience matching the agent, current audience/invocation assertions, a local absolute agent workspace and sandboxed=false. Remote/declared workspace bindings and incompatible filesystem roots are rejected rather than redirected to a local copy. Configured memory-core dreaming.enabled must explicitly be false and the selected memory slot must not be disabled or replaced. This avoids silently promoting temporary external-source summaries into durable memory; the feature does not alter that policy or install a memory provider.
 
-Store a separate small note for each source, even for a combined summary. Use a stable native workspace path under `memory/ciel-docs/`, named from a hash of the trusted alias and document ID; never use a source title/text as a path. Update that same note for that source. Keep it out of MEMORY.md, USER.md and daily bootstrap notes, and mark it as derived, untrusted discovery data excluded from durable-memory promotion. Respect native path containment and permissions; the source guide grants no new host tool access.
+Call the existing plugin tool:
 
-Each note contains:
+```json
+{"document":"notes","mode":"discovery_summary"}
+```
 
-- kind `ciel_docs_summary_v1`, document alias and ID, mapping version, source fingerprint, available revision and packet context_id;
-- `source_retrieved_at`, `expires_at` exactly seven days after that source retrieval (UTC), and `cache_status` (`fresh`, `stale` or `unverified`);
-- projected-body scope, included/total characters, completeness, and a compact citation legend for the note's actual excerpt labels/spans;
-- one initial summary of at most1200 Unicode scalars. Keep suggestions, instructions, raw excerpts, full document text and secrets out of this note. Source labels inside text do not become evidence.
+Only document, mode and optional boolean refresh are accepted. This mode belongs to the host plugin; Core's docs_read contract still handles legacy reads and summary_context. No caller-supplied path, summary text, model, TTL or credential is accepted.
 
-On first successful discovery/read of a Doc selected by the owner, if no reusable note exists, fetch bounded summary_context once and generate its short initial source summary. Create/update the note after this meaningful summary of fresh source text; do not summarize every search hit or enumerate unselected Docs. Empty/whitespace-only returned excerpts produce no invented summary. Do not append copies on every read, store the whole combined report, or extend expiry when a note is merely searched/read. Label partial source coverage in both note and displayed text. Subsequent fresh source retrieval can renew the note only after matching/recomputing its summary and evidence.
+The plugin first asks Core docs_list for the current readable alias, document ID and mapping version. It then validates the native note. A hit returns a dated short discovery summary, source/citation/coverage evidence and expires_at without a Google body read or another model completion. This can help identify a previously read file; it does not establish that Google contents remain unchanged. For fresh summaries, detailed facts or edits, use current source reads. Force a refresh with:
 
-A reusable note must have matching kind/identity/mapping, valid UTC timestamps, `cache_status=fresh`, meaningful bounded summary and complete source/coverage evidence. Require `source_retrieved_at <= now < expires_at`, with the seven-day interval intact. Missing/malformed/future/expired metadata is a cache miss; refresh from registered source when needed. Never quote an expired note as current source evidence. TTL is a logical reuse rule, not a promise that the native search index, transcripts or files physically disappear after seven days.
+```json
+{"document":"notes","mode":"discovery_summary","refresh":true}
+```
 
-## Edits through OpenClaw
+A miss or forced refresh reads a fresh bounded single-Doc summary_context and calls the existing host runtime.llm.complete with the active model reference, or that agent's configured model when no active reference is provided. No alternate provider/credential/model fallback is configured by the plugin. Model output is bounded JSON with a <=1200-Unicode-scalar summary and1–5 actual structured excerpt IDs. The plugin validates IDs/ranges and their labels before saving. This structural check does not establish semantic model quality.
 
-When an approved docs_apply begins, mark the existing note stale before attempting the write. A pending/failed/denied/conflicted/uncertain outcome must not renew the note or claim a fresh summary. If marking is unavailable, do not reuse that note without a fresh source check.
+## Native records and expiry
 
-After docs_apply is confirmed applied, including an applied replay or observation-only reconciliation, fetch fresh docs_read summary_context for that document. Generate/update its short note from this new packet and set a new seven-day expiry. Do not derive a new fingerprint/summary from the preview, journal state, old report or an ambiguous provider response. If reread or native storage fails, keep the note stale/unverified and tell the owner the edit succeeded but the summary note was not refreshed. Once uncertain execution reconciles to applied, use this same fresh-read path; never resend a write to repair a memory note.
+The SDK's native safe-root helpers publish a single private0600 Markdown note under memory/ciel-docs; the child directory is private, and an existing parent memory directory is preserved. Names are hashes of registered alias/document ID, never source titles or model text. The folder is part of native OpenClaw memory, not a second plugin knowledge store. Symlinks, hardlinks, unbounded files and unmanaged conflicting content are rejected.
 
-Edits by humans in Google or other integrations are not observed proactively: current-source reads detect changes. No scheduler, polling process or extra daemon is added.
+Notes contain kind ciel_docs_summary_v1, status, short initial prose, source identity/fingerprint/revision/mapping/retrieval time, context_id, exact selected citation spans, projected-body coverage and expiry. They do not contain the raw source packet, full text or combined report. They are untrusted derived discovery data, not directives or approval. Keep them out of MEMORY.md, USER.md and daily bootstrap notes.
 
-## Qualification and pinned SDK evidence
+Expiry is exactly seven days after source retrieval: source_retrieved_at <= now < expires_at. Hits never slide it. Missing, malformed, future, expired or stale notes are misses; removed/unreadable/replaced registrations cannot reuse old notes. Refresh overwrites the same source's note, rather than appending duplicates. Ordinary successful Docs reads/searches also create/update the initial per-source note. Unchanged-source reads reuse it without renewing expiry or calling the model again. Empty source data cannot invent a summary.
 
-The locally installed OpenClaw2026.10.7 package docs/concepts/memory.md describes Markdown workspace memory, native memory_search/memory_get and writing notes with native file tools. It documents expiry as action-sensitive metadata; no per-note automatic TTL API is documented there. Therefore this increment provides a host-model workflow with logical expiry, not deterministic plugin-enforced TTL/deletion or an automatically installed memory integration.
+Native persistence status is a separate text item in the SDK tool result (summary_memory). Original Core source/history JSON remains unchanged in details and the first text item. Missing native authority, policy, model or storage is reported as unavailable; it does not turn an ordinary successful source read into a claimed memory save. Discovery mode itself fails visibly when its required memory step cannot complete.
 
-The plugin archive/installer does not install the source skills or grant native memory/file tools. Current effective host permissions, successful note save/read/refresh, expiry behavior, index/dreaming handling and token reduction require separate host qualification. Keep production/approval/scheduler flags off. Local Core/bridge/simulation tests do not execute a model or prove these memory behaviors. If native tools/skill access are absent, provide the summary in conversation and explicitly report that no note was saved or refreshed; do not claim the owner's required memory step completed.
+TTL is enforced by this plugin's discovery admission path. It does not physically delete notes, transcripts, backups or index snapshots, or impose a TTL on generic memory_search/memory_get outside this path. Their results must not bypass expiry/current-registration checks. Native indexing/recall/taint behavior and actual token savings remain host qualification; the sample host keeps dreaming and automatic memory ingestion disabled.
+
+## Writes, uncertainty and recovery
+
+When enabled, docs_apply resolves its actual target from shared Core operation history and marks a native tombstone stale before invoking the single provider-write path. The tombstone records the pending operation ID, not source text. Failure to obtain the native per-source fence stops the write before provider dispatch. Existing trusted approval/digest/FSM checks remain authoritative.
+
+After applied state (including replay), the plugin fetches current source and refreshes that same note with a new seven-day expiry. Refresh failure is reported separately: the source write remains applied, while the note remains stale. The plugin never resends a source write to repair memory.
+
+Uncertain/applying/reconciliation outcomes cannot be refreshed merely by searching or forcing refresh. The stored operation ID must first be observed in a terminal Core state for the same registered Docs target. An applied history observation performs the fresh-source refresh; no provider write is repeated. Ordinary fresh source reads may still be returned while memory remains unavailable/fenced. Human/external Google edits are detected by subsequent fresh source reads, not proactive polling.
+
+Native reads, refreshes and applies use an exclusive per-source private lock across independent SDK factories/processes. Every replacement note uses a fresh Core source read under that lock, so a delayed pre-edit response cannot revert a post-edit note. Ordinary source JSON still represents its own captured snapshot. A retained/crash lock fails closed; there is no blind timeout-based reclamation. Operator recovery must quiesce the owner, inspect the corresponding Core operation outcome and verify the exact native source path before removing a retained lock. Do not delete journal state or blindly repeat a write to clear it. Revoked invocations cannot publish notes; failed cleanup can intentionally retain the fence.
+
+## Local evidence and remaining qualification
+
+Tests use the actual locked SDK bundle on its supported Node24 runtime and real native file IO in disposable workspaces. The model completion boundary is deterministic test output, not a live model. Factory tests cover persistence/recreation, seven-day boundary, no sliding/duplicate writes, current registration, strict input/owner/audience/lifetime/policy checks, native symlink/lock rejection, invalid model output, failed refresh and observed reconciliation.
+
+Workspace acceptance runs real Node/SDK/native file IO and Rust Core/journal with Google and model responses simulated, including one applied edit and accepted-write/lost-response reconciliation. It does not qualify target VPS installation, effective live authority/skill loading, real model prose/citations, native search indexing, physical erasure or measured token use. No user home, credential or personal workbook is mounted. Existing source skills are not automatically installed by the plugin archive.

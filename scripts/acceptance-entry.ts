@@ -92,7 +92,7 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
   if(kind==='docs'){
    const context=await execute(first.tool('docs_read',owner),{document:'notes',mode:'summary_context',max_characters:100});assert.equal(context.data.excerpts[0].excerpt_id,'S1');assert.equal(context.data.coverage.projected_text_complete,true);assert(context.data.excerpts[0].text.includes(' SDK appended'));
    const selectedSummary=await execute(first.tool('docs_read',owner),{documents:['notes','reference'],mode:'summary_context',max_characters:300});assert.equal(selectedSummary.data.documents[0].source_id,'D1');assert.equal(selectedSummary.data.documents[1].context.source.document,'reference');assert.equal(selectedSummary.data.coverage.total_documents,2);
-   const readParameters=first.tool('docs_read',owner).parameters as any;assert.equal(readParameters.properties.max_characters.maximum,10000);assert.equal(readParameters.oneOf.length,3);
+   const readParameters=first.tool('docs_read',owner).parameters as any;assert.equal(readParameters.properties.max_characters.maximum,10000);assert.equal(readParameters.oneOf.length,4);
    const read=await execute(first.tool('docs_read',owner),{document:'notes',tab_id:'t.0'});
    assert.equal(read.data.text.split(' SDK appended').length-1,1);
    const found=await execute(first.tool('docs_search',owner),{document:'notes',query:'SDK appended'});assert.equal(found.data.matches.length,1);assert.equal(found.data.matches[0].tab_id,'t.0');

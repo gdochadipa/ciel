@@ -23,6 +23,10 @@
       "schedulerQualified": {
         "type": "boolean",
         "default": false
+      },
+      "summaryMemoryEnabled": {
+        "type": "boolean",
+        "default": false
       }
     },
     "additionalProperties": false

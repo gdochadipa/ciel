@@ -1,5 +1,8 @@
 /** Real bridge/Core -> simulated Google Sheets and Docs, never fake Core/HTTP. */
 import assert from 'node:assert/strict';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {fileURLToPath} from 'node:url';
 import {assertDocsReadResponse} from './docs-read-contract';
 import {createSecretary} from '../plugins/secretary-tools/src/bridge';
 import {acceptanceConfiguration,syntheticOwner,syntheticToken} from './acceptance';
@@ -105,5 +108,6 @@ export async function runWorkspaceAcceptance(coreUrl:string,docsUrl:string) {
  assert.equal((await tool('sheets_update',{operation_id:lostGrid.operation_id})).data.state,'uncertain');assert.equal((await tool('sheets_update',{operation_id:lostGrid.operation_id})).ok,false);assert.equal((await operator(lostGrid.operation_id,'reconcile',{})).data.state,'applied');assert.equal((await sheetFixture('/__fixture/stats')).gridWrites,2);
  const {runEntryAcceptance}=await import('./acceptance-entry');await runEntryAcceptance(coreUrl,'docs');await runEntryAcceptance(coreUrl,'tabs');await runEntryAcceptance(coreUrl,'grid');assert.equal((await sheetFixture('/__fixture/stats')).gridWrites,3);
  assert.equal((await fixture('/__fixture/stats')).applies,4);
+ const native=await promisify(execFile)('node',[fileURLToPath(new URL('./acceptance-native-memory.mjs',import.meta.url)),coreUrl,docsUrl],{timeout:45000,env:{...process.env,SECRETARY_CORE_TOKEN:syntheticToken}});process.stdout.write(native.stdout);
  console.log(JSON.stringify({acceptance:'passed',scenario:'workspace',scope:'generic Sheets + controlled grid edits + tab creation + controlled Docs through actual SDK/bridge/Core; only Google simulated, no live Docs authorization'}));
 }
