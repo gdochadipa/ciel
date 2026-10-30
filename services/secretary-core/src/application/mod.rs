@@ -4,5 +4,6 @@ pub mod documents;
 pub mod grids;
 pub mod ports;
 pub mod sheets_search;
+pub mod sheets_summary;
 pub mod tabs;
 pub mod writes;

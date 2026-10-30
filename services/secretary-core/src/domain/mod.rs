@@ -6,5 +6,6 @@ pub mod operation;
 pub mod projection;
 pub mod registry;
 pub mod registry_diff;
+pub mod sheets_summary;
 pub mod tabs;
 pub mod write_model;

@@ -335,7 +335,7 @@
     "/v1/tools/sheets_read": {
       "post": {
         "operationId": "sheets_read",
-        "description": "Read one bounded registered projection. Cursor is bound to source fingerprint, mapping version and view; source changes invalidate pagination. No arbitrary A1 ranges.",
+        "description": "Read one bounded registered projection. Cursor is bound to source fingerprint, mapping version and view; source changes invalidate pagination. No arbitrary A1 ranges. Summary source mode: spreadsheet/view/mode summary_context and optional max_records1\u2013100(default25); forbid limit/cursor. Full captured workbook/selected projection validated before taking prefix. Return untrusted typed records R1..Rn with existing cell-range references, common source evidence, source/view/budget-bound context_id, compatible legacy continuation and explicit registered-view coverage. Whole packet<=64KiB without truncation of fields; errors fail whole, including a four-second aggregate async deadline. No workbook-wide completeness or totals claim; host model writes grounded prose. No model endpoint, memory, scope or mutation is added.",
         "security": [
           {
             "CoreBearer": []
@@ -362,13 +362,59 @@
                   },
                   "cursor": {
                     "type": "string"
+                  },
+                  "mode": {
+                    "const": "summary_context"
+                  },
+                  "max_records": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100,
+                    "default": 25
                   }
                 },
                 "required": [
                   "spreadsheet",
                   "view"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "mode"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "max_records"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "required": [
+                      "mode"
+                    ],
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "limit"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "cursor"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
               }
             }
           }
@@ -385,40 +431,47 @@
                       "const": true
                     },
                     "data": {
-                      "type": "object",
-                      "properties": {
-                        "records": {
-                          "type": "array",
-                          "maxItems": 100,
-                          "items": {
-                            "$ref": "#/components/schemas/Record"
-                          }
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "records": {
+                              "type": "array",
+                              "maxItems": 100,
+                              "items": {
+                                "$ref": "#/components/schemas/Record"
+                              }
+                            },
+                            "next_cursor": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "source_revision": {
+                              "type": "string"
+                            },
+                            "mapping_version": {
+                              "type": "string"
+                            },
+                            "retrieved_at": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          },
+                          "required": [
+                            "records",
+                            "next_cursor",
+                            "source_revision",
+                            "mapping_version",
+                            "retrieved_at"
+                          ],
+                          "additionalProperties": false
                         },
-                        "next_cursor": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "source_revision": {
-                          "type": "string"
-                        },
-                        "mapping_version": {
-                          "type": "string"
-                        },
-                        "retrieved_at": {
-                          "type": "string",
-                          "format": "date-time"
+                        {
+                          "$ref": "#/components/schemas/SheetsSummaryContext"
                         }
-                      },
-                      "required": [
-                        "records",
-                        "next_cursor",
-                        "source_revision",
-                        "mapping_version",
-                        "retrieved_at"
-                      ],
-                      "additionalProperties": false
+                      ]
                     }
                   },
                   "required": [
@@ -481,7 +534,7 @@
             }
           },
           "413": {
-            "description": "Request exceeds 64 KiB",
+            "description": "Request or complete summary-context packet exceeds64KiB",
             "content": {
               "application/json": {
                 "schema": {
@@ -491,7 +544,7 @@
             }
           },
           "502": {
-            "description": "Bounded provider read failed",
+            "description": "Provider read failed or summary four-second deadline exceeded",
             "content": {
               "application/json": {
                 "schema": {
@@ -4688,6 +4741,145 @@
           "source",
           "tabs",
           "excerpts",
+          "coverage"
+        ],
+        "additionalProperties": false
+      },
+      "SheetsSummaryContext": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "const": "summary_context"
+          },
+          "content_role": {
+            "const": "untrusted_source_data"
+          },
+          "context_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "spreadsheet": {
+                "type": "string"
+              },
+              "view": {
+                "type": "string"
+              },
+              "spreadsheet_id": {
+                "type": "string"
+              },
+              "registered_range": {
+                "type": "string"
+              },
+              "profile": {
+                "type": "string"
+              },
+              "source_revision": {
+                "type": "string"
+              },
+              "mapping_version": {
+                "type": "string"
+              },
+              "sheet_id": {
+                "type": "integer"
+              },
+              "retrieved_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "spreadsheet",
+              "view",
+              "spreadsheet_id",
+              "registered_range",
+              "profile",
+              "source_revision",
+              "mapping_version",
+              "sheet_id",
+              "retrieved_at"
+            ],
+            "additionalProperties": false
+          },
+          "records": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "properties": {
+                "reference_id": {
+                  "type": "string",
+                  "pattern": "^R([1-9]|[1-9][0-9]|100)$"
+                },
+                "fields": {
+                  "type": "object"
+                },
+                "source": {
+                  "$ref": "#/components/schemas/Source"
+                }
+              },
+              "required": [
+                "reference_id",
+                "fields",
+                "source"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "coverage": {
+            "type": "object",
+            "properties": {
+              "scope": {
+                "const": "registered_view_only"
+              },
+              "total_records": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "included_records": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "omitted_records": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "view_records_complete": {
+                "type": "boolean"
+              },
+              "can_summarize": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "scope",
+              "total_records",
+              "included_records",
+              "omitted_records",
+              "view_records_complete",
+              "can_summarize"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "mode",
+          "content_role",
+          "context_id",
+          "source",
+          "records",
+          "next_cursor",
           "coverage"
         ],
         "additionalProperties": false

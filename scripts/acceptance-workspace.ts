@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
-import {assertDocsReadResponse} from './docs-read-contract';
+import {assertDocsReadResponse,assertSheetsReadResponse} from './docs-read-contract';
 import {createSecretary} from '../plugins/secretary-tools/src/bridge';
 import {acceptanceConfiguration,syntheticOwner,syntheticToken} from './acceptance';
 export async function runWorkspaceAcceptance(coreUrl:string,docsUrl:string) {
@@ -24,8 +24,10 @@ export async function runWorkspaceAcceptance(coreUrl:string,docsUrl:string) {
  }assert(ready,'Actual Core did not become ready');
  await fixture('/__fixture/reset',{});
  const grid=await tool('sheets_read',{spreadsheet:'operations',view:'overview',limit:2});
- assert.equal(grid.ok,true);assert.deepEqual(grid.data.records[0].fields,{B:'Independent',C:12,D:true});assert.equal(grid.data.records[1].fields.C,6);
+ assertSheetsReadResponse(grid);assert.equal(grid.ok,true);assert.deepEqual(grid.data.records[0].fields,{B:'Independent',C:12,D:true});assert.equal(grid.data.records[1].fields.C,6);
  assert.equal((await tool('sheets_search',{spreadsheet:'operations',view:'overview',query:'true'})).data.records.length,1);
+ const sheetContext=await tool('sheets_read',{spreadsheet:'operations',view:'overview',mode:'summary_context',max_records:1});assertSheetsReadResponse(sheetContext);assert.equal(sheetContext.data.records[0].reference_id,'R1');assert.deepEqual(sheetContext.data.records[0].fields,grid.data.records[0].fields);assert.equal(sheetContext.data.coverage.included_records,1);assert.equal(sheetContext.data.coverage.view_records_complete,false);
+ const sheetContinuation=await tool('sheets_read',{spreadsheet:'operations',view:'overview',cursor:sheetContext.data.next_cursor,limit:1});assertSheetsReadResponse(sheetContinuation);assert.equal(sheetContinuation.data.records[0].fields.C,6);
  const targets=[{spreadsheet:'operations',view:'overview'},{spreadsheet:'archive',view:'overview'}];
  const cross=await tool('sheets_search',{targets,query:'INDEPENDENT',limit:1});assert.equal(cross.ok,true);assert.equal(cross.data.sources.length,2);assert.equal(cross.data.records[0].spreadsheet,'operations');assert(cross.data.next_cursor);
  const crossNext=await tool('sheets_search',{targets,query:'INDEPENDENT',limit:1,cursor:cross.data.next_cursor});assert.equal(crossNext.data.records[0].spreadsheet,'archive');assert.equal(crossNext.data.records[0].fields.C,5);assert.equal(crossNext.data.next_cursor,null);

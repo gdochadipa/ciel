@@ -107,6 +107,8 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
    const cross=await execute(selected,{targets,query:'independent',limit:1});assert.equal(cross.data.sources.length,2);assert.equal(cross.data.records[0].spreadsheet,'operations');assert(cross.data.next_cursor);
    const next=await execute(selected,{targets,query:'independent',limit:1,cursor:cross.data.next_cursor});assert.equal(next.data.records[0].spreadsheet,'archive');assert.equal(next.data.next_cursor,null);
    const parameters=selected.parameters as any;assert.equal(parameters.properties.targets.maxItems,3);assert.equal(parameters.oneOf.length,2);
+   const summary=await execute(first.tool('sheets_read',owner),{spreadsheet:'operations',view:'overview',mode:'summary_context',max_records:1});assert.equal(summary.data.mode,'summary_context');assert.equal(summary.data.records[0].reference_id,'R1');assert.equal(summary.data.records[0].source.range,"'Operations'!B2:D2");assert.equal(summary.data.coverage.view_records_complete,false);
+   assert.equal((first.tool('sheets_read',owner).parameters as any).oneOf.length,2);
   }else if(kind==='tabs'){
    const history=await execute(first.tool('operations_get_history',owner),{operation_id:change.operation_id});
    assert.equal(history.data.operation.after.registration,'unregistered');

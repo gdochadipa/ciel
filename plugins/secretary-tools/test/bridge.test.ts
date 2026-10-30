@@ -420,3 +420,21 @@ test('available asynchronous Gateway preserves invocation checks before schedule
   expect(requests).toBe(1);
  } finally {server.stop(true);}
 });
+
+(process.env.SECRETARY_HTTP_TESTS==='1'?test:test.skip)('Sheets summary context forwards one registered view and rejects mixed or injected scope before traffic',async()=>{
+ let requests=0;
+ const {server,options}=setup(async request=>{
+  requests++;expect(new URL(request.url).pathname).toBe('/v1/tools/sheets_read');
+  expect(await request.json()).toEqual({spreadsheet:'operations',view:'overview',mode:'summary_context',max_records:2});
+  return Response.json({ok:true,data:{mode:'summary_context',records:[{reference_id:'R1',fields:{B:0,C:false}}]}});
+ });
+ try{
+  const bridge=createSecretary(options);
+  const result=await bridge.execute('sheets_read',{spreadsheet:'operations',view:'overview',mode:'summary_context',max_records:2},owner) as any;
+  expect(result.data.records[0].fields).toEqual({B:0,C:false});
+  for(const extra of [{max_records:0},{max_records:101},{max_records:null},{limit:2},{cursor:'x'},{range:'A1:Z100'},{model:'paid'},{mode:'summary'}])await expect(bridge.execute('sheets_read',{spreadsheet:'operations',view:'overview',mode:'summary_context',...extra},owner)).rejects.toThrow('INVALID_INPUT');
+  await expect(bridge.execute('sheets_read',{spreadsheet:'operations',view:'overview',max_records:2},owner)).rejects.toThrow('INVALID_INPUT');
+  await expect(bridge.execute('sheets_read',{spreadsheet:'operations',view:'overview',mode:'summary_context'},{})).rejects.toThrow('OWNER_REQUIRED');
+  expect(requests).toBe(1);
+ }finally{server.stop(true);}
+});

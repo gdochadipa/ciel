@@ -9,7 +9,7 @@ export const secretaryToolNames = [...coreTools,...reminderTools];
 const fields: Record<string, [string[], string[]]> = {
  docs_list:[[],[]],docs_describe:[['document'],[]],docs_read:[[],['document','documents','tab_id','limit','cursor','mode','max_characters']],docs_search:[['query'],['document','documents','tab_id','limit','cursor','case_sensitive']],docs_preview_change:[['operation_id','document','tab_id','action','fields'],[]],docs_apply:[['operation_id'],[]],operations_get_history:[[],['operation_id','limit','cursor']],
  sheets_preview_create_tab:[['operation_id','spreadsheet','title','rows','columns'],['headers']],sheets_create_tab:[['operation_id'],[]],
- sheets_list:[[],[]], sheets_describe:[['spreadsheet'],[]], sheets_read:[['spreadsheet','view'],['limit','cursor']], sheets_search:[['query'],['spreadsheet','view','targets','limit','cursor']],
+ sheets_list:[[],[]], sheets_describe:[['spreadsheet'],[]], sheets_read:[['spreadsheet','view'],['limit','cursor','mode','max_records']], sheets_search:[['query'],['spreadsheet','view','targets','limit','cursor']],
  sheets_preview_change:[['operation_id','spreadsheet','view','action','fields'],['record_id']], sheets_append:[['operation_id'],[]], sheets_update:[['operation_id'],[]], sheets_get_history:[[],['operation_id','limit','cursor']], reports_wedding:[['spreadsheet'],[]],
 };
 export class SecretaryError extends Error { constructor(public code: string) { super(code); } }
@@ -70,7 +70,9 @@ export function createSecretary(options: Options) {
   if(name==='docs_search' && (('document' in input)===('documents' in input) || ('documents' in input && 'tab_id' in input))) fail('INVALID_INPUT');
   if(name==='sheets_search' && ('targets' in input ? ('spreadsheet' in input || 'view' in input) : !('spreadsheet' in input && 'view' in input))) fail('INVALID_INPUT');
   if(name==='docs_read' && ((('document' in input)===('documents' in input)) || ('mode' in input ? (input.mode!=='summary_context' || ['tab_id','limit','cursor'].some(key=>key in input)) : (!('tab_id' in input) || 'max_characters' in input || 'documents' in input)))) fail('INVALID_INPUT');
+  if(name==='sheets_read' && ('mode' in input ? (input.mode!=='summary_context' || 'limit' in input || 'cursor' in input) : 'max_records' in input)) fail('INVALID_INPUT');
   for (const [key,val] of Object.entries(input)) {
+   if(key==='max_records') {if(!Number.isInteger(val) || Number(val)<1 || Number(val)>100) fail('INVALID_INPUT');continue;}
    if(key==='max_characters') {if(!Number.isInteger(val) || Number(val)<('documents' in input?300:100) || Number(val)>10000) fail('INVALID_INPUT');continue;}
    if(key==='targets') {
     if(!Array.isArray(val) || val.length<1 || val.length>3) fail('INVALID_INPUT');

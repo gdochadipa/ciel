@@ -48,3 +48,17 @@ test('published Docs read response contract accepts legacy and cited packets and
  expect(()=>assertDocsReadResponse({ok:true,data:{...legacy.data,mode:'summary_context'}})).toThrow();
  expect(()=>assertDocsReadResponse({ok:true,data:{...summary.data,mode:'unsupported'}})).toThrow();
 });
+
+test('published Sheets summary contract accepts typed partial/full/empty source and preserves legacy responses',async()=>{
+ const {assertSheetsReadResponse}=await import('./docs-read-contract');
+ const rowSource={spreadsheet_id:'synthetic',sheet_id:7,range:"'Data'!A1:B1",record_id:null,source_revision:'a'.repeat(64),mapping_version:'v1',retrieved_at:'2026-10-30T00:00:00Z'};
+ const row={fields:{A:0,B:false},source:rowSource};
+ expect(()=>assertSheetsReadResponse({ok:true,data:{records:[row],next_cursor:null,source_revision:rowSource.source_revision,mapping_version:'v1',retrieved_at:rowSource.retrieved_at}})).not.toThrow();
+ const packet={mode:'summary_context',content_role:'untrusted_source_data',context_id:'b'.repeat(64),source:{spreadsheet:'book',view:'data',spreadsheet_id:'synthetic',sheet_id:7,registered_range:"'Data'!A1:B2",profile:'grid',source_revision:rowSource.source_revision,mapping_version:'v1',retrieved_at:rowSource.retrieved_at},records:[{reference_id:'R1',...row}],next_cursor:'synthetic-cursor',coverage:{scope:'registered_view_only',total_records:2,included_records:1,omitted_records:1,view_records_complete:false,can_summarize:true}};
+ expect(()=>assertSheetsReadResponse({ok:true,data:packet})).not.toThrow();
+ expect(()=>assertSheetsReadResponse({ok:true,data:{...packet,next_cursor:null,coverage:{...packet.coverage,total_records:1,omitted_records:0,view_records_complete:true}}})).not.toThrow();
+ expect(()=>assertSheetsReadResponse({ok:true,data:{...packet,records:[],next_cursor:null,coverage:{...packet.coverage,total_records:0,included_records:0,omitted_records:0,view_records_complete:true,can_summarize:false}}})).not.toThrow();
+ const {coverage,...missing}=packet;
+ expect(()=>assertSheetsReadResponse({ok:true,data:missing})).toThrow();
+ expect(()=>assertSheetsReadResponse({ok:true,data:{...packet,records:[{reference_id:'R101',...row}]}})).toThrow();
+});

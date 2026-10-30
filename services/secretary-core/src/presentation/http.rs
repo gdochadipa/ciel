@@ -93,7 +93,10 @@ fn decode_tool(name: &str, input: Value) -> Result<Command, CoreError> {
             Command::List
         }
         "sheets_describe" => Command::Describe(parse(input)?),
-        "sheets_read" => Command::Read(parse(input)?),
+        "sheets_read" => match parse(input)? {
+            SheetsReadRequest::Rows(p) => Command::Read(p),
+            SheetsReadRequest::Summary(p) => Command::SheetSummary(p),
+        },
         "sheets_search" => Command::Search(parse(input)?),
         "reports_wedding" => Command::Report(parse(input)?),
         "sheets_preview_create_tab" => {

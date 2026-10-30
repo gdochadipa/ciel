@@ -60,6 +60,7 @@ impl CommandBus {
                 )
             }
             Command::Read(p) => read(self, &p.spreadsheet, &p.view, None, p.limit, p.cursor).await,
+            Command::SheetSummary(p) => super::sheets_summary::summary(self, p).await,
             Command::Search(Search::Many(p)) => super::sheets_search::search(self, p).await,
             Command::Search(Search::One(p)) => {
                 if p.query.is_empty() || p.query.len() > 256 {
@@ -119,20 +120,12 @@ async fn read(
     projection::validate(s, &workbook)?;
     let fingerprint = projection::fingerprint(&workbook);
     // Cursor binds the source revision and full query, preventing pagination over changed data.
-    use sha2::{Digest, Sha256};
-    let binding = format!(
-        "{:x}",
-        Sha256::digest(
-            format!(
-                "{}|{}|{}|{}|{}",
-                s.id,
-                view,
-                query.as_deref().unwrap_or(""),
-                state.registry.version,
-                fingerprint
-            )
-            .as_bytes()
-        )
+    let binding = projection::read_binding(
+        &s.id,
+        view,
+        query.as_deref(),
+        &state.registry.version,
+        &fingerprint,
     );
     let offset = if let Some(c) = cursor {
         let (b, n) = c.split_once(':').ok_or_else(CoreError::invalid)?;

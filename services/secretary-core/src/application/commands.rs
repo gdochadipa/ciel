@@ -13,6 +13,7 @@ pub enum Command {
     List,
     Describe(Describe),
     Read(Read),
+    SheetSummary(SheetSummary),
     Search(Search),
     Report(Describe),
     Mutation(MutationCommand),
@@ -122,6 +123,21 @@ pub struct Empty {}
 #[serde(deny_unknown_fields)]
 pub struct Describe {
     pub spreadsheet: String,
+}
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum SheetsReadRequest {
+    Rows(Read),
+    Summary(SheetSummary),
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SheetSummary {
+    pub spreadsheet: String,
+    pub view: String,
+    pub mode: SummaryContextMode,
+    #[serde(default, deserialize_with = "non_null_option")]
+    pub max_records: Option<usize>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

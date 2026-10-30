@@ -8,6 +8,7 @@ Current owner priority (2026-10-29): feature development first. Target amd64 bui
 
 | Ticket | Depends on | Status | Outcome |
 | --- | --- | --- | --- |
+| T039 Cited Sheets summary context | T023,T035,T038 | accepted locally: full suite/seven scenarios/SDK archive/medium review; live T007 open | Typed registered-view prefix with R references, explicit coverage and compatible continuation; no model endpoint/memory/write. |
 | T038 Executable native summary memory | T036,T037 | accepted locally: full suite/13native tests/seven scenarios/SDK pack/medium review and P2 correction; live T007 open | Actual SDK native notes, fixed seven-day discovery reuse and applied/uncertain refresh fences; no new memory provider/store. |
 | T037 Selected Docs summaries and native summary-memory guidance | T033,T036 | accepted locally: full suite/seven simulations/SDK pack/medium review; native memory/live T007 open | Global bounded source context with D1:S1 citations; seven-day native initial-summary workflow remains host-qualified. |
 | T036 Cited Docs summary context | T023,T030,T035 | accepted locally: full suite + seven scenarios + SDK pack; later medium review/P2 correction + full suite/Workspace recheck; live T007 open | Bounded source excerpts/coverage and host-model summary workflow; no added model service or tool. |

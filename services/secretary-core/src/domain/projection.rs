@@ -11,6 +11,28 @@ pub fn fingerprint(book: &Value) -> String {
         Sha256::digest(serde_json::to_vec(book).unwrap_or_default())
     )
 }
+pub fn read_binding(
+    id: &str,
+    view: &str,
+    query: Option<&str>,
+    version: &str,
+    revision: &str,
+) -> String {
+    format!(
+        "{:x}",
+        Sha256::digest(
+            format!(
+                "{}|{}|{}|{}|{}",
+                id,
+                view,
+                query.unwrap_or(""),
+                version,
+                revision
+            )
+            .as_bytes()
+        )
+    )
+}
 pub fn coordinate(s: &str) -> Option<(usize, usize)> {
     let split = s.find(|c: char| c.is_ascii_digit())?;
     let (letters, row) = s.split_at(split);
