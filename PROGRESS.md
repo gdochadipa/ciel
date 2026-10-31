@@ -315,3 +315,10 @@ source-only plugin checks passed. Hosted logs require authenticated access unava
 through the CLI here; browser access was declined and is not retried. A bounded CI
 error-summary wrapper preserves the same gate and exposes only compiler/test failure
 lines as annotations, redacting fixture markers. No release or VPS result is claimed.
+
+Hosted run41156218209 exposed the verification failure: Ubuntu runner has no rg,
+which the acceptance-launcher Python tests require. Both full verification jobs now
+explicitly install Ubuntu's ripgrep package before the same gates. Source-only checks
+remain successful. Diagnostic wrapper failure/redaction/cleanup and workflow lint pass;
+no weakened test or substituted SDK is used. Native packaging is retried only after
+these unchanged checks pass.
