@@ -397,3 +397,21 @@ remove deny or fabricate trust/alter the SQLite ledger, automatically reinstall/
 or claim qualified native capabilities from this result. Next safe diagnostic: compare
 installed three-file payload with the verified archive and inspect read-only plugin
 diagnostics; active Core configuration/start and all T007 live gates remain pending.
+
+## T040 operator-confirmed offline host checks — 2026-10-31
+
+Operator returned plugins doctor ok=true with empty pluginErrors, diagnostics,
+sourceShadowing, compatibility and configurationWarnings. This does not supersede
+the earlier inspect trust.reason=provenance-invalid; no new trusted inspect result
+or capability-specific qualification was supplied. No repair or trust bypass occurred.
+
+Installed native Core registry check against the shipped example returned ok=true,
+mode=offline, configuration_changed=false, activation_changed=false and
+live_access_checked=false. Example counts:1 spreadsheet/1 view/1 document, both
+resource types readable, zero configured create-tab/document/grid/structured write
+permissions. This confirms native binary/loader and offline validator execution on
+the operator's VPS; example aliases/IDs are not actual registered Google resources.
+Inactive installation/registration and offline checks are complete. Actual private
+Core config/owner/token/service-user preparation, read-only runtime/Google/bridge
+qualification and eventual activation remain pending under T007. All production
+write, approval/scheduler qualification and native-memory gates remain off.
