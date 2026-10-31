@@ -364,3 +364,16 @@ success is claimed. Operator terminal execution is required for the next step. U
 published archive's independently recorded SHA256, standalone verify and install-files;
 keep host selection private/dynamic and preserve existing configuration/state. Do not
 weaken SSH validation or transfer credentials into the agent/container to bypass this.
+
+## T040 operator-confirmed inactive VPS file installation — 2026-10-31
+
+Operator returned successful standalone verify and first install-files receipts for
+9aeaf0777861e53af65628eb2bc83448d33290d8: verified=true, files_installed=true,
+reused=false, starts_services=false, activates_plugins=false, production_writes=false.
+This is operator-reported target file-installation evidence, not agent SSH execution.
+Core release/unit files are installed according to that receipt; plugin registration,
+active configuration/service-user preparation, service start and T007 qualification
+remain pending. Do not infer a running Core, loaded plugin, Google/model/memory access,
+owner approval transport, scheduler/channel or full recovery from this receipt. Next
+step is read-only effective host/plugin policy inspection before separately controlled
+registration/configuration. All activation/write/qualification defaults stay disabled.
