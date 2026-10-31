@@ -52,7 +52,7 @@ jobs:
       - name: Install locked JavaScript dependencies
         run: bun install --frozen-lockfile
       - name: Verify local behavior
-        run: bash scripts/verify.sh
+        run: bash scripts/ci-verify.sh
       - name: Install pinned Postman CLI without lifecycle scripts
         run: npm install --global --ignore-scripts postman-cli@1.75.0
       - name: Verify real bridge and Core against Google-only simulations

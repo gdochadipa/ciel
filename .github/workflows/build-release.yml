@@ -37,7 +37,7 @@ jobs:
           npm install --global --ignore-scripts postman-cli@1.75.0
       - name: Verify source and simulated provider integration
         run: |
-          bash scripts/verify.sh
+          bash scripts/ci-verify.sh
           bash scripts/acceptance-all.sh
       - name: Stage native release and verify clone-free distribution
         run: |

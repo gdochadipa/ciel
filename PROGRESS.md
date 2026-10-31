@@ -307,3 +307,11 @@ missing tar extraction filter; tests now copy only validated regular members and
 final full run passed. actionlint1.7.7 passed both workflows. Medium parallel Standards
 and Spec reviews against22d0a39 found no material findings. Seven local simulations
 and actual hosted x86 staging/release are being executed; no VPS/live claim.
+
+T040 continuation: normal atomic publication reached4a0e0bc on main/integration.
+All seven additional local scenarios passed (t040-acceptance.log). First hosted build
+41085191176 fetched locked dependencies but failed verification before staging;
+source-only plugin checks passed. Hosted logs require authenticated access unavailable
+through the CLI here; browser access was declined and is not retried. A bounded CI
+error-summary wrapper preserves the same gate and exposes only compiler/test failure
+lines as annotations, redacting fixture markers. No release or VPS result is claimed.
