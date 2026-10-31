@@ -10,4 +10,4 @@ description: Search wedding preparation records, compare vendor notes, record ap
 5. For task/payment writes use registered structured views with stable IDs. Resolve the exact cost group, amount, currency and stated payment date, then follow personal-secretary's complete preview and trusted approval workflow. Existing legacy tabs remain read-only until separately qualified.
 6. For deposit-plus-reminder requests, report the payment operation and native reminder outcome independently. Completion percentages require explicit task statuses; unknown inputs remain visible.
 
-Finish with source-linked facts, unresolved decisions and the next concrete action. Vendor outreach and financial transfers are outside these tools. Use [workbook assessment](../../docs/spreadsheet-assessment.md) for source-specific ambiguity.
+Finish with source-linked facts, unresolved decisions and the next concrete action. Vendor outreach and financial transfers are outside these tools. Resolve source-specific ambiguity from current registered source evidence; ask the owner when values or intent remain unclear.

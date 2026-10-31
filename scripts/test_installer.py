@@ -30,7 +30,7 @@ class InstallerCLI(unittest.TestCase):
                      'plugins/secretary-tools/package.json', 'plugins/secretary-tools/openclaw.plugin.json',
                      'scripts/preflight.py', 'scripts/backup.py', '.env.example',
                      'config/workspace.example.json', 'config/openclaw.example.json',
-                     'deploy/qualification.example.json', 'deploy/secretary-core.service', 'docs/installation.md'):
+                     'deploy/qualification.example.json', 'deploy/secretary-core.service', 'README.md'):
             target = source / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / name, target)

@@ -1,28 +1,85 @@
 # Ciel
 
-Ciel is a lightweight personal secretary for OpenClaw, using one OpenClaw agent, optional domain Skills, an owner-only TypeScript plugin and a loopback Rust Core. Registered Google Sheets grids and Google Docs are general capabilities, including bounded read-only Docs text search with an optional case-insensitive mode; the wedding workbook is an optional domain profile. Native OpenClaw owns reminders and personal memory. Controlled writes share one command bus, approval flow, journal and FSM.
+Ciel is a lightweight personal secretary for OpenClaw: an owner-only TypeScript
+plugin, one loopback Rust Core, one in-process command bus and a durable SQLite
+operation FSM. Registered Google Sheets and Docs are general capabilities; the
+wedding workbook is an optional domain profile. OpenClaw owns reminders and memory.
 
-Start with [architecture](docs/architecture.md), [interface notes](contracts/interface-notes.md), [workbook assessment](docs/spreadsheet-assessment.md) and [security boundaries](docs/security.md). The original [specification](docs/specs/openclaw-personal-secretary.md) defines the intended behavior. Progress and acceptance evidence live in [local tickets](.scratch/secretary-mvp/index.md).
+Project instructions start at [AGENTS.md](AGENTS.md). Versioned rules cover
+[code/comments](.agent/rules/code.md), [FSM](.agent/rules/fsm.md),
+[memory](.agent/rules/memory.md) and [processing](.agent/rules/processing.md).
+Design notes, progress, glossary and task records stay local and are not required
+to build or stage a release.
 
-See [current implementation status](docs/implementation-status.md) for what is coded, which checks actually passed, and why full acceptance remains open. This is not a production-ready or fully accepted implementation of the entire specification.
+## Capabilities and boundaries
 
-The full local verification now passes with actual dependency locks and the installed OpenClaw 2026.10.7 SDK: 57 Rust tests, 29 Python CLI checks and 46 TypeScript checks, strict SDK type checking, host build/validation/pack and seven real bridge/Core scenarios against simulated Google Sheets/Docs. See [the reproducible Docker setup](docs/local-verification.md). The verified runtime uses Node 24.22.1, Bun 1.2.21 and Rust 1.95.0; the SDK engine range is `>=24.22.1 <25 || >=26.12.1`. The full CI job also runs `bash scripts/acceptance-all.sh` with pinned Postman CLI and synthetic local targets; all seven cases pass sequentially locally. The prior hosted simulation step failed; further GitHub Actions and VPS work are deferred by the owner.
+Use registered bounded Sheets views and Docs tabs through the
+[API contract](contracts/openapi.yaml) and [generic registry example](config/workspace.example.json).
+Controlled edits and tab creation require immutable previews, exact owner approval,
+source conflict checks and the shared journal. New tabs receive no automatic
+registration or access grant. Ambiguous writes reconcile through observation,
+without another provider send.
 
-Local HTTP stand-ins and disposable fixtures demonstrate only their exercised behavior. They do not establish actual Google write preservation, installed OpenClaw SDK activation, trusted WhatsApp approvals, native restart persistence or channel delivery. [Deployment guidance](docs/deployment.md) keeps startup gated on an operator's version-specific host qualification. No production connection, workbook modification or deployment is implied by repository files.
+Production writes, approval/scheduler qualification and native summary persistence
+remain disabled by default. Local tests and simulated Google/model responses do
+not qualify live Google, host authority, model output, channels or recovery. Keep
+credentials, private targets, workbook contents and raw logs out of Git.
 
-Personal memory is delegated to OpenClaw by owner decision. The secretary plugin registers no memory tools or preference store; native memory lifecycle setup is outside plugin scope. The host's memory permissions and privacy policy remain operator responsibilities. Sources, ambiguous amounts, shared costs and unknown dates remain visible rather than being filled from conversation guesses. A payment record and its reminder have separate operation outcomes.
+## Verification
 
-Before live activation, supply and qualify the actual VPS/runtime, approved Google spreadsheet/registry, service account, owner WhatsApp account and outbound recipient policy, trusted full diff approval, model entitlement, native scheduler delivery, and backup/restore. Keep `SECRETARY_WRITES_ENABLED=false` throughout initial qualification. The five guides under `skills/` grant no tools or additional authority. A low-effort review found two P2 defects; both have local regression fixes. Full runtime qualification remains open.
+Use actual Cargo/Bun locks and the pinned OpenClaw SDK. The qualified toolchain is
+Python >=3.11, Rust/Cargo 1.95.0, Bun 1.2.21 and OpenClaw 2026.10.7. The SDK Node
+engine range is `>=24.22.1 <25 || >=26.12.1`.
 
+With the required dependencies available, run `bash scripts/verify.sh` for local
+Rust/operator/plugin/SDK checks. Provider changes also need relevant scenarios in
+`bash scripts/acceptance-all.sh` with Postman CLI 1.75.0. These exercise real
+Core/bridge/journal against simulated providers. Use disposable targets and private
+logs, and report local/simulated/live evidence separately.
 
-The Rust Core now uses domain/application/infrastructure/presentation layers with a typed in-process command bus and an explicit mutation FSM. See [the architecture](docs/architecture.md) for dependencies, legal transitions and preserved contracts.
+## Installation
 
-Use [the generic workspace example](config/workspace.example.json) for registered grids and Docs. The first Docs edit capabilities are approved append text and one-match text replacement on a selected supported tab. [Capability notes](docs/specs/workspace-capabilities.md) document bounds, compatibility and live qualification still required.
+The installer stages a commit-bound native release, verifies its hashes and installs
+inactive files. These are separate steps; none starts services, registers/activates
+plugins, writes live Google data or changes production qualification flags.
 
-T025 adds preview/approval-based tab creation inside registered spreadsheets (`create_tabs` defaults false). New tabs remain unregistered for reads/writes until the operator explicitly configures bounded access. No new spreadsheet files are created; see [Workspace capabilities](docs/specs/workspace-capabilities.md).
+Select a reviewed full 40-character commit in a clean checkout. The operator supplies
+SECRETARY_REVISION and a private, operator-owned secretary_release_parent directory
+outside that checkout. Build/stage as an unprivileged operator on the target native
+platform, with the toolchain above and actual dependency locks:
 
-For the owner-selected GitHub → VPS checkout → installer flow, see [installation](docs/installation.md). The CLI stages a reviewed native release and installs inactive files separately; it never starts services, activates plugins or changes production qualification flags.
+```sh
+python3 scripts/install.py plan --revision "$SECRETARY_REVISION"
+python3 scripts/install.py stage --revision "$SECRETARY_REVISION" \
+  --output "$secretary_release_parent/release"
+python3 scripts/install.py verify --revision "$SECRETARY_REVISION" \
+  --release "$secretary_release_parent/release"
+```
+
+Optional stage --offline requires previously populated frozen JS dependencies and
+cached Cargo packages. Verify the independently selected commit and native OS/CPU/libc;
+receipt hashes detect drift, not authenticity of an untrusted receipt. Never transfer
+incompatible ARM/x86 binaries. Only after target-specific installation authorization:
+
+```sh
+sudo python3 scripts/install.py install-files --revision "$SECRETARY_REVISION" \
+  --release "$secretary_release_parent/release"
+```
+
+Real filesystem installation requires Linux/root; --root supports a private disposable
+root exercise. Existing config/state is preserved; conflicting releases, units and
+unsafe paths fail closed. The release contains Core, the 26-tool three-file SDK plugin
+archive, MIT license, preflight/backup utilities, inactive templates, this README as
+INSTALLATION.md and a commit/hash receipt. The standalone installer shipped in a release
+supports verify/install-files without a source checkout.
+
+File installation does not create service users, provision private config, reload
+systemd, start Core or register the plugin. Active setup and qualification require
+separate owner authorization. Before activation, qualify the actual runtime,
+Google ACL/API/scopes and disposable writes, owner-only full-preview approval,
+model/native memory policy, scheduler/channel delivery and backup/recovery.
+Keep production flags off until those gates and explicit activation authorization
+are satisfied. Plugin --no-enable alone does not override an existing enabled
+host policy; inspect effective policy before separately authorized registration.
 
 Licensed under the [MIT License](LICENSE).
-
-Offline registry preparation (T030): the current Core supports registry init/check before runtime setup, with inactive non-overwriting drafts and sanitized validation summaries from the same Rust rules. See [registry setup](docs/registry-setup.md) for commands and required source-version checks. No Google credential/access or service activation is involved.

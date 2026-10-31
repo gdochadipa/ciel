@@ -1,5 +1,0 @@
-# Keep one in-process command bus and a durable operation FSM
-
-Accepted 2026-10-27 by the owner after considering CQRS: keep a single Rust Core with a typed in-process command bus for reads and writes, and a durable finite-state machine for controlled mutations. The secretary is a lightweight personal plugin, so separate query/write buses, replicated read databases, event brokers, background projection workers and event sourcing do not justify their operational cost at the current scope. Planning records remain authoritative in Google Sheets, Core SQLite records operation intent/approval/audit/recovery, native reminders and personal memory remain OpenClaw-owned; reconsider the architecture only when measured workload or reliability needs require a different boundary.
-
-The bus awaits handlers directly. An audit trail does not make the journal an event-sourced read model or authorize replay: uncertain/interrupted writes require observation and reconciliation. This decision preserves the existing DDD/hexagonal layers, owner/approval checks and provider conflict detection; it does not make Sheets transactions atomic or claim measured CPU/token savings.

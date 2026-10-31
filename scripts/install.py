@@ -52,7 +52,7 @@ TEMPLATES = {
     'templates/registry.example.json': 'config/workspace.example.json',
     'templates/openclaw.example.json': 'config/openclaw.example.json',
     'templates/secretary-core.service': 'deploy/secretary-core.service',
-    'INSTALLATION.md': 'docs/installation.md',
+    'INSTALLATION.md': 'README.md',
 }
 ARTIFACTS = set(TEMPLATES) | {'bin/secretary-core', 'plugins/secretary-tools.tgz'}
 

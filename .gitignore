@@ -15,7 +15,11 @@
 /secrets/
 *service-account*.json
 *credentials*.json
-docs/*.xlsx
+# Local working documentation; rules stay versioned.
+/docs/
+/PROGRESS.md
+/GLOSSARY.md
+/.scratch/
 postman/.dependencies/
 sim.ndjson
 sim.err
