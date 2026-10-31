@@ -377,3 +377,23 @@ remain pending. Do not infer a running Core, loaded plugin, Google/model/memory 
 owner approval transport, scheduler/channel or full recovery from this receipt. Next
 step is read-only effective host/plugin policy inspection before separately controlled
 registration/configuration. All activation/write/qualification defaults stay disabled.
+
+## T040 operator-confirmed plugin registration — 2026-10-31
+
+Operator reported valid OpenClaw configuration and unset global enabled/allow/deny
+and secretary-tools.enabled policy values. Explicitly setting only deny=[secretary-tools]
+and installing the reviewed local archive with --no-enable succeeded, applied in
+Gateway generation6. Cold inspect reports version0.1.0,26 declared tools, enabled=false,
+explicitlyEnabled=false, activated=false, imported=false, status=disabled and blocked
+by denylist. Empty runtime tools/hooks are expected for that inactive instance; this
+is registration/metadata evidence, not loaded-tools or Core connectivity evidence.
+Existing unrelated plugins were not intentionally reconfigured.
+
+Inspect also reports trust.reason=provenance-invalid for archive provenance. This
+remains unresolved; verified Release bytes do not establish host trust-ledger acceptance.
+Pinned SDK docs/tools/plugin.md and docs/plugins/sdk-runtime.md distinguish load policy
+from capability-specific trust (hook agent turns / Gateway scope elevation). Do not
+remove deny or fabricate trust/alter the SQLite ledger, automatically reinstall/force,
+or claim qualified native capabilities from this result. Next safe diagnostic: compare
+installed three-file payload with the verified archive and inspect read-only plugin
+diagnostics; active Core configuration/start and all T007 live gates remain pending.
