@@ -322,3 +322,33 @@ explicitly install Ubuntu's ripgrep package before the same gates. Source-only c
 remain successful. Diagnostic wrapper failure/redaction/cleanup and workflow lint pass;
 no weakened test or substituted SDK is used. Native packaging is retried only after
 these unchanged checks pass.
+
+T040 accepted — hosted Ubuntu x86_64 and downloaded release, 2026-10-31:
+normal atomic publication reached9aeaf0777861e53af65628eb2bc83448d33290d8.
+[Build41156372059](https://github.com/gdochadipa/ciel/actions/runs/41156372059)
+succeeded, including full locked verification, all seven simulations, actual native
+stage, ELF/loader/offline CLI smoke, clone-free receipt verification and inactive
+file installation into a disposable root. Both independent contract-check workflows
+41156372227 and41156372058 also succeeded. This is hosted x86_64 evidence, not a
+VPS install or live Google/approval/model/scheduler/channel/recovery qualification.
+
+[Immutable prerelease](https://github.com/gdochadipa/ciel/releases/tag/build-9aeaf0777861e53af65628eb2bc83448d33290d8)
+contains the archive, SHA256 sidecar and smoke.json. The public assets were downloaded
+again and independently verified:4482473bytes, SHA256
+cc1b52339280fa22afb8e42ae291c3bd3b942cf7f34eedeb88b9acf6ea3fd790.
+Exact tar allowlist, standalone installer bytes against the selected Git commit,
+inner artifact hashes, source lock hashes and clone-free verify all pass. Receipt:
+Linux x86_64/glibc2.39,26tools. Offline CLI smoke:2CPU affinity cap,2GiB address-space
+limit,12064KiB peak child RSS; this includes the launcher/exec boundary and does not
+measure whole OpenClaw/model/server capacity. Private download/verification evidence
+is in qualified runs/t040-download-9aeaf0777861e53af65628eb2bc83448d33290d8/.
+
+Standards: no material findings in medium feature review or final diagnostic/dependency
+delta recheck. Spec: no material findings in either review. Local failure/redaction/
+cleanup check and actionlint passed for the CI wrapper/workflows. Workbook SHA remains
+b24351dbda4c69a7cbf5f14d9b18d7fbbc983deff406e8dad3607f6bcd196de3.
+All production/write/approval/scheduler/native-memory defaults remain off. Native staged
+and disposable installed receipt is now T040; actual VPS installed state is unchanged
+and T007 remains open. No secrets, raw logs, workbook or generated distributions enter
+Git. Documentation-only acceptance commit uses [skip ci] to avoid rebuilding unchanged
+release code; downloadable package remains bound to the exact9aeaf07 source commit.
