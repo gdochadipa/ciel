@@ -352,3 +352,15 @@ and disposable installed receipt is now T040; actual VPS installed state is unch
 and T007 remains open. No secrets, raw logs, workbook or generated distributions enter
 Git. Documentation-only acceptance commit uses [skip ci] to avoid rebuilding unchanged
 release code; downloadable package remains bound to the exact9aeaf07 source commit.
+
+## T040 target installation attempt — 2026-10-31
+
+Owner explicitly authorized trying installation on the selected VPS. Scope is inactive
+file installation from the verified9aeaf07 Release; activation/start, live Google,
+native jobs, channels and qualification-flag changes remain separate. A strict-host-key,
+batch SSH read-only preflight was blocked locally with Operation not permitted before
+authentication. No remote inventory or modification occurred, and no installed-host
+success is claimed. Operator terminal execution is required for the next step. Use the
+published archive's independently recorded SHA256, standalone verify and install-files;
+keep host selection private/dynamic and preserve existing configuration/state. Do not
+weaken SSH validation or transfer credentials into the agent/container to bypass this.
