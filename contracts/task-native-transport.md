@@ -28,9 +28,39 @@ agent/session/incarnation and its process-minted Gateway identity.
 The built plugin exports `createNativeTaskClient` for trusted composition. It
 requires explicit transport qualification, a real hook/tool cancellation signal
 and `summaryMemoryEnabled:false`.
-Memory-enabled task dispatch stays unavailable until the existing stale-note /
-refresh fencing is integrated; the helper cannot silently bypass that policy.
+Memory-enabled trusted composition instead uses `createMemoryNativeTaskClient`
+with `summaryMemoryEnabled:true`, the host API and a distinct model/Core bearer
+(`coreToken`) for history and fresh reads. The API must have the same configured
+owner, explicit summary-memory opt-in and no read-only profile. Both clients require
+explicit transport qualification; neither is activated by production startup.
 The SDK model-tool metadata does not expose these credentials or methods.
+
+## Native summary-memory coupling
+
+The memory-aware client waits for the captured task decision acknowledgement
+before any history lookup or note IO. It resolves the exact member from Core
+history, checks operation ID, registered physical Docs identity and mapping, and
+uses the existing per-source native lock. It persists stale/pending-operation
+evidence before starting the one-member execute request. Lock/fence failure stops
+that request. A grid member creates no Docs note.
+
+Current owner-private memory audience and no-promotion policy are rechecked by
+the native assertion immediately before every Core request, including confirmation
+after source preflight. Revocation withholds that confirmation and retains stale
+evidence; it does not erase an already accepted member. Applied results reread the
+source and replace the same seven-day note under its lock. Refresh failure is
+reported as `summary_memory.status:refresh_failed` beside the applied result,
+never as a reason to resend. Other outcomes leave the fence stale. Only observed
+terminal history for the exact pending operation and physical source clears a
+fence through the ordinary discovery/history path. Memory status is separate from
+the Core operation state.
+
+Verification status: AfTS4Z4B on 2026-11-14 passed the full supported SDK
+verifier, including all12 memory-aware safe-root IO cases, plus all seven existing
+Google-only regressions. YW7DQYg5 on 2026-11-15 passed all75 protected cases,
+including same-identity timeout cleanup, official SDK build/validation and a final
+206-input unchanged source check. These results do not establish live host routing, model quality, memory
+indexing or native task-tool/lifecycle activation.
 
 ## Owner scope and lifecycle
 

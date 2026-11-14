@@ -125,4 +125,4 @@ entry.register=(api)=>{
 };
 export default entry;
 
-export {createNativeTaskClient} from "./task-native.js";
+export {createNativeTaskClient,createMemoryNativeTaskClient} from "./task-native.js";

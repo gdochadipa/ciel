@@ -1,6 +1,8 @@
-"""Check the SDK pack output and the protected fixture agree on its location."""
+"""Check protected release fixture paths and timeout supervision."""
 from pathlib import Path
 import re
+import subprocess
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -10,6 +12,66 @@ import service_check_linux
 
 
 class ReleaseFixturePaths(unittest.TestCase):
+    def test_readonly_timeout_is_owned_after_the_credential_drop(self):
+        fixture = service_check_linux.ServiceCheckLinux()
+        fixture.manifest_path = Path('/synthetic/manifest.json')
+        fixture.probe_arguments = lambda path: [
+            '/synthetic/setpriv', '--reuid=1', '--regid=1', 'probe', str(path)]
+        with patch.object(service_check_linux.subprocess, 'run') as run:
+            run.return_value = subprocess.CompletedProcess([], 1, b'', b'')
+            result = fixture.readonly_command('/synthetic/core', 'check-release-readonly', '/synthetic/plugin')
+        arguments, keywords = run.call_args
+        command = arguments[0]
+        self.assertNotIn('timeout', keywords, 'Root without CAP_KILL cannot own a dropped-UID timeout')
+        self.assertEqual(command[:3], ['/synthetic/setpriv', '--reuid=1', '--regid=1'])
+        self.assertEqual(command[3], sys.executable)
+        self.assertEqual(result.returncode, 1)
+
+    def test_readonly_timeout_does_not_need_the_parent_to_signal_its_child(self):
+        with tempfile.TemporaryDirectory(prefix='ciel-timeout-fixture-') as directory:
+            executable = Path(directory) / 'slow-core'
+            executable.write_text('#!' + sys.executable + '\nimport time\ntime.sleep(0.3)\n')
+            executable.chmod(0o700)
+            fixture = service_check_linux.ServiceCheckLinux()
+            fixture.manifest_path = Path(directory) / 'manifest.json'
+            # This portable case starts already under the test user's identity.
+            # Only the Linux suite proves the actual setpriv/capability boundary.
+            fixture.probe_arguments = lambda path: ['probe', str(path)]
+            actual_run = subprocess.run
+
+            def short_run(*args, **kwargs):
+                if 'timeout' in kwargs:
+                    kwargs['timeout'] = 0.05
+                return actual_run(*args, **kwargs)
+
+            with patch.object(service_check_linux, 'READONLY_COMMAND_TIMEOUT', 0.05, create=True), \
+                    patch.object(service_check_linux.subprocess, 'run', side_effect=short_run), \
+                    patch.object(subprocess.Popen, 'kill', side_effect=PermissionError(1, 'Synthetic cross-UID signal denial')):
+                with self.assertRaises(subprocess.TimeoutExpired) as raised:
+                    fixture.readonly_command(executable, 'check-release-readonly', directory)
+            self.assertEqual(raised.exception.timeout, 0.05)
+
+    def test_readonly_supervisor_preserves_completed_cli_output_status_and_arguments(self):
+        with tempfile.TemporaryDirectory(prefix='ciel-output-fixture-') as directory:
+            executable = Path(directory) / 'core'
+            executable.write_text(
+                '#!' + sys.executable + '\nimport os, sys\n'
+                'assert not os.environ.get("CIEL_PARENT_ONLY")\n'
+                'assert sys.argv[1:3] == ["service", "check-release-readonly"]\n'
+                'assert sys.argv[-2:] == ["--synthetic", "exact argument"]\n'
+                'sys.stdout.buffer.write(b"synthetic stdout\\n")\n'
+                'sys.stderr.buffer.write(b"synthetic stderr\\n")\n'
+                'sys.exit(7)\n')
+            executable.chmod(0o700)
+            fixture = service_check_linux.ServiceCheckLinux()
+            fixture.manifest_path = Path(directory) / 'manifest.json'
+            fixture.probe_arguments = lambda path: ['probe', str(path)]
+            with patch.dict(service_check_linux.os.environ, {'CIEL_PARENT_ONLY': 'not inherited'}):
+                result = fixture.readonly_command(executable, 'check-release-readonly', directory,
+                                                  trailing=('--synthetic', 'exact argument'))
+            self.assertEqual((result.returncode, result.stdout, result.stderr),
+                             (7, b'synthetic stdout\n', b'synthetic stderr\n'))
+
     def test_admission_denial_preserves_the_gateway_canary_and_detects_new_state(self):
         with tempfile.TemporaryDirectory(prefix='ciel-denial-fixture-') as directory:
             root = Path(directory)

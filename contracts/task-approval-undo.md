@@ -3,7 +3,10 @@
 Status: inverse planning/linkage, the scoped ledger, trusted native Core control
 and one-member dispatch transport are implemented locally. The new transport's
 supported Linux/SDK gate passed on 2026-11-14. Normal model tools, native lifecycle routing,
-summary-memory integration, provider undo and cleanup remain unfinished. No live
+provider undo and cleanup remain unfinished. A trusted memory-aware native client
+now couples task dispatch to the shared stale-note/refresh workflow. Its supported
+SDK/Linux IO cases passed in AfTS4Z4B and all75 protected acceptance cases passed
+in YW7DQYg5 on 2026-11-15 after the fixture timeout correction. No live
 write or service activation is enabled. See [native transport](task-native-transport.md).
 
 ## Authority and lifetime

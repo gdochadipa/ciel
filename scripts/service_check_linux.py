@@ -22,6 +22,7 @@ import sys
 import tempfile
 import tarfile
 import unittest
+from unittest.mock import patch
 import http.server
 import threading
 import urllib.request
@@ -45,6 +46,19 @@ BLOCKERS = [
     "release_contract_and_compatibility_pending", "runtime_secret_validation_pending",
 ]
 CANARY = b"SYNTHETIC_UNREAD_BODY_CANARY"
+# Offline release checks hash the real SDK/artifact tree on a disposable filesystem.
+# This fixture budget is separate from production admission and task deadlines.
+READONLY_COMMAND_TIMEOUT = 60
+_READONLY_TIMEOUT_EXIT = 124
+_READONLY_SUPERVISOR = """\
+import subprocess
+import sys
+try:
+    result = subprocess.run(sys.argv[2:], env={}, timeout=float(sys.argv[1]))
+except subprocess.TimeoutExpired:
+    sys.exit(124)
+sys.exit(result.returncode)
+"""
 
 
 def acl_bytes():
@@ -163,13 +177,40 @@ class ServiceCheckLinux(unittest.TestCase):
         return installed_core, plugin
 
     def readonly_command(self, executable, action, plugin, *, gateway=None, trailing=()):
-        command = [
-            *self.probe_arguments(self.manifest_path)[:-2], str(executable),
+        invocation = [
+            str(executable),
             "service", action, "--manifest", str(self.manifest_path),
             *(["--gateway-plan", str(gateway)] if gateway else []),
             "--plugin-dir", str(plugin), *trailing,
         ]
-        return subprocess.run(command, env={}, capture_output=True, timeout=15)
+        # Root deliberately lacks CAP_KILL here. The timer must share the Core's
+        # dropped identity, so timeout cleanup never needs a cross-UID signal.
+        command = [
+            *self.probe_arguments(self.manifest_path)[:-2], sys.executable,
+            "-I", "-B", "-S", "-c", _READONLY_SUPERVISOR,
+            str(READONLY_COMMAND_TIMEOUT), *invocation,
+        ]
+        result = subprocess.run(command, env={}, capture_output=True)
+        if result.returncode == _READONLY_TIMEOUT_EXIT:
+            raise subprocess.TimeoutExpired(invocation, READONLY_COMMAND_TIMEOUT,
+                                            output=result.stdout, stderr=result.stderr)
+        return result
+
+    def test_readonly_timeout_is_reaped_under_dropped_identity(self):
+        executable = self.root / "slow-cli"
+        self.write(executable, (
+            f"#!{sys.executable}\nimport os, time\n"
+            "print(os.getpid(), flush=True)\ntime.sleep(4)\n"
+        ).encode(), 0o755)
+        with patch.object(sys.modules[__name__], "READONLY_COMMAND_TIMEOUT", 2):
+            with self.assertRaises(subprocess.TimeoutExpired) as raised:
+                self.readonly_command(executable, "check-release-readonly", self.root)
+        self.assertEqual(raised.exception.timeout, 2)
+        pid = int(raised.exception.output.strip())
+        # A live cross-UID child would return EPERM here without CAP_KILL; ESRCH
+        # proves the same-identity supervisor killed and reaped the fixture.
+        with self.assertRaises(ProcessLookupError):
+            os.kill(pid, 0)
 
     def test_release_compatibility_binds_running_inode_actual_sdk_files_and_exact_tree(self):
         core, plugin = self.compatible_release()

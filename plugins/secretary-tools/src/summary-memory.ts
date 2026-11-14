@@ -47,6 +47,11 @@ function guard(api:OpenClawPluginApi,ctx:OpenClawPluginToolContext){
  if(cfg.plugins?.slots?.memory==='none'||(cfg.plugins?.slots?.memory&&cfg.plugins.slots.memory!=='memory-core')||memoryConfig?.enabled===false||!dreaming||typeof dreaming!=='object'||!('enabled'in dreaming)||dreaming.enabled!==false)fail('SUMMARY_MEMORY_POLICY_REQUIRED');
  if(ctx.fsPolicy?.root&&resolve(ctx.fsPolicy.root)!==resolve(ctx.workspaceDir))fail('SUMMARY_MEMORY_AUTHORITY_REQUIRED');
 }
+/** Recheck native memory policy at the final post-preflight task confirmation. */
+export function assertSummaryMemoryCurrent(api:OpenClawPluginApi,ctx:OpenClawPluginToolContext):void {
+ if(api.pluginConfig?.summaryMemoryEnabled!==true)fail('SUMMARY_MEMORY_DISABLED');
+ guard(api,ctx);
+}
 async function targetFor(alias:string,core:Core):Promise<Target>{
  const result=object(await core('docs_list',{}));if(result.ok!==true)fail('SUMMARY_MEMORY_REGISTRY_UNAVAILABLE');const data=object(result.data);
  if(!Array.isArray(data.documents)||!text(data.mapping_version))fail('SUMMARY_MEMORY_REGISTRY_UNAVAILABLE');
@@ -100,13 +105,41 @@ async function assertResolved(note:unknown,core:Core,target:Target):Promise<void
  const result=object(await core('operations_get_history',{operation_id:note.pending_operation_id}));
  if(result.ok!==true)fail('SUMMARY_MEMORY_RECONCILIATION_REQUIRED');
  const operation=object(object(result.data).operation);
- if(operation.resource_kind!=='google_docs'||operation.document!==target.alias||!['applied','known_failure','rejected','expired','conflict'].includes(String(operation.state)))fail('SUMMARY_MEMORY_RECONCILIATION_REQUIRED');
+ if(operation.operation_id!==note.pending_operation_id||operation.resource_kind!=='google_docs'||operation.document!==target.alias||operation.record_id!==target.id||!['applied','known_failure','rejected','expired','conflict'].includes(String(operation.state)))fail('SUMMARY_MEMORY_RECONCILIATION_REQUIRED');
 }
 async function refresh(api:OpenClawPluginApi,ctx:OpenClawPluginToolContext,target:Target,core:Core,io:{write:(v:unknown)=>Promise<void>}){
  // Only a source fetched while holding the note lock may publish a replacement.
  const result=object(await core('docs_read',{document:target.alias,mode:'summary_context',max_characters:6000}));
  if(result.ok!==true)fail('SUMMARY_MEMORY_SOURCE_UNAVAILABLE');
  const note=await makeNote(api,ctx,target,result.data);await io.write(note);return note;
+}
+async function fencedApply(api:OpenClawPluginApi,ctx:OpenClawPluginToolContext,target:Target,operationId:string,core:Core,dispatch:()=>Promise<unknown>):Promise<MemoryExecution>{
+ return await withNote(api,ctx,target,async io=>{
+  const old=await io.read();
+  if(!old||typeof old!=='object'||!('pending_operation_id'in old)||old.pending_operation_id!==operationId)await assertResolved(old,core,target);
+  await io.write({kind:'ciel_docs_summary_v1',cache_status:'stale',document:target.alias,document_id:target.id,pending_operation_id:operationId});
+  const value=await dispatch(),result=object(value);
+  if(result.ok!==true||object(result.data).state!=='applied')return {value,memory:{status:'stale',document:target.alias}};
+  try{await refresh(api,ctx,target,core,io);guard(api,ctx);return {value,memory:{status:'refreshed',document:target.alias}};}
+  catch{guard(api,ctx);return {value,memory:{status:'refresh_failed',document:target.alias,source_write:'applied'}};}
+ });
+}
+
+/** Fence one native task member before its transport starts, using Core history only. */
+export async function executeTaskWithSummaryMemory(api:OpenClawPluginApi,ctx:OpenClawPluginToolContext,operationId:string,core:Core,dispatch:()=>Promise<unknown>):Promise<MemoryExecution>{
+ if(api.pluginConfig?.summaryMemoryEnabled!==true)fail('SUMMARY_MEMORY_DISABLED');
+ if(!text(operationId,256))fail('INVALID_INPUT');
+ guard(api,ctx);
+ const history=object(await core('operations_get_history',{operation_id:operationId}));
+ if(history.ok!==true)fail('SUMMARY_MEMORY_FENCE_REQUIRED');
+ const operation=object(object(history.data).operation);
+ if(operation.operation_id!==operationId)fail('SUMMARY_MEMORY_FENCE_REQUIRED');
+ if(operation.resource_kind==='sheets_grid')return {value:await dispatch()};
+ if(operation.resource_kind!=='google_docs'||!text(operation.document)||!text(operation.record_id)||!text(operation.mapping_version))fail('SUMMARY_MEMORY_FENCE_REQUIRED');
+ const target=await targetFor(operation.document,core);
+ // A registration replacement cannot fence a different source under an old alias.
+ if(target.id!==operation.record_id||target.version!==operation.mapping_version)fail('SUMMARY_MEMORY_SOURCE_CHANGED');
+ return await fencedApply(api,ctx,target,operationId,core,dispatch);
 }
 export async function executeWithSummaryMemory(api:OpenClawPluginApi,ctx:OpenClawPluginToolContext,name:string,input:unknown,core:Core):Promise<MemoryExecution>{
  const request=input&&typeof input==='object'&&!Array.isArray(input)?input as ObjectValue:{};
@@ -124,14 +157,7 @@ export async function executeWithSummaryMemory(api:OpenClawPluginApi,ctx:OpenCla
   const history=object(await core('operations_get_history',input));const operation=object(object(history.data).operation);
   if(operation.resource_kind!=='google_docs'||!text(operation.document))fail('SUMMARY_MEMORY_FENCE_REQUIRED');
   const target=await targetFor(operation.document,core);
-  return await withNote(api,ctx,target,async io=>{
-   const old=await io.read();if(!old||typeof old!=='object'||!('pending_operation_id'in old)||old.pending_operation_id!==request.operation_id)await assertResolved(old,core,target);
-   await io.write({kind:'ciel_docs_summary_v1',cache_status:'stale',document:target.alias,document_id:target.id,pending_operation_id:request.operation_id});
-   const value=await core(name,input),result=object(value);
-   if(result.ok!==true||object(result.data).state!=='applied')return {value,memory:{status:'stale',document:target.alias}};
-   try{await refresh(api,ctx,target,core,io);guard(api,ctx);return {value,memory:{status:'refreshed',document:target.alias}};}
-   catch{guard(api,ctx);return {value,memory:{status:'refresh_failed',document:target.alias,source_write:'applied'}};}
-  });
+  return await fencedApply(api,ctx,target,request.operation_id,core,()=>core(name,input));
  }
  const value=await core(name,input),result=object(value);if(result.ok!==true)return {value};
  try{

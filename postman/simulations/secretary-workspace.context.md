@@ -60,3 +60,32 @@ live-host proof. This existing scenario passed in the full frozen Linux gate to
 regress the shared adapter path; do not treat it as native task provider round-trip
 or undo qualification. Owning sources: application/task_authority.rs, grids.rs,
 documents.rs, presentation/task_native.rs and tests/task_native.rs.
+
+
+## Native task memory coupling — supported verifier and protected gate passed, 2026-11-15
+
+- id: task-member-native-memory-fence
+- status: supported
+- claim: The optional memory-aware native task client persists a per-source stale
+  fence before dispatch, rereads after applied, and never resends to repair memory.
+- reason: It reuses the existing native safe-root lock and refresh workflow. Core
+  history supplies exact operation/physical-source identity; memory audience is
+  checked again at post-preflight confirmation. The default model tools and Google
+  adapters/mocks remain unchanged.
+- verification: AfTS4Z4B full supported verifier passes37 SDK Node cases,
+  including all12 memory-aware native IO cases, plus all seven existing Google-only
+  regressions and88 Bun cases. All206 input hashes match the frozen receipt and
+  then-current source. Two protected CLI fixture subprocesses timed out after15s;
+  cleanup raised EPERM across the dropped-UID boundary. That run emitted no final
+  source-check. YW7DQYg5 on 2026-11-15 passes all75 protected cases, including the
+  real dropped-UID child-reaping regression, official SDK build/validation and a
+  final206-input unchanged check after the fixture-only supervisor/budget correction.
+  Compared with the successful main verifier, only two fixture Python files and
+  verification-status Markdown changed. The supported memory claim is limited to the new
+  controlled Core/source/model cases with actual SDK safe-root IO. Existing Google
+  scenarios exercise legacy native memory, not the optional native task/member
+  protocol. No actual host routing, live Google or model-quality qualification.
+- source: plugins/secretary-tools/src/task-native.ts;
+  plugins/secretary-tools/src/summary-memory.ts;
+  plugins/secretary-tools/test/task-memory.node.mjs
+- updated_at: 2026-11-15

@@ -1,8 +1,10 @@
 // Trusted composition API only. No model tool or activation flag is added here.
-import type {OpenClawPluginToolContext} from 'openclaw/plugin-sdk/plugin-entry';
+import type {OpenClawPluginApi,OpenClawPluginToolContext} from 'openclaw/plugin-sdk/plugin-entry';
 import {randomUUID} from 'node:crypto';
 import {bindNativeInvocation} from './native-authority.js';
 import type {ApprovalDecision} from './approval-ack.js';
+import {createSecretary} from './bridge.js';
+import {assertSummaryMemoryCurrent,executeTaskWithSummaryMemory} from './summary-memory.js';
 const gatewayInstance=randomUUID();
 const MAX_BYTES=524288;
 const MAX_REQUEST_BYTES=65536;
@@ -23,6 +25,16 @@ export type NativeTaskProposal={
  approval:{title:string;description:string;severity:'warning';allowedDecisions:Array<'allow-once'|'deny'>;timeoutMs:number;onResolution:(decision:ApprovalDecision)=>Promise<void>};
  grant:()=>Promise<Grant>;
 };
+export type NativeTaskClient={
+ propose:(scope:unknown)=>Promise<NativeTaskProposal>;
+ resume:(taskId:string)=>Promise<NativeTaskProposal>;
+ inspect:(taskId:string)=>Promise<unknown>;
+ capture:(taskId:string,change:unknown)=>Promise<unknown>;
+ discard:(taskId:string,operationId:string)=>Promise<unknown>;
+ execute:(taskId:string,revision:number,operationId:string)=>Promise<unknown>;
+ end:(taskId:string,revision:number,reason:'completed'|'cancelled')=>Promise<unknown>;
+};
+type MemberExecution=(operationId:string,dispatch:()=>Promise<unknown>)=>Promise<unknown>;
 function fail(code:string):never {throw new Error(code);}
 function object(value:unknown):ObjectValue {
  if(value===null || typeof value!=='object' || Array.isArray(value))fail('INVALID_TASK_RESPONSE');
@@ -42,15 +54,24 @@ function grant(value:unknown):Grant {
 }
 
 /** Bind every task control/confirmation to one genuine current native factory context. */
-export function createNativeTaskClient(options:NativeTaskOptions,context:OpenClawPluginToolContext,signal:AbortSignal|undefined):{
- propose:(scope:unknown)=>Promise<NativeTaskProposal>;
- resume:(taskId:string)=>Promise<NativeTaskProposal>;
- inspect:(taskId:string)=>Promise<unknown>;
- capture:(taskId:string,change:unknown)=>Promise<unknown>;
- discard:(taskId:string,operationId:string)=>Promise<unknown>;
- execute:(taskId:string,revision:number,operationId:string)=>Promise<unknown>;
- end:(taskId:string,revision:number,reason:'completed'|'cancelled')=>Promise<unknown>;
-} {
+export function createNativeTaskClient(options:NativeTaskOptions,context:OpenClawPluginToolContext,signal:AbortSignal|undefined):NativeTaskClient {
+ return taskClient(options,context,signal,(_operationId,dispatch)=>dispatch());
+}
+
+/** Trusted composition with the existing native note lock, source fence and refresh. */
+export function createMemoryNativeTaskClient(options:NativeTaskOptions & {coreToken:string},api:OpenClawPluginApi,context:OpenClawPluginToolContext,signal:AbortSignal|undefined):NativeTaskClient {
+ if(options.summaryMemoryEnabled!==true||api.pluginConfig?.summaryMemoryEnabled!==true)fail('SUMMARY_MEMORY_DISABLED');
+ if(api.pluginConfig?.owner!==options.owner||api.pluginConfig?.readOnlyRuntime===true)fail('INVALID_CONFIGURATION');
+ const current=bindNativeInvocation(context,signal);
+ const native={...current,get senderIsOwner(){return current.senderIsOwner;},assertInvocationCurrent(){assertSummaryMemoryCurrent(api,current);}};
+ const bridge=createSecretary({coreUrl:options.coreUrl,owner:options.owner,coreToken:options.coreToken});
+ return taskClient({...options,summaryMemoryEnabled:false},native,signal,async(operationId,dispatch)=>{
+  const result=await executeTaskWithSummaryMemory(api,native,operationId,(name,input)=>bridge.execute(name,input,native),dispatch);
+  return result.memory===undefined?result.value:{...object(result.value),summary_memory:result.memory};
+ });
+}
+
+function taskClient(options:NativeTaskOptions,context:OpenClawPluginToolContext,signal:AbortSignal|undefined,runMember:MemberExecution):NativeTaskClient {
  if(options.qualified!==true)fail('TASK_TRANSPORT_UNQUALIFIED');
  if(options.summaryMemoryEnabled!==false)fail('TASK_MEMORY_INTEGRATION_REQUIRED');
  if(signal===undefined)fail('NATIVE_AUTHORITY_REQUIRED');
@@ -139,6 +160,9 @@ export function createNativeTaskClient(options:NativeTaskOptions,context:OpenCla
  }
  async function execute(taskId:string,revision:number,operationId:string):Promise<unknown> {
   await acknowledged(taskId);
+  return runMember(operationId,()=>executeMember(taskId,revision,operationId));
+ }
+ async function executeMember(taskId:string,revision:number,operationId:string):Promise<unknown> {
   const member={task_id:taskId,context:identity,grant_revision:revision,operation_id:operationId};
   const response=await send('/v1/write-tasks/execute',member);
   if(!response.ok || response.headers.get('content-type')!=='application/vnd.ciel.task-dispatch+ndjson;version=1')fail('TASK_CORE_REJECTED');

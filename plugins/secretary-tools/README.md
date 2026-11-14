@@ -66,7 +66,16 @@ The built module also exports `createNativeTaskClient` for trusted integration
 code. It does not add model tools or activate production writes. This optional
 client requires explicit transport qualification, current v2 owner context, a
 real cancellation signal and `summaryMemoryEnabled:false`; native summary fencing
-for this task path is unfinished. The separate operator bearer is configuration,
+for memory-enabled composition uses the separate `createMemoryNativeTaskClient`
+export. That client requires explicit summary-memory opt-in in both options and
+host API, matching owner/private audience, local workspace/no-promotion policy,
+and `coreToken` for Core history/source reads. It uses the existing note lock and
+persists a stale operation fence before starting execute, rechecks memory authority
+at the post-preflight confirmation, then refreshes after applied. Failed refresh
+reports `summary_memory.status:refresh_failed` alongside the applied result;
+uncertainty keeps its fence and never authorizes resend. This new composition's
+supported SDK/Linux IO cases passed in AfTS4Z4B; all75 protected acceptance cases
+passed in YW7DQYg5 on 2026-11-15 after the fixture timeout correction. The separate operator bearer is configuration,
 never tool input. See [native protocol](../../contracts/task-native-transport.md).
 
 Scope authorization uses one captured native owner decision. Core-owned task IDs,
@@ -77,7 +86,7 @@ preflight challenge, rechecks native authority, then confirms exactly one effect
 Core rechecks its durable grant and persists an accepted-member receipt before
 using the existing adapter/observer. A lost result or expired invocation cannot
 authorize resend. The supported Linux/SDK/Core fixture and existing Google-only
-regressions passed on 2026-11-14. Normal task-tool/lifecycle integration and live
+regressions for the memory-disabled client passed on 2026-11-14. Normal task-tool/lifecycle integration and live
 host qualification remain pending; existing model tools retain their legacy flow.
 
 ## Native reminders and memory

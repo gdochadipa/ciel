@@ -20,7 +20,7 @@ async function fixture() {
  async function handle(request){
   const name=new URL(request.url).pathname.split('/').at(-1),input=await request.json();
   if(name==='docs_list'){state.lists++;return Response.json({ok:true,data:{mapping_version:state.version,documents:state.readable?[{document:'notes',id:'synthetic-doc',readable:true}]:[]}});}
-  if(name==='operations_get_history'){state.historyReads++;return Response.json({ok:true,data:{operation:{resource_kind:'google_docs',document:'notes',state:state.historyState}}});}
+  if(name==='operations_get_history'){state.historyReads++;return Response.json({ok:true,data:{operation:{operation_id:input.operation_id,resource_kind:'google_docs',document:'notes',record_id:'synthetic-doc',mapping_version:state.version,state:state.historyState}}});}
   if(name==='docs_preview_change')return Response.json({ok:true,data:{...input,resource_kind:'google_docs',actor:'owner',preview_digest:'synthetic-digest',expires_at:'2099-01-01T00:00:00Z',state:'previewed'}});
   if(name==='approval')return state.onApproval===undefined?Response.json({ok:true,data:{state:'approved'}}):await state.onApproval();
   if(name==='docs_apply'){state.writes++;await state.onApply?.();state.text='Updated document after approved edit\n';state.historyState=state.applyState;return Response.json({ok:true,data:{state:state.applyState}});}
