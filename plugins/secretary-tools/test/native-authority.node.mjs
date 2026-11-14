@@ -1,0 +1,136 @@
+// Actual pinned SDK registry, context issuer, callback wrapper and run-scope fence.
+// Requester identity/source invalidation are fixture inputs, not live owner routing.
+import {test,after} from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join,dirname} from 'node:path';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+
+const state=await mkdtemp(join(tmpdir(),'ciel-native-v2-'));
+const saved=new Map(['OPENCLAW_STATE_DIR','OPENCLAW_CONFIG_PATH','SECRETARY_CORE_TOKEN','SECRETARY_APPROVAL_TOKEN'].map(key=>[key,process.env[key]]));
+process.env.OPENCLAW_STATE_DIR=state;process.env.OPENCLAW_CONFIG_PATH=join(state,'config.json');
+process.env.SECRETARY_CORE_TOKEN='synthetic-core';process.env.SECRETARY_APPROVAL_TOKEN='synthetic-approval';
+await writeFile(process.env.OPENCLAW_CONFIG_PATH,JSON.stringify({plugins:{enabled:false},logging:{level:'silent'}}));
+after(async()=>{for(const [key,value] of saved){if(value===undefined)delete process.env[key];else process.env[key]=value;}await rm(state,{recursive:true,force:true});});
+
+async function sdkRoot(){
+ let path=dirname(fileURLToPath(import.meta.resolve('openclaw/plugin-sdk/plugin-entry')));
+ for(let depth=0;depth<5;depth++,path=dirname(path)){
+  try {const pkg=JSON.parse(await readFile(join(path,'package.json'),'utf8'));if(pkg.name==='openclaw'){assert.equal(pkg.version,'2026.10.7');return path;}}
+  catch(error){if(error?.code!=='ENOENT')throw error;}
+ }
+ throw Error('Pinned SDK package root not found');
+}
+const root=await sdkRoot(),load=async name=>import(pathToFileURL(join(root,'dist',name)).href);
+const registrySdk=await load('registry-BwDJiK-z.mjs');
+const toolsSdk=await load('tools-fou-nJCY.mjs');
+const lifecycle=await load('registry-lifecycle-C978THT2.mjs');
+const contextSdk=await load('load-context.resolve-COA_cf7U.mjs');
+const guards=await load('agent-tool-source-execution-guard-DI8a3ZFX.mjs');
+const {default:entry}=await import('../dist/index.js');
+const manifest=JSON.parse(await readFile(new URL('../openclaw.plugin.json',import.meta.url),'utf8'));
+const logger={info(){},warn(){},error(message){throw Error(message);},debug(){}};
+
+function fixture(){
+ const config={plugins:{enabled:true,allow:['secretary-tools'],entries:{'secretary-tools':{enabled:true}}}};
+ const runtime={config:{current:()=>config},gateway:{isAvailable:()=>false}};
+ const builder=registrySdk.t({logger,runtime,coreGatewayMethodNames:[],activateGlobalSideEffects:false});
+ const source=fileURLToPath(new URL('../dist/index.js',import.meta.url));
+ const rootDir=dirname(dirname(source));
+ const record={...manifest,source,rootDir,origin:'workspace',format:'bundle',enabled:true,status:'loaded',toolNames:[],hookNames:[],commandNames:[],gatewayMethods:[],cliRegistrars:[],serviceIds:[]};
+ builder.registry.plugins.push(record);
+ const api=builder.createApi(record,{config,pluginConfig:{owner:'owner',approvalTransportQualified:true},registrationMode:'full'});
+ entry.register(api);
+ assert.equal(builder.registry.diagnostics.length,0,JSON.stringify(builder.registry.diagnostics));
+ assert.equal(builder.registry.tools.length,manifest.contracts.tools.length);
+ assert(builder.registry.tools.every(tool=>tool.contextVersion===2));
+ const plugin={...record,toolMetadata:{}};
+ const metadataSnapshot={plugins:[plugin],byPluginId:new Map([[plugin.id,plugin]]),index:{plugins:[{pluginId:plugin.id,origin:plugin.origin,enabled:true}]}};
+ const loadContext=contextSdk.t({config,env:process.env,workspaceDir:state,logger,manifestRegistry:{plugins:[plugin],diagnostics:[]}});
+ const context={config,agentId:'agent',sessionKey:'agent:owner',sessionId:'incarnation',requesterSenderId:'owner',senderIsOwner:true,workspaceDir:state};
+ function resolve(assertInvocationCurrent,extra={}){
+  return toolsSdk.i({context:{...context,...extra},env:process.env,toolAllowlist:['secretary-tools'],assertInvocationCurrent,preparedRuntime:{loadContext,metadataSnapshot,registry:builder.registry}});
+ }
+ return {builder,context,resolve,close(){lifecycle.T(builder.registry);}};
+}
+function find(tools,name){const tool=tools.find(tool=>tool.name===name);assert(tool,`Missing ${name}`);return tool;}
+function deferred(){let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};}
+
+test('actual registry registers only v2; resolver refuses a tool outside admitted authority',async()=>{
+ const f=fixture();try{
+  // The host creates the assertion even when admission is absent; plugin lookup
+  // cannot turn that unusable closure into owner authority.
+  const tool=find(f.resolve(undefined),'sheets_list');
+  await assert.rejects(tool.execute('missing',{}),/outside an admitted run or request/);
+ }finally{f.close();}
+});
+
+test('actual SDK run-scope closure expires retained built tools after completion and abort',async()=>{
+ const f=fixture(),original=globalThis.fetch;let sends=0,retained;
+ globalThis.fetch=async()=>{sends++;return Response.json({ok:true,data:[]});};
+ const abort=new AbortController(),budget=guards.a({signal:abort.signal,abort:error=>abort.abort(error)});
+ try{
+  await budget.run(async()=>{
+   const assertion=guards.r(abort.signal);retained=find(f.resolve(assertion),'sheets_list');
+   assert.equal((await retained.execute('active',{})).details.ok,true);
+  });
+  assert(retained);await assert.rejects(retained.execute('retained',{}),/scope is no longer active/);assert.equal(sends,1);
+  const next=new AbortController(),nextBudget=guards.a({signal:next.signal,abort:error=>next.abort(error)});
+  await nextBudget.run(async()=>{
+   const tool=find(f.resolve(guards.r(next.signal)),'sheets_list');next.abort(Error('synthetic abort'));
+   await assert.rejects(tool.execute('cancelled',{}),/synthetic abort/);
+  });
+  assert.equal(sends,1);
+ }finally{globalThis.fetch=original;f.close();}
+});
+
+test('actual SDK issued closure blocks retained approval on reset before any Core decision',async()=>{
+ const f=fixture(),original=globalThis.fetch,signal=new AbortController();let incarnation='incarnation';const paths=[];
+ globalThis.fetch=async(input,init)=>{
+  const request=new Request(input,init),path=new URL(request.url).pathname;paths.push(path);
+  return Response.json({ok:true,data:{...await request.json(),resource_kind:'sheets_grid',actor:'owner',preview_digest:'synthetic-digest',expires_at:'2099-01-01T00:00:00Z',state:'previewed'}});
+ };
+ try{
+  const tools=f.resolve(()=>{if(incarnation!=='incarnation')throw Error('INVOCATION_EXPIRED');});
+  const change={operation_id:'op',spreadsheet:'sheet',view:'grid',action:'update',fields:{range:'A1:A1',values:[['new']]}};
+  assert.equal((await find(tools,'sheets_preview_change').execute('preview',change)).details.ok,true);
+  const hook=f.builder.registry.typedHooks.find(hook=>hook.hookName==='before_tool_call');assert(hook);
+  const approval=await hook.handler({toolName:'sheets_update',params:{operation_id:'op'}},{...f.context,toolName:'sheets_update',abortSignal:signal.signal,requester:{senderId:'owner',senderIsOwner:true}});
+  assert(approval.requireApproval);incarnation='new';
+  await assert.rejects(approval.requireApproval.onResolution('allow-once'),/INVOCATION_EXPIRED/);
+  assert.deepEqual(paths,['/v1/tools/sheets_preview_change']);
+ }finally{globalThis.fetch=original;f.close();}
+});
+
+test('actual SDK rechecks source authority after an await; removed plugin cannot disclose a pending result',async()=>{
+ const f=fixture(),original=globalThis.fetch,pending=deferred(),started=deferred();let sends=0;
+ globalThis.fetch=async()=>{sends++;started.resolve();return pending.promise;};
+ try{
+  const tool=find(f.resolve(()=>{}),'sheets_list'),result=tool.execute('pending',{});
+  await started.promise;f.close();pending.resolve(Response.json({ok:true,data:['private fixture']}));
+  await assert.rejects(result,/runtime is no longer active/);assert.equal(sends,1);
+ }finally{globalThis.fetch=original;f.close();}
+});
+
+test('SDK issued final guard prevents a Core dispatch after encoding revokes source authority',async()=>{
+ const f=fixture(),original=globalThis.fetch;let active=true,sends=0;
+ globalThis.fetch=async()=>{sends++;return Response.json({ok:true,data:{}});};
+ try{
+  const tool=find(f.resolve(()=>{if(!active)throw Error('INVOCATION_EXPIRED');}),'sheets_preview_change');
+  const fields={toJSON(){active=false;return {range:'A1:A1',values:[['new']]};}};
+  await assert.rejects(tool.execute('encoding',{operation_id:'op',spreadsheet:'sheet',view:'grid',action:'update',fields}),/INVOCATION_EXPIRED/);
+  assert.equal(sends,0);
+ }finally{globalThis.fetch=original;f.close();}
+});
+
+test('a dispatched Core request is never retried when native cancellation ends its invocation',async()=>{
+ const f=fixture(),original=globalThis.fetch,pending=deferred(),started=deferred(),signal=new AbortController();let sends=0;
+ globalThis.fetch=async()=>{sends++;started.resolve();return pending.promise;};
+ try{
+  const tool=find(f.resolve(()=>signal.signal.throwIfAborted()),'sheets_list');
+  const response=tool.execute('dispatched',{});await started.promise;signal.abort(Error('synthetic cancellation'));
+  pending.resolve(Response.json({ok:true,data:[]}));await assert.rejects(response,/synthetic cancellation/);
+  await assert.rejects(tool.execute('no-next-send',{}),/synthetic cancellation/);assert.equal(sends,1);
+ }finally{globalThis.fetch=original;f.close();}
+});

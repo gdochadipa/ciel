@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ciel:readonly:service-policy:v1",
+  "title": "Ciel read-only service policy v1",
+  "$comment": "Static Linux policy selection only. Effective launcher groups, live authority and runtime admission require separate evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "revision",
+    "core",
+    "gateway",
+    "listener",
+    "filesystem",
+    "launcher",
+    "endpoints"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ciel.readonly.service-policy.v1"
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "core": {
+      "$ref": "#/$defs/principal"
+    },
+    "gateway": {
+      "$ref": "#/$defs/principal"
+    },
+    "listener": {
+      "const": "127.0.0.1:8787"
+    },
+    "filesystem": {
+      "const": "linux-root-owned-no-acl.v1"
+    },
+    "launcher": {
+      "const": "ciel.readonly.launcher.v1"
+    },
+    "endpoints": {
+      "const": "google-production.v1"
+    }
+  },
+  "$defs": {
+    "principal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "uid",
+        "gid"
+      ],
+      "properties": {
+        "uid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "gid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        }
+      }
+    }
+  }
+}

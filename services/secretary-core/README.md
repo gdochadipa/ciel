@@ -6,6 +6,14 @@ Build/test with `cargo test -p secretary-core`; run with `cargo run -p secretary
 
 Set `SECRETARY_CONFIG` to the registry JSON path, `SECRETARY_CORE_TOKEN` to a random secret of at least 12 bytes, `SECRETARY_OWNER` to the sole owner actor, and `GOOGLE_APPLICATION_CREDENTIALS` to the protected service-account JSON path. The Google client exchanges a one-hour JWT with Google OAuth, caches the short-lived access token with a safety margin, and requests only `spreadsheets.readonly` scope. The credential file is never returned or logged.
 
+Registry loading at startup and in the offline operator CLI uses the same bounded
+file decoder. Inputs must be regular files of at most 1 MiB; final symlinks and
+duplicate JSON keys at any depth are rejected, including escaped spellings of the
+same key. Errors do not disclose paths or configuration values. Startup validates
+this registry snapshot before opening Google credentials. This loader does not
+check administrator ownership of ancestor directories or implement service-manifest
+admission; those read-only service gates remain pending.
+
 For an explicit disposable HTTP simulation only, `SECRETARY_MOCK_MODE=true` selects `SECRETARY_GOOGLE_BASE_URL` and `SECRETARY_GOOGLE_TOKEN` instead of service-account credentials. HTTP is accepted only for loopback stand-ins; other endpoints require HTTPS. URLs and credentials are never tool inputs. Production launches must omit mock mode.
 
 `config/spreadsheets.example.json` is an entirely synthetic fixture, not a production mapping. It uses invented spreadsheet/sheet IDs and some sanitized headers/merge layouts. Before live activation, register the actual Google spreadsheet ID, stable numeric tab IDs, exact headers, *all* intersecting merge ranges and exact formula locations/text from a fresh read-only live inspection. Keep aliases distinct. The live XLSX package IDs must not be reused as Google IDs. JSON is the operator registry format; no new YAML parser is needed. The five legacy kinds have fixed bounded record envelopes. Header/formula/merge drift rejects the whole read instead of guessing. Item positions also require nonempty labels. Unsupported currency and nonintegral/ambiguous amounts remain unresolved.
@@ -15,6 +23,41 @@ Views preserve cost-group anchors, raw guest estimates, yearless planning blocks
 Provider responses are streamed under a 2 MiB limit with redirects disabled. Each socket has a 10 second bound, and the entire read including OAuth/retries is also bounded to 10 seconds. At most two read retries apply to connection/timeout failures, 429 or 5xx responses; no writes exist here. Errors expose only stable sanitized codes. Bridge requests have a separate 5 second timeout, so a bridge may stop waiting before a bounded provider read finishes.
 
 `services/secretary-core/scripts/check-adapter-offline.sh` builds **the actual domain, application, Axum presentation and SQLite adapter modules** with cached dependencies and executes the committed adapter-seam tests when network dependencies are unavailable. This is deliberately narrower evidence than a production build: it compiles the real router and exercises it with in-process requests, but it does not compile Reqwest/OAuth or execute the socket-based HTTP stand-in tests. The latter remain in `tests/public_api.rs` and must pass in an environment permitting dependency fetch and localhost binds. No credentials or private workbook data are needed for these sanitized tests.
+
+## Explicit read-only foundation
+
+The offline command `secretary-core service check --manifest FILE` now parses the
+strict manifest/service policy and inspects a Linux candidate without runtime
+effects or secret-body reads. Read the [service-check contract](../../contracts/service-check.md)
+for schemas, ownership requirements and sanitized exit statuses. Static completion
+returns exit `3` / `readiness: incomplete`: budgets, effective launcher groups,
+full package compatibility and runtime-secret validation remain pending.
+This command never starts a service or qualifies the host; macOS authority
+inspection fails closed. The existing no-argument startup path stays unchanged.
+
+For a candidate registry, use the offline command
+`secretary-core registry check --config PATH --profile readonly`. It rejects
+configured tab creation, grid write ranges, structured write views/schemas and
+writable Docs, including dormant grants. It needs no runtime credentials and
+does not start Core, contact Google or attest service readiness. Existing checks
+without `--profile` retain their permission rules; all registry inputs now use the
+strict shared decoder described above. Unknown profiles fail closed.
+
+Rust embedders may explicitly construct `AppState::new_read_only` or
+`CommandBus::new_read_only`. This profile admits only registered Sheets/Docs
+list/describe/read/search and their existing summary-context modes. Other decoded
+tools and approval commands fail with `readonly_profile`, including full history
+and the optional wedding report, before provider access or mutation-intent
+creation. Operator reconciliation remains separately authenticated and only
+observes; operational journal recovery does not write to Google.
+
+The HTTP constructor requires a Core token of at least 32 bytes. Attaching a
+disabled journal coordinator additionally requires a distinct operator token of
+at least 32 bytes; an enabled coordinator is rejected. These constructors do not
+qualify OAuth scopes, service ownership, host routing or a legacy-journal owner
+transition. The executable still uses its existing startup path and full preflight.
+The offline checker adds no production profile switch, bounded runner, receipt
+promotion or permanent-start authorization.
 
 ## Controlled structured writes
 

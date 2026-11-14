@@ -12,7 +12,7 @@
     ]
   },
   "scripts": {
-    "test": "bun test test && node --test test/summary-memory.node.mjs",
+    "test": "bun test test && node --test test/summary-memory.node.mjs test/approval-order.node.mjs test/native-authority.node.mjs test/task-native-core.node.mjs",
     "build": "bun run check:types && bun run bundle && openclaw plugins build --root . --entry ./dist/index.js",
     "validate": "bun run check:package && openclaw plugins validate --root . --entry ./dist/index.js --json",
     "build:bridge": "bun build ./src/bridge.ts --target=node --outdir ./dist/bridge",

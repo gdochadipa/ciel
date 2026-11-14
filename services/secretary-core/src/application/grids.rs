@@ -13,6 +13,15 @@ impl Writes {
         bus: &CommandBus,
         c: Change,
     ) -> Result<Value, CoreError> {
+        let p = self.capture_grid(bus, c).await?;
+        let p = self.journal.create(p).await?;
+        Ok(p.public("previewed"))
+    }
+    pub(super) async fn capture_grid(
+        &self,
+        bus: &CommandBus,
+        c: Change,
+    ) -> Result<Preview, CoreError> {
         let s = bus.registry.lookup(&c.spreadsheet)?;
         let v = s
             .views
@@ -40,10 +49,17 @@ impl Writes {
             expires_at: chrono::Utc::now().timestamp() + 300,
             preview_digest: String::new(),
         };
-        let p = self.journal.create(p).await?;
-        Ok(p.public("previewed"))
+        Ok(p)
     }
     pub(super) async fn apply_grid(&self, bus: &CommandBus, p: &Preview) -> Outcome {
+        self.apply_grid_checked(bus, p, None).await
+    }
+    pub(super) async fn apply_grid_checked(
+        &self,
+        bus: &CommandBus,
+        p: &Preview,
+        guard: Option<&dyn super::task_authority::EffectGuard>,
+    ) -> Outcome {
         let s = match bus.registry.lookup(&p.spreadsheet) {
             Ok(s) if bus.registry.version == p.mapping_version => s,
             _ => return Outcome::Conflict,
@@ -80,6 +96,11 @@ impl Writes {
             || !matches!(grids::snapshot(v,&book,range),Ok(before) if before==p.before)
         {
             return Outcome::Conflict;
+        }
+        if let Some(guard) = guard {
+            if guard.accept(p).await.is_err() {
+                return Outcome::KnownFailure;
+            }
         }
         match bus.source.write_grid(s, p).await {
             WriteOutcome::Rejected => Outcome::KnownFailure,

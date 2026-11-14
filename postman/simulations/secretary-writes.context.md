@@ -25,3 +25,60 @@ Run `bash scripts/acceptance.sh writes` in the qualified environment from `docs/
 2026-10-26 (T020): Google again served the stateful and built-entry workflows after preview-cache bounds were introduced; approval, reconciliation and single-record assertions passed. Host routing/UI remain unqualified.
 2026-10-26 (T019): Google served the existing stateful workflow plus the built entry’s registered factory/hook append. SDK metadata, lazy construction, API-instance preview isolation and exactly-once append assertions passed; the host registry remains a boundary fixture.
 <!-- end:observations -->
+
+
+## Approval acknowledgement ordering — 2026-11-13
+
+- id: bridge-waits-for-core-approval-ack
+- status: supported
+- claim: With a locally prepared native approval, the bridge withholds apply until
+  Core acknowledges the expected approved state; refusal and revoked invocation
+  authority do not send apply in the controlled delayed-response cases exercised.
+- reason: Notification of a native allow decision is distinct from durable Core
+  approval. A pristine pre-change bridge sent apply before the held Core response;
+  the new ordering barrier prevents that request and preserves unknown outcomes.
+- verification: Supported Linux full gate on 2026-11-13 passes 65 Bun tests,
+  18 actual-SDK Node tests and all seven Google-only scenarios. The four actual
+  SDK handler/built-entry cases use synthetic Core replies to assert ordering;
+  existing provider scenarios use real Core with Google simulated. These do not
+  qualify live owner routing, native v2 continuation authority or Google writes.
+- source: plugins/secretary-tools/src/approval-ack.ts;
+  plugins/secretary-tools/src/bridge.ts;
+  plugins/secretary-tools/test/approval-ack.test.ts
+- updated_at: 2026-11-13
+
+- id: actual-native-handler-approval-order
+- status: supported
+- claim: The built plugin's acknowledgement barrier also holds when the actual
+  locked SDK host returns allow before its onResolution callback completes.
+- reason: Four supported-runtime tests exercise the actual locked SDK deferred
+  approval handler and built entry. Native allow returns before callback completion;
+  delayed/refused acknowledgements, revoked invocation and native denial have the
+  expected apply-request counts. A fifth memory case leaves note/history untouched
+  when Core refuses approval.
+- verification: All cases pass in Node 24.22.1 with OpenClaw 2026.10.7, genuine
+  completed package lifecycle and unchanged frozen source inputs. Registration
+  remains a boundary fixture and Core replies are synthetic in the ordering cases;
+  live owner routing and real v2 continuation issuance remain unqualified.
+- source: plugins/secretary-tools/test/approval-order.node.mjs;
+  plugins/secretary-tools/src/bridge.ts
+- updated_at: 2026-11-13
+
+
+## Native one-member transport applicability — 2026-11-14
+
+Status: supported regression passed on 2026-11-14 for all seven existing Google-only
+scenarios and the 205-input native task revision. The earlier V6Dxsrsc run covered
+the 198-input plugin-v2 revision. New code
+refactors shared grid/Docs capture/apply to insert an optional post-preflight
+native confirmation for task members. Legacy composition keeps existing behavior;
+scoped composition blocks legacy mutation/approval bypasses and retains observers.
+The Google HTTP adapters/mocks are unchanged. The new task router/bus/SQLite tests
+use a controlled WorkspacePort and assert zero sends before confirmation, one-use
+binding, cancellation, drift, timeout/drop, receipt rollback and uncertainty.
+An actual-SDK/real-Core HTTP fixture adds a single owner decision with incremental
+members, but its provider remains a controlled source. It is not Google HTTP or
+live-host proof. This existing scenario passed in the full frozen Linux gate to
+regress the shared adapter path; do not treat it as native task provider round-trip
+or undo qualification. Owning sources: application/task_authority.rs, grids.rs,
+documents.rs, presentation/task_native.rs and tests/task_native.rs.

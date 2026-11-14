@@ -14,6 +14,56 @@ use secretary_core::{
 };
 use serde_json::Value;
 struct FixtureSource(Value);
+
+#[tokio::test]
+async fn runtime_authority_denial_stops_dispatch_and_withholds_completed_results() {
+    use secretary_core::application::ports::RuntimeAuthority;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    struct Guard {
+        observations: Arc<AtomicUsize>,
+        fail_at: usize,
+    }
+    impl RuntimeAuthority for Guard {
+        fn check(&self) -> Result<(), &'static str> {
+            if self.observations.fetch_add(1, Ordering::SeqCst) >= self.fail_at {
+                Err("runtime_fenced")
+            } else {
+                Ok(())
+            }
+        }
+    }
+    for fail_at in [0, 1] {
+        let (mut registry, book) = fixture();
+        for source in &mut registry.spreadsheets {
+            source.create_tabs = false;
+            source.views.retain(|view| !view.structured());
+            for view in &mut source.views {
+                view.writable_range = None;
+                view.write_schema = None;
+            }
+        }
+        for document in &mut registry.documents {
+            document.writable = false;
+        }
+        let observations = Arc::new(AtomicUsize::new(0));
+        let bus =
+            CommandBus::new_read_only(registry, "configured-owner".into(), FixtureSource(book))
+                .unwrap()
+                .with_runtime_authority(Guard {
+                    observations: observations.clone(),
+                    fail_at,
+                })
+                .unwrap();
+        assert_eq!(
+            bus.execute(Command::List).await.unwrap_err().1,
+            "runtime_fenced"
+        );
+        assert_eq!(observations.load(Ordering::SeqCst), fail_at + 1);
+    }
+}
 impl SpreadsheetPort for FixtureSource {
     fn read<'a>(&'a self, _: &'a Spreadsheet) -> PortFuture<'a, Result<Value, CoreError>> {
         Box::pin(async { Ok(self.0.clone()) })

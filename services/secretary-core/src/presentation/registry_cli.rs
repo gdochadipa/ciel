@@ -1,17 +1,14 @@
 //! Offline operator setup. No Google client, environment secrets, journal or listener.
 use crate::domain::registry::{Document, Kind, Registry, Spreadsheet, View};
+use crate::infrastructure::config::{self, ConfigError};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::{
-    ffi::OsString,
-    fs::{self, OpenOptions},
-    io::{Read, Write},
-    path::Path,
-};
+use std::{ffi::OsString, fs::OpenOptions, io::Write, path::Path};
 const MAX_BYTES: usize = 1024 * 1024;
 
 fn validation_code(reason: &str) -> &'static str {
     match reason {
+        "read-only profile forbids configured writes" => "registry_write_permissions",
         "invalid registry bounds" => "registry_bounds",
         "invalid document registration" => "registry_invalid_document",
         "invalid spreadsheet registration" => "registry_invalid_spreadsheet",
@@ -28,40 +25,13 @@ fn validation_code(reason: &str) -> &'static str {
     }
 }
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, &'static str> {
-    let metadata = fs::symlink_metadata(path).map_err(|_| "registry_unavailable")?;
-    if !metadata.is_file() {
-        return Err("registry_unsafe_file");
-    }
-    if metadata.len() > MAX_BYTES as u64 {
-        return Err("registry_too_large");
-    }
-    let mut options = OpenOptions::new();
-    options.read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
-    }
-    let file = options.open(path).map_err(|_| "registry_unavailable")?;
-    if !file
-        .metadata()
-        .map_err(|_| "registry_unavailable")?
-        .is_file()
-    {
-        return Err("registry_unsafe_file");
-    }
-    let mut bytes = Vec::new();
-    file.take((MAX_BYTES + 1) as u64)
-        .read_to_end(&mut bytes)
-        .map_err(|_| "registry_unavailable")?;
-    if bytes.len() > MAX_BYTES {
-        return Err("registry_too_large");
-    }
-    serde_json::from_slice(&bytes).map_err(|error| match error.classify() {
-        serde_json::error::Category::Syntax | serde_json::error::Category::Eof => {
-            "registry_json_invalid"
-        }
-        _ => "registry_schema_invalid",
+    config::read_json(path).map_err(|error| match error {
+        ConfigError::Unavailable => "registry_unavailable",
+        ConfigError::UnsafeFile => "registry_unsafe_file",
+        ConfigError::TooLarge => "registry_too_large",
+        ConfigError::InvalidJson => "registry_json_invalid",
+        ConfigError::InvalidSchema => "registry_schema_invalid",
+        ConfigError::UnsupportedPlatform => "unsupported_platform",
     })
 }
 fn load(path: &Path) -> Result<Registry, &'static str> {
@@ -245,7 +215,25 @@ pub fn run(args: &[OsString]) -> (Value, i32) {
             1,
         );
     }
-    let operation = if args.len() == 4
+    let operation = if args.len() == 6
+        && args[0] == "registry"
+        && args[1] == "check"
+        && args[2] == "--config"
+        && args[4] == "--profile"
+    {
+        if args[5] != "readonly" {
+            Err("profile_unknown")
+        } else {
+            load(Path::new(&args[3])).and_then(|registry| {
+                registry
+                    .validate_read_only()
+                    .map_err(|reason| validation_code(&reason))?;
+                let mut body = success(summary(&registry), false);
+                body["profile"] = json!("readonly");
+                Ok(body)
+            })
+        }
+    } else if args.len() == 4
         && args[0] == "registry"
         && args[1] == "check"
         && args[2] == "--config"
@@ -281,7 +269,7 @@ pub fn run(args: &[OsString]) -> (Value, i32) {
         )
     } else {
         return (
-            json!({"ok":false,"mode":"offline","error":{"code":"usage","message":"Use registry check --config PATH, registry init --output PATH, registry add --config BASE --resource ADDITION --output NEW, or registry diff --before BASE --after CANDIDATE --output REPORT."},"live_access_checked":false,"activation_changed":false}),
+            json!({"ok":false,"mode":"offline","error":{"code":"usage","message":"Use registry check --config PATH [--profile readonly], registry init --output PATH, registry add --config BASE --resource ADDITION --output NEW, or registry diff --before BASE --after CANDIDATE --output REPORT."},"live_access_checked":false,"activation_changed":false}),
             2,
         );
     };

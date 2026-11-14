@@ -1,0 +1,14 @@
+{
+  "schema": "ciel.readonly.manifest.v1",
+  "profile": "readonly",
+  "deployment_generation": "example-generation-01",
+  "owner_file": "/etc/secretary/readonly/owner.txt",
+  "registry_file": "/etc/secretary/readonly/registry.json",
+  "core_token_file": "/etc/secretary/readonly/core.token",
+  "operator_token_file": "/etc/secretary/readonly/operator.token",
+  "google_credentials_file": "/etc/secretary/readonly/google.json",
+  "state_directory": "/var/lib/secretary-readonly",
+  "release_file": "/opt/secretary/release.json",
+  "service_policy_file": "/etc/secretary/readonly/service-policy.json",
+  "budget_policy_file": "/etc/secretary/readonly/budget-policy.json"
+}

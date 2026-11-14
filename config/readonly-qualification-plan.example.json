@@ -1,0 +1,12 @@
+{
+  "schema": "ciel.readonly.qualification-plan.v1",
+  "deployment_generation": "example-generation-01",
+  "wall_seconds": 60,
+  "cases": [
+    {"kind": "missing_bearer"},
+    {"kind": "wrong_bearer"},
+    {"kind": "readonly_mutation"},
+    {"kind": "sheet", "spreadsheet": "operations", "view": "overview"},
+    {"kind": "document", "document": "notes", "tab_id": "t.0"}
+  ]
+}

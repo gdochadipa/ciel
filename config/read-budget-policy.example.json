@@ -1,0 +1,12 @@
+{
+  "schema": "ciel.readonly.budget-policy.v1",
+  "revision": "example-v1",
+  "ceiling": {
+    "calls": 32,
+    "rows": 1000,
+    "document_characters": 100000,
+    "output_bytes": 1048576,
+    "in_flight": 2
+  },
+  "request_output_bytes": 131072
+}

@@ -62,3 +62,16 @@ test('published Sheets summary contract accepts typed partial/full/empty source 
  expect(()=>assertSheetsReadResponse({ok:true,data:missing})).toThrow();
  expect(()=>assertSheetsReadResponse({ok:true,data:{...packet,records:[{reference_id:'R101',...row}]}})).toThrow();
 });
+
+test('published budgeted media types resolve legacy schemas and accept whole success/error packets',async()=>{
+ const {assertReadBudgetResponse}=await import('./docs-read-contract');
+ const success={ok:true,data:{mapping_version:'v1',spreadsheets:[]}};
+ const wire={result:success,model_text:JSON.stringify(success)};
+ expect(()=>assertReadBudgetResponse('sheets_list',wire)).not.toThrow();
+ expect(()=>assertReadBudgetResponse('sheets_list',{...wire,result:{ok:true,data:{}}})).toThrow();
+ expect(()=>assertReadBudgetResponse('sheets_list',{result:success})).toThrow();
+ const error={ok:false,error:{code:'read_budget_result_too_large',message:'read_budget_result_too_large',retryable:false}};
+ for(const name of ['sheets_list','sheets_describe','sheets_read','sheets_search','docs_list','docs_describe','docs_read','docs_search'])
+  expect(()=>assertReadBudgetResponse(name,{result:error,model_text:JSON.stringify(error)})).not.toThrow();
+ expect(()=>assertReadBudgetResponse('docs_apply',wire)).toThrow();
+});

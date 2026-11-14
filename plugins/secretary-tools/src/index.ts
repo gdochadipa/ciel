@@ -1,9 +1,10 @@
 // Host imports deliberately isolated: bridge tests require no substituted SDK.
-import type {OpenClawPluginApi,AnyAgentTool} from 'openclaw/plugin-sdk/plugin-entry';
+import type {OpenClawPluginApi,OpenClawPluginToolContext,AnyAgentTool} from 'openclaw/plugin-sdk/plugin-entry';
 import {defineToolPlugin} from 'openclaw/plugin-sdk/tool-plugin';
 import {Type} from 'typebox';
+import {bindNativeInvocation,NativeApprovalAuthority} from './native-authority.js';
 import {executeWithSummaryMemory} from './summary-memory.js';
-import {createSecretary, reminderTools, secretaryToolNames, type Options} from './bridge.js';
+import {createSecretary, secretaryModelText, reminderTools, secretaryToolNames, commitTools, type Options} from './bridge.js';
 const reminderDescriptions:Record<string,string>={
  reminders_create:'Create a reminder using a stable reminder_id and an exact timestamp with offset or a five-field cron schedule. Clarify ambiguous dates first. Reuse the ID to reconcile a retry; a changed request conflicts. Execution does not prove message delivery.',
  reminders_list:'List owner-scoped native reminders, including disabled and retained completed jobs. A scheduler discovery error means the list is incomplete; do not infer that a reminder is missing.',
@@ -56,10 +57,42 @@ function bridgeFor(api:OpenClawPluginApi) {
  let bridge=bridges.get(api);
  if(!bridge) {
   const config=api.pluginConfig??{};
-  const options:Options={coreUrl:typeof config.coreUrl==='string'?config.coreUrl:undefined,owner:typeof config.owner==='string'?config.owner:'',coreToken:process.env.SECRETARY_CORE_TOKEN??'',approvalToken:process.env.SECRETARY_APPROVAL_TOKEN,approvalTransportQualified:config.approvalTransportQualified===true,schedulerQualified:config.schedulerQualified===true,gateway:api.runtime.gateway};
+  if(config.readOnlyRuntime===true && config.summaryMemoryEnabled===true)throw new Error('READONLY_MEMORY_DISABLED');
+  const readOnly=config.readOnlyRuntime===true;
+  const options:Options={coreUrl:typeof config.coreUrl==='string'?config.coreUrl:undefined,owner:typeof config.owner==='string'?config.owner:'',coreToken:process.env.SECRETARY_CORE_TOKEN??'',approvalToken:readOnly?undefined:process.env.SECRETARY_APPROVAL_TOKEN,approvalTransportQualified:config.approvalTransportQualified===true,schedulerQualified:config.schedulerQualified===true,gateway:readOnly?undefined:api.runtime.gateway,readOnlyRuntime:readOnly};
   bridge=createSecretary(options);bridges.set(api,bridge);
  }
  return bridge;
+}
+const nativeAuthorities=new WeakMap<OpenClawPluginApi,NativeApprovalAuthority>();
+function authorityFor(api:OpenClawPluginApi):NativeApprovalAuthority {
+ let authority=nativeAuthorities.get(api);
+ if(authority===undefined){authority=new NativeApprovalAuthority();nativeAuthorities.set(api,authority);}
+ return authority;
+}
+function createTool(api:OpenClawPluginApi,context:OpenClawPluginToolContext,name:string):AnyAgentTool {
+ const toolContext=bindNativeInvocation(context);
+ if(commitTools.some(tool=>tool===name))authorityFor(api).remember(name,toolContext);
+ return {
+   name,label:name,description:documentDescriptions[name]??reminderDescriptions[name]??'Owner-only secretary operation; input cannot set actor, credentials, host or outbound recipient.',
+   parameters:Type.Unsafe(schemas[name]),
+   async execute(_toolCallId,params,signal) {
+    const invocation=bindNativeInvocation(toolContext,signal);
+    try {
+     // Core acknowledgement must precede optional memory fencing as well as apply.
+     // Carry the captured ID across that await instead of rereading mutable args.
+     const captured=commitTools.some(tool=>tool===name)
+      ? await bridgeFor(api).prepareCommit(name,params,invocation):params;
+     const result=api.pluginConfig?.readOnlyRuntime===true
+      ? {value:await bridgeFor(api).execute(name,captured,invocation),memory:undefined}
+      : await executeWithSummaryMemory(api,invocation,name,captured,(tool,input)=>bridgeFor(api).execute(tool,input,invocation));
+     const text=secretaryModelText(result.value);
+     const content:Array<{type:'text';text:string}>=text?[{type:'text',text}]:[];
+     if(result.memory)content.push({type:'text',text:JSON.stringify({summary_memory:result.memory})});
+     return {content,details:result.value};
+    } catch(error) {const code=error instanceof Error && /^[A-Z_]+$/.test(error.message)?error.message:'SECRETARY_UNAVAILABLE';return {content:api.pluginConfig?.readOnlyRuntime===true?[]:[{type:'text',text:JSON.stringify({ok:false,error:{code}})}],details:{ok:false,error:{code}}};}
+   }
+ };
 }
 const entry=defineToolPlugin({
  id:'secretary-tools',name:'Personal Secretary tools',description:'Bounded owner-only Workspace and native scheduler bridge',
@@ -69,35 +102,27 @@ const entry=defineToolPlugin({
   approvalTransportQualified:Type.Optional(Type.Boolean({default:false})),
   schedulerQualified:Type.Optional(Type.Boolean({default:false})),
   summaryMemoryEnabled:Type.Optional(Type.Boolean({default:false})),
+  readOnlyRuntime:Type.Optional(Type.Boolean({default:false})),
  },{additionalProperties:false}),
  tools:tool=>secretaryToolNames.map(name=>tool({
   name,label:name,description:documentDescriptions[name]??reminderDescriptions[name]??'Owner-only secretary operation; input cannot set actor, credentials, host or outbound recipient.',
   parameters:Type.Unsafe(schemas[name]),
-  factory:({api,toolContext}):AnyAgentTool=>({
-   name,label:name,description:documentDescriptions[name]??reminderDescriptions[name]??'Owner-only secretary operation; input cannot set actor, credentials, host or outbound recipient.',
-   parameters:Type.Unsafe(schemas[name]),
-   async execute(_toolCallId,params) {
-    try {
-     const result=await executeWithSummaryMemory(api,toolContext,name,params,(tool,input)=>bridgeFor(api).execute(tool,input,toolContext));
-     const content:Array<{type:'text';text:string}>=[{type:'text',text:JSON.stringify(result.value)}];
-     if(result.memory)content.push({type:'text',text:JSON.stringify({summary_memory:result.memory})});
-     return {content,details:result.value};
-    } catch(error) {const code=error instanceof Error && /^[A-Z_]+$/.test(error.message)?error.message:'SECRETARY_UNAVAILABLE';return {content:[{type:'text',text:JSON.stringify({ok:false,error:{code}})}],details:{ok:false,error:{code}}};}
-   }
-  }),
+  factory:({api,toolContext}):AnyAgentTool=>createTool(api,toolContext,name),
  })),
 });
-// Preserve the SDK entry and its authoring metadata while adding the native approval hook.
-const registerTools=entry.register!;
+// The authoring helper registers v1 callbacks. Preserve its static metadata, but
+// explicitly opt runtime factories into the SDK's host-bound v2 authority.
 entry.register=(api)=>{
- registerTools(api);
+ for(const name of secretaryToolNames)api.registerTool({contextVersion:2,create:context=>createTool(api,context,name)},{name});
  api.on('before_tool_call',async(event,context)=>{
-  if(!['sheets_append','sheets_update','docs_apply','sheets_create_tab'].includes(event.toolName))return;
-  const requester=context.requester;
+  if(!commitTools.some(tool=>tool===event.toolName))return;
+  if(api.pluginConfig?.readOnlyRuntime===true)return {block:true,blockReason:'Read-only runtime forbids mutations'};
   try {
-   const requireApproval=await bridgeFor(api).prepareApproval(event.toolName,event.params,{requesterSenderId:requester?.senderId,senderIsOwner:requester?.senderIsOwner});
+   const requireApproval=await bridgeFor(api).prepareApproval(event.toolName,event.params,authorityFor(api).capture(event.toolName,context));
    return {requireApproval};
-  } catch {return {block:true,blockReason:'Owner approval transport and an unexpired immutable preview are required'};}
+  } catch {return {block:true,blockReason:'Current native owner authority, approval transport and an unexpired immutable preview are required'};}
  });
 };
 export default entry;
+
+export {createNativeTaskClient} from "./task-native.js";

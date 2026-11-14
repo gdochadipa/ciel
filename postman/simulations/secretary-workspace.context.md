@@ -27,3 +27,36 @@ Run `bash scripts/acceptance.sh workspace` in the qualified environment. The lau
 2026-10-28 (T025): Both members served traffic again. Sheets now models metadata-only catalog reads and atomic addSheet/updateCells, preserving first-row literal headers. Real bridge/Core and built SDK tab factory/hook pass approval, replay, name collision, no automatic view grant, optional empty headers and accepted-create/malformed-response reconciliation. Three tab creates (including SDK fixture), no duplicate sends. Native HTTP tests additionally cover ID collision and journal restart. Mock state uses the namespaced `google-sheets-grid:create-state` key; intercepted JSON comes from `req.body`, as in the other member. Earlier use of native stream-only parsing returned 400; corrected before acceptance. No live Google/host qualification is established.
 
 T027: workspace also exercises explicit registered grid writes through the real bridge/Core/journal and actual SDK update factory/hook, including literal/clear, approval, replay and accepted-write/lost-response observation-only reconciliation. The Sheets member supports a bounded updateCells subset on the synthetic original grid; no existing tab-create or Docs mutation is repurposed as live evidence. Both members served requests in the targeted local pass. Final all-scenario results are recorded in T027.
+
+
+## Approval transport applicability — 2026-11-13
+
+The acknowledgement-order investigation and its supported/unknown claims are
+recorded in secretary-writes.context.md. The changed bridge covers all four
+existing commit classes, including grid, Docs and tab creation. Local controlled
+Core-response tests, four actual SDK handler/built-entry ordering cases and a
+native-memory refusal case pass in the supported Linux gate on 2026-11-13. All
+seven Google-only scenarios, including Workspace, pass against the frozen revision.
+Registration/Core responses in the ordering cases remain fixtures; live owner
+routing and real native v2 continuation authority are not qualified. The new
+journal inverse-reference methods have SQLite tests only and are not exposed in
+these provider scenarios; do not infer provider undo round-trip coverage.
+
+
+## Native one-member transport applicability — 2026-11-14
+
+Status: supported regression passed on 2026-11-14 for all seven existing Google-only
+scenarios and the 205-input native task revision. The earlier V6Dxsrsc run covered
+the 198-input plugin-v2 revision. New code
+refactors shared grid/Docs capture/apply to insert an optional post-preflight
+native confirmation for task members. Legacy composition keeps existing behavior;
+scoped composition blocks legacy mutation/approval bypasses and retains observers.
+The Google HTTP adapters/mocks are unchanged. The new task router/bus/SQLite tests
+use a controlled WorkspacePort and assert zero sends before confirmation, one-use
+binding, cancellation, drift, timeout/drop, receipt rollback and uncertainty.
+An actual-SDK/real-Core HTTP fixture adds a single owner decision with incremental
+members, but its provider remains a controlled source. It is not Google HTTP or
+live-host proof. This existing scenario passed in the full frozen Linux gate to
+regress the shared adapter path; do not treat it as native task provider round-trip
+or undo qualification. Owning sources: application/task_authority.rs, grids.rs,
+documents.rs, presentation/task_native.rs and tests/task_native.rs.

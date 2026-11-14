@@ -10,7 +10,7 @@ import entry from '../dist/index.js';
 async function fixture() {
  const workspace=await mkdtemp(join(tmpdir(),'ciel-native-memory-'));
  const saved=process.env.SECRETARY_CORE_TOKEN,savedApproval=process.env.SECRETARY_APPROVAL_TOKEN;process.env.SECRETARY_CORE_TOKEN='synthetic';process.env.SECRETARY_APPROVAL_TOKEN='synthetic-approval';
- const state={reads:0,models:0,lists:0,version:'v1',readable:true,text:'A short original document\n',modelError:false,writes:0,applyState:'applied',historyState:'approved',onApply:undefined,modelText:undefined,onModel:undefined,onRead:undefined};
+ const state={reads:0,models:0,lists:0,historyReads:0,onApproval:undefined,version:'v1',readable:true,text:'A short original document\n',modelError:false,writes:0,applyState:'applied',historyState:'approved',onApply:undefined,modelText:undefined,onModel:undefined,onRead:undefined};
  const server=createServer(async (req,res)=>{
   const chunks=[];for await(const chunk of req)chunks.push(chunk);
   const request=new Request('http://127.0.0.1'+req.url,{method:'POST',body:Buffer.concat(chunks)});
@@ -20,7 +20,9 @@ async function fixture() {
  async function handle(request){
   const name=new URL(request.url).pathname.split('/').at(-1),input=await request.json();
   if(name==='docs_list'){state.lists++;return Response.json({ok:true,data:{mapping_version:state.version,documents:state.readable?[{document:'notes',id:'synthetic-doc',readable:true}]:[]}});}
-  if(name==='operations_get_history')return Response.json({ok:true,data:{operation:{resource_kind:'google_docs',document:'notes',state:state.historyState}}});
+  if(name==='operations_get_history'){state.historyReads++;return Response.json({ok:true,data:{operation:{resource_kind:'google_docs',document:'notes',state:state.historyState}}});}
+  if(name==='docs_preview_change')return Response.json({ok:true,data:{...input,resource_kind:'google_docs',actor:'owner',preview_digest:'synthetic-digest',expires_at:'2099-01-01T00:00:00Z',state:'previewed'}});
+  if(name==='approval')return state.onApproval===undefined?Response.json({ok:true,data:{state:'approved'}}):await state.onApproval();
   if(name==='docs_apply'){state.writes++;await state.onApply?.();state.text='Updated document after approved edit\n';state.historyState=state.applyState;return Response.json({ok:true,data:{state:state.applyState}});}
   if(name==='docs_read'){
    state.reads++;const n=[...state.text].length;
@@ -30,12 +32,17 @@ async function fixture() {
   return Response.json({ok:false,error:{code:'unexpected'}});
  }
  let current=true;
- const context={agentId:'agent-one',workspaceDir:workspace,sessionKey:'agent:agent-one:main',requesterSenderId:'owner',senderIsOwner:true,memoryAudience:{kind:'owner-private',agentId:'agent-one'},assertInvocationCurrent(){if(!current)throw Error('INVOCATION_EXPIRED');},assertMemoryAudienceCurrent(){if(!current)throw Error('INVOCATION_EXPIRED');},sandboxed:false};
+ const context={agentId:'agent-one',workspaceDir:workspace,sessionKey:'agent:agent-one:main',sessionId:'incarnation',requesterSenderId:'owner',senderIsOwner:true,memoryAudience:{kind:'owner-private',agentId:'agent-one'},assertInvocationCurrent(){if(!current)throw Error('INVOCATION_EXPIRED');},assertMemoryAudienceCurrent(){if(!current)throw Error('INVOCATION_EXPIRED');},sandboxed:false};
  function registry(config={summaryMemoryEnabled:true},hostConfig={plugins:{entries:{'memory-core':{config:{dreaming:{enabled:false}}}}}}) {
-  const tools=new Map();
-  const api={pluginConfig:{owner:'owner',approvalTransportQualified:true,coreUrl:'http://127.0.0.1:'+server.address().port,...config},config:hostConfig,runtime:{gateway:{isAvailable:()=>false},llm:{async complete(params){state.models++;await state.onModel?.();if(state.modelError)throw Error('private model error');assert.equal(params.model,undefined);return {text:state.modelText??JSON.stringify({summary:'The document gives an original short description [S1].',excerpt_ids:['S1']})};}}},registerTool(factory,options){tools.set(options.name,factory);},on(){}};
+  const tools=new Map(),instances=new WeakMap();const abort=new AbortController();let before;
+  const api={pluginConfig:{owner:'owner',approvalTransportQualified:true,coreUrl:'http://127.0.0.1:'+server.address().port,...config},config:hostConfig,runtime:{gateway:{isAvailable:()=>false},llm:{async complete(params){state.models++;await state.onModel?.();if(state.modelError)throw Error('private model error');assert.equal(params.model,undefined);return {text:state.modelText??JSON.stringify({summary:'The document gives an original short description [S1].',excerpt_ids:['S1']})};}}},registerTool(factory,options){tools.set(options.name,factory);},on(name,handler){if(name==='before_tool_call')before=handler;}};
   entry.register(api);
-  return {async run(input,ctx=context,name='docs_read'){const factory=tools.get(name);const tool=factory(ctx);return await tool.execute('synthetic',input);}};
+  function toolFor(name,ctx){
+   let selected=instances.get(ctx);
+   if(selected===undefined){selected=new Map();instances.set(ctx,selected);for(const [toolName,factory] of tools){assert.equal(factory.contextVersion,2);selected.set(toolName,factory.create(ctx));}}
+   const tool=selected.get(name);assert(tool);return tool;
+  }
+  return {async approval(name,params){toolFor(name,context);assert.equal(typeof before,'function');return await before({toolName:name,params},{...context,abortSignal:abort.signal,requester:{senderId:'owner',senderIsOwner:true}});},async run(input,ctx=context,name='docs_read'){return await toolFor(name,ctx).execute('synthetic',input,abort.signal);}};
  }
  return {workspace,state,context,registry,revoke(){current=false;},async close(){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await rm(workspace,{recursive:true,force:true});if(saved===undefined)delete process.env.SECRETARY_CORE_TOKEN;else process.env.SECRETARY_CORE_TOKEN=saved;if(savedApproval===undefined)delete process.env.SECRETARY_APPROVAL_TOKEN;else process.env.SECRETARY_APPROVAL_TOKEN=savedApproval;}};
 }
@@ -199,4 +206,24 @@ test('a delayed pre-edit source packet cannot overwrite the refreshed post-edit 
   release();await delayed;
   const after=await api.run(discoveryInput);assert.equal(after.details.data.source.source_fingerprint,expected);assert.equal(f.state.writes,1);
  }finally{release?.();await f.close();}
+});
+
+
+test('refused delayed Core approval leaves native summary bytes and history untouched before apply',{timeout:20000},async()=>{
+ const f=await fixture();try {
+  const api=f.registry();await api.run(discoveryInput);const path=await notePath(f);
+  const original=await readFile(path,'utf8'),files=await readdir(join(f.workspace,'memory/ciel-docs'));
+  const change={operation_id:'op-ack',document:'notes',tab_id:'t.0',action:'replace_text',fields:{find:'original',replacement:'updated'}};
+  assert.equal((await api.run(change,f.context,'docs_preview_change')).details.ok,true);
+  const request=await api.approval('docs_apply',{operation_id:'op-ack'});assert(request.requireApproval);
+  let release,started;const response=new Promise(resolve=>{release=resolve;}),sent=new Promise(resolve=>{started=resolve;});
+  f.state.onApproval=async()=>{started();return response;};
+  const resolution=request.requireApproval.onResolution('allow-once').then(()=>({ok:true}),error=>({ok:false,error}));
+  const write=api.run({operation_id:'op-ack'},f.context,'docs_apply');await sent;await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(f.state.historyReads,0);assert.equal(f.state.writes,0);assert.equal(await readFile(path,'utf8'),original);
+  release(Response.json({ok:false,error:{code:'operation_conflict'}},{status:409}));
+  assert.equal((await resolution).ok,false);assert.equal((await write).details.error.code,'APPROVAL_REJECTED');
+  assert.equal(f.state.historyReads,0);assert.equal(f.state.writes,0);assert.equal(f.state.models,1);
+  assert.equal(await readFile(path,'utf8'),original);assert.deepEqual(await readdir(join(f.workspace,'memory/ciel-docs')),files);
+ } finally {await f.close();}
 });

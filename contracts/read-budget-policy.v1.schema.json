@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ciel.readonly.budget-policy.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "revision",
+    "ceiling",
+    "request_output_bytes"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ciel.readonly.budget-policy.v1"
+    },
+    "revision": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "ceiling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "calls",
+        "rows",
+        "document_characters",
+        "output_bytes",
+        "in_flight"
+      ],
+      "properties": {
+        "calls": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "rows": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "document_characters": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000000
+        },
+        "output_bytes": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 67108864
+        },
+        "in_flight": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        }
+      },
+      "description": "Explicit operator limits; in_flight <= calls, monotonic increases and protected ceilings are enforced by Core."
+    },
+    "request_output_bytes": {
+      "type": "integer",
+      "minimum": 256,
+      "maximum": 1048576
+    }
+  },
+  "description": "Runtime also requires request_output_bytes <= ceiling.output_bytes - 256. No implicit defaults or activation."
+}

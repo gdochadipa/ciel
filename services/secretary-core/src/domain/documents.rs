@@ -180,7 +180,16 @@ pub fn snapshot(doc: &Document, value: &Value) -> Result<Snapshot, CoreError> {
     })
 }
 pub fn read_binding(snapshot: &Snapshot, tab_id: &str, version: &str) -> String {
-    fingerprint(&json!([snapshot.id, tab_id, snapshot.fingerprint, version]))
+    read_binding_for_source(&snapshot.id, tab_id, &snapshot.fingerprint, version)
+}
+
+pub(crate) fn read_binding_for_source(
+    id: &str,
+    tab_id: &str,
+    source: &str,
+    version: &str,
+) -> String {
+    fingerprint(&json!([id, tab_id, source, version]))
 }
 pub fn matches(p: &Preview, c: &DocChange, owner: &str) -> bool {
     p.resource_kind == ResourceKind::GoogleDocs

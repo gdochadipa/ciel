@@ -25,6 +25,22 @@ remain disabled by default. Local tests and simulated Google/model responses do
 not qualify live Google, host authority, model output, channels or recovery. Keep
 credentials, private targets, workbook contents and raw logs out of Git.
 
+The manifest runtime checks the installed release and requires an independently
+reviewed promotion before it can serve. The protected qualification supervisor
+records bounded reads and cleanup for review, and startup revalidates the
+effective configuration against that evidence.
+See [read-only compatibility and admission](contracts/readonly-admission.md).
+
+The read-only runtime components support one operator-created active read task per
+protected owner/deployment. The distinct operator credential controls task creation,
+monotonic increases and closure; tools cannot reset counters. Cumulative calls,
+returned rows, document Unicode scalars, complete model-text UTF-8 bytes and
+outstanding reservations survive restart in the operational journal. See the
+[budget protocol](contracts/read-task-budget.md),
+[explicit policy example](config/read-budget-policy.example.json) and
+[runtime boundary](contracts/runtime-lifetime.md). These units do not measure
+host model tokens, billing or live deployment qualification.
+
 ## Verification
 
 Use actual Cargo/Bun locks and the pinned OpenClaw SDK. The qualified toolchain is

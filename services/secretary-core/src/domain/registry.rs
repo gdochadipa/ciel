@@ -165,6 +165,23 @@ impl View {
     }
 }
 impl Registry {
+    pub fn validate_read_only(&self) -> Result<(), String> {
+        self.validate()?;
+        // Dormant grants must not become available after a later readability change.
+        if self.documents.iter().any(|document| document.writable)
+            || self.spreadsheets.iter().any(|spreadsheet| {
+                spreadsheet.create_tabs
+                    || spreadsheet.views.iter().any(|view| {
+                        view.structured()
+                            || view.write_schema.is_some()
+                            || view.writable_range.is_some()
+                    })
+            })
+        {
+            return Err("read-only profile forbids configured writes".into());
+        }
+        Ok(())
+    }
     pub fn validate(&self) -> Result<(), String> {
         if self.version.is_empty() || self.spreadsheets.len() + self.documents.len() > 20 {
             return Err("invalid registry bounds".into());

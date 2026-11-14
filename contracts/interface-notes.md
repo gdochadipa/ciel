@@ -26,6 +26,25 @@ This is the implementation contract seed. `openapi.yaml` is the final machine-re
 
 Implementation tests should use public tool routes and external HTTP stand-ins. Production dependency availability and live runtime compatibility are separately evidenced.
 
+Explicit read-only foundation: `AppState::new_read_only` and
+`CommandBus::new_read_only` validate the registry and admit only the eight
+Sheets/Docs list/describe/read/search tools (including existing summary-context
+modes), plus separately authenticated operator observation/reconciliation.
+Other decoded commands, including previews, approvals, applies, full history and
+the optional wedding report, return `403 readonly_profile` before dispatch.
+All configured write grants, even dormant structured views, are rejected.
+The HTTP constructor requires a Core bearer of at least 32 bytes; attaching its
+disabled journal coordinator requires a distinct operator bearer of at least 32
+bytes. Enabled coordinators are rejected. Authentication and strict input parsing
+still precede the application policy decision. Legacy constructors retain their
+existing behavior and token requirements.
+
+`secretary-core registry check --config PATH --profile readonly` performs only
+offline registry validation and reports the selected profile; it does not validate
+service files, credentials, live access or host qualification. Unknown profiles
+fail with `profile_unknown` rather than selecting legacy behavior. No executable
+read-only startup option, promotion, gate bypass or service activation is added.
+
 
 Rust implementation: HTTP presentation decodes these tool names into typed application commands. The in-process command bus coordinates domain rules through source/journal ports. Concrete Google/SQLite adapters implement those ports; error categories become HTTP statuses only in presentation. The command-bus refactor does not alter this public contract or grant tool-callable operator authorization.
 

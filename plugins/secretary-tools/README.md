@@ -17,15 +17,68 @@ Docs provider JSON is capped at 2 MiB, projected text at 128 KiB across at most 
 
 ## Owner and approval
 
+`readOnlyRuntime` defaults false. With this opt-in profile, only the eight Sheets/
+Docs read tools execute. The bridge reserves durable Core task quota before local
+input validation or source access and returns the exact Core-counted model text.
+Failed/retried reads consume calls; lost responses are never automatically resent.
+An exhausted task emits one prepaid stop notice, then empty text until an operator
+increases the budget or closes/creates a task. Recreating a tool or changing a
+tool-call ID cannot reset counters. The separate operator bearer is never read by
+this bridge profile. Native summaries, model completions, reminders and mutations
+are disabled; `summaryMemoryEnabled:true` is rejected. Tool metadata still declares
+26 tools, so a host must separately qualify its effective exposure/routing. This
+option grants no startup admission or live host authority. See the
+[budget protocol](../../contracts/read-task-budget.md).
+
 Trusted factory context supplies `requesterSenderId`, `senderIsOwner` and invocation guards. Tool inputs cannot supply actors, credentials, hosts or outbound destinations. Authority is checked before requests and after responses; revoked pending results cannot return data/cache previews. A dispatched mutation may already have occurred, so inspect/reconcile its outcome.
+
+All runtime tools register through the pinned SDK's explicit version-2 factory
+descriptor. Missing host invocation authority fails closed. The captured context
+preserves the host's live owner predicate; tool cancellation also invalidates its
+execution guard. Before dispatching each Core request, the bridge rechecks that
+guard after request encoding, without an intervening await.
+
+Approval callbacks additionally require one matching live factory for the exact
+tool, agent, session key and session incarnation, plus the hook's trusted owner
+and cancellation signal. Missing, ambiguous, stale or mismatched bindings block
+approval. The bounded lookup retains at most 64 live factory bindings per host
+API; it refuses additional bindings rather than evicting live authority. Retained
+callbacks keep their original guard and cannot borrow a later invocation. These
+bindings carry no task grant and impose no task countdown. New native invocations
+must obtain fresh host authority; durable scoped task issuance/execution is still
+unavailable. The synchronous guard covers the plugin's Core-request dispatch,
+not the subsequent provider send inside Core. Live owner routing, reset/new and
+continuation provenance require separate host qualification.
 
 The bridge defaults to `http://127.0.0.1:8787`, permits literal loopback HTTP only and rejects redirects. It reads distinct Core/operator bearers from `SECRETARY_CORE_TOKEN` and `SECRETARY_APPROVAL_TOKEN` lazily at invocation. Request limit 64 KiB, response limit 2 MiB, bridge timeout 5s; raw provider errors/tokens are omitted. Core remains authoritative for schema, immutable intent, actor/action binding, expiry, audit and single-use commit.
 
-`approvalTransportQualified` defaults false and blocks Sheets commits and `docs_apply`. The registered `before_tool_call` hook presents the captured original preview and permits only allow-once/deny. Callback failures block resolution; denial/expiry/replay do not grant commit authority. Qualify owner-only routing, full rendering without truncation, callback failure behavior and restart handling in the actual host before enabling. No model `approved` flag is accepted.
+`approvalTransportQualified` defaults false and blocks Sheets commits and `docs_apply`. The registered `before_tool_call` hook presents the captured original preview and permits only allow-once/deny. The bridge waits for Core's successful approval acknowledgement before sending apply, including when the host does not await `onResolution`. Refusal, callback failure, expiry or revoked invocation authority blocks apply. A missing acknowledgement yields an unknown outcome; inspect Core history before continuing. Qualify owner-only routing, full rendering without truncation, callback ordering/failure behavior and restart handling in the actual host before enabling. No model `approved` flag is accepted.
 
 The shared preview cache holds at most 64 captures/4 MiB serialized UTF-8 JSON per host API. Preview/approval activity removes expired captures; fresh captures evict oldest when needed. Re-fetch an evicted preview before opening another dialog. An already-open dialog retains its original one-shot snapshot outside the cache budget. No cleanup timer or personal-memory database is added.
 
+Approval ordering barriers retain at most 64 entries until consumed or their original preview expires. A second pending dialog for the same operation is rejected. Waiting for acknowledgement is bounded by the remaining preview lifetime and 11 seconds; a late success after an unknown timeout does not automatically start a write. These barriers order requests; the Core journal remains the write authority.
+
 Docs commits use Google's `requiredRevisionId`, explicit tab selection, one batchUpdate send and subsequent text observation. Concurrent changes detected before send become conflict; native revision rejection is a known failure and cannot be replayed. Accepted-but-lost response becomes uncertain; reconciliation observes the expected text without resending. Legacy Sheets journal JSON/digests are preserved by a defaulted resource-kind tag.
+
+## Native scoped-task composition
+
+The built module also exports `createNativeTaskClient` for trusted integration
+code. It does not add model tools or activate production writes. This optional
+client requires explicit transport qualification, current v2 owner context, a
+real cancellation signal and `summaryMemoryEnabled:false`; native summary fencing
+for this task path is unfinished. The separate operator bearer is configuration,
+never tool input. See [native protocol](../../contracts/task-native-transport.md).
+
+Scope authorization uses one captured native owner decision. Core-owned task IDs,
+digests/revisions and cumulative usage survive ordinary pauses. There is no task
+countdown. Local acknowledgement barriers survive client recreation; lost grant
+acknowledgement requires authoritative inspection. Each member waits for a Core
+preflight challenge, rechecks native authority, then confirms exactly one effect.
+Core rechecks its durable grant and persists an accepted-member receipt before
+using the existing adapter/observer. A lost result or expired invocation cannot
+authorize resend. The supported Linux/SDK/Core fixture and existing Google-only
+regressions passed on 2026-11-14. Normal task-tool/lifecycle integration and live
+host qualification remain pending; existing model tools retain their legacy flow.
 
 ## Native reminders and memory
 

@@ -15,7 +15,8 @@ use std::sync::Arc;
 pub struct Writes {
     pub journal: Arc<dyn OperationStore>,
     pub enabled: bool,
-    writer: tokio::sync::Mutex<()>,
+    pub(super) writer: tokio::sync::Mutex<()>,
+    pub(super) tasks: Option<Arc<dyn super::task_authority::TaskLedger>>,
 }
 impl Writes {
     pub fn new(journal: impl OperationStore + 'static, enabled: bool) -> Self {
@@ -23,7 +24,29 @@ impl Writes {
             journal: Arc::new(journal),
             enabled,
             writer: tokio::sync::Mutex::new(()),
+            tasks: None,
         }
+    }
+    /// Compose scoped authority with its exact paired journal. No production gate is enabled.
+    /// ```no_run
+    /// # fn attach(ledger: impl secretary_core::application::task_authority::TaskLedger + 'static) {
+    /// let writes = secretary_core::writes::Writes::with_task_ledger(ledger, false);
+    /// # }
+    /// ```
+    pub fn with_task_ledger(
+        ledger: impl super::task_authority::TaskLedger + 'static,
+        enabled: bool,
+    ) -> Self {
+        let journal = ledger.operations();
+        Self {
+            journal,
+            enabled,
+            writer: tokio::sync::Mutex::new(()),
+            tasks: Some(Arc::new(ledger)),
+        }
+    }
+    pub(crate) fn task_owner(&self) -> Option<&str> {
+        self.tasks.as_ref().map(|ledger| ledger.owner())
     }
     pub async fn handle(
         &self,
@@ -52,6 +75,11 @@ impl Writes {
                 .journal
                 .history(p.operation_id.as_deref(), p.limit.unwrap_or(50), cursor)
                 .await;
+        }
+        // Scoped composition has one execution authority. Legacy mutation routes
+        // must not bypass task membership or unresolved-source fences with a new ID.
+        if self.tasks.is_some() {
+            return Err(CoreError(ErrorKind::Forbidden, "task_dispatch_required"));
         }
         if !self.enabled {
             return Err(CoreError(ErrorKind::Forbidden, "writes_disabled"));
@@ -214,6 +242,10 @@ impl Writes {
         if !self.enabled {
             self.journal.audit(Some(id), "writes_disabled").await?;
             return Err(CoreError(ErrorKind::Forbidden, "writes_disabled"));
+        }
+        if self.tasks.is_some() {
+            self.journal.audit(None, "task_dispatch_required").await?;
+            return Err(CoreError(ErrorKind::Forbidden, "task_dispatch_required"));
         }
         let result = async {
             if !matches!(p.decision.as_str(), "approve" | "reject") || !write_model::valid_id(id) {

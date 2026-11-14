@@ -8,6 +8,27 @@ use std::{future::Future, pin::Pin};
 
 pub type PortFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
+/// Observe the current runtime authority before dispatch and result delivery.
+///
+/// # Examples
+/// ```
+/// use secretary_core::application::ports::RuntimeAuthority;
+/// fn check(authority: &dyn RuntimeAuthority) -> Result<(), &'static str> { authority.check() }
+/// ```
+pub trait RuntimeAuthority: Send + Sync {
+    /// Deny stale/unsafe authority without provider IO or configuration reload.
+    ///
+    /// # Errors
+    /// Returns a sanitized static denial code.
+    fn check(&self) -> Result<(), &'static str>;
+}
+
+impl<T: RuntimeAuthority + ?Sized> RuntimeAuthority for std::sync::Arc<T> {
+    fn check(&self) -> Result<(), &'static str> {
+        self.as_ref().check()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum WriteOutcome {
     Accepted,

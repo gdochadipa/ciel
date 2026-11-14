@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ciel:readonly:manifest:v1",
+  "title": "Ciel read-only manifest v1",
+  "$comment": "Executable offline parser contract. Shape validation does not establish file authority, readiness, secret validity or runtime admission.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "profile",
+    "deployment_generation",
+    "owner_file",
+    "registry_file",
+    "core_token_file",
+    "operator_token_file",
+    "google_credentials_file",
+    "state_directory",
+    "release_file",
+    "service_policy_file",
+    "budget_policy_file"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ciel.readonly.manifest.v1"
+    },
+    "profile": {
+      "const": "readonly"
+    },
+    "deployment_generation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "description": "Administrator-issued opaque revision, not a timestamp, live pass or activation grant."
+    },
+    "owner_file": {
+      "$ref": "#/$defs/absolutePath",
+      "description": "Protected exact canonical owner identity; never a model-supplied actor."
+    },
+    "registry_file": {
+      "$ref": "#/$defs/absolutePath",
+      "description": "Registered Workspace grants validated with the shared Rust read-only rules."
+    },
+    "core_token_file": {
+      "$ref": "#/$defs/absolutePath",
+      "description": "Business bearer reference; no token value appears in this manifest."
+    },
+    "operator_token_file": {
+      "$ref": "#/$defs/absolutePath",
+      "description": "Separate operator-only recovery bearer, never provided to Gateway."
+    },
+    "google_credentials_file": {
+      "$ref": "#/$defs/absolutePath",
+      "description": "Service-account credential reference; offline inspection never opens its body."
+    },
+    "state_directory": {
+      "$ref": "#/$defs/absolutePath",
+      "description": "Existing private service-owned operational directory, not a personal/source store."
+    },
+    "release_file": {
+      "$ref": "#/$defs/absolutePath",
+      "description": "Immutable release inventory; artifact consistency is not service qualification."
+    },
+    "service_policy_file": {
+      "$ref": "#/$defs/absolutePath",
+      "description": "Protected service-identity, filesystem, loopback and launcher policy."
+    },
+    "budget_policy_file": {
+      "$ref": "#/$defs/absolutePath",
+      "description": "Required processing-policy reference. Its unresolved schema/accounting contract blocks complete admission."
+    }
+  },
+  "$defs": {
+    "absolutePath": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 4096,
+      "pattern": "^/(?:[A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+$",
+      "not": {
+        "pattern": "(^|/)\\.{1,2}(/|$)"
+      },
+      "description": "Absolute Linux deployment path using ASCII letters, digits, dots, underscores and hyphens. No root-only path, empty/dot component, trailing slash, expansion or URI. Filesystem safety requires separate descriptor/ancestor checks."
+    }
+  }
+}

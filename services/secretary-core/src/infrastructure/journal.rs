@@ -14,6 +14,8 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
+pub mod read_budget;
+pub mod write_tasks;
 struct JournalLock {
     file: std::fs::File,
 }
@@ -30,6 +32,8 @@ pub struct Journal {
     pool: SqlitePool,
     directory: PathBuf,
     _lock: std::sync::Arc<JournalLock>,
+    budget_claimed: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    write_tasks_claimed: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 fn storage() -> CoreError {
     CoreError(ErrorKind::Unavailable, "journal_unavailable")
@@ -39,6 +43,97 @@ fn conflict() -> CoreError {
 }
 impl Journal {
     pub async fn open(directory: &Path) -> Result<Self, CoreError> {
+        Self::open_inner(directory, true).await
+    }
+
+    /// Initialize read-only operational state only after exact owner/generation binding.
+    ///
+    /// Unbound legacy state is rejected before operation recovery. This API is
+    /// intended for an already admitted protected runtime, not offline checking.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async fn example() -> Result<(), secretary_core::CoreError> {
+    /// let journal = secretary_core::journal::Journal::open_read_only_bound(
+    ///     std::path::Path::new("/var/lib/ciel"), "owner", "deployment-v1").await?;
+    /// # Ok(()) }
+    /// ```
+    /// # Errors
+    /// Returns sanitized storage or binding errors; never adopts legacy operations.
+    pub async fn open_read_only_bound(
+        directory: &Path,
+        owner: &str,
+        generation: &str,
+    ) -> Result<Self, CoreError> {
+        if owner.is_empty()
+            || owner.len() > 256
+            || owner.chars().any(char::is_control)
+            || !crate::domain::service_config::revision(generation)
+        {
+            return Err(storage());
+        }
+        let journal = Self::open_inner(directory, false).await?;
+        let mut tx = journal.pool.begin().await.map_err(|_| storage())?;
+        let write_binding: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='write_task_binding'",
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|_| storage())?;
+        if write_binding != 0 {
+            return Err(CoreError(
+                ErrorKind::Conflict,
+                "readonly_legacy_state_unbound",
+            ));
+        }
+        sqlx::query("CREATE TABLE IF NOT EXISTS readonly_runtime_binding(singleton INTEGER PRIMARY KEY CHECK(singleton=1),owner TEXT NOT NULL,generation TEXT NOT NULL)").execute(&mut *tx).await.map_err(|_|storage())?;
+        let binding =
+            sqlx::query("SELECT owner,generation FROM readonly_runtime_binding WHERE singleton=1")
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(|_| storage())?;
+        if let Some(binding) = binding {
+            if binding.get::<String, _>("owner") != owner
+                || binding.get::<String, _>("generation") != generation
+            {
+                return Err(CoreError(ErrorKind::Conflict, "readonly_state_binding"));
+            }
+        } else {
+            let operations: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM operations")
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|_| storage())?;
+            let audits: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM audit")
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|_| storage())?;
+            let tasks: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='read_tasks'",
+            )
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|_| storage())?;
+            if operations != 0 || audits != 0 || tasks != 0 {
+                return Err(CoreError(
+                    ErrorKind::Conflict,
+                    "readonly_legacy_state_unbound",
+                ));
+            }
+            sqlx::query(
+                "INSERT INTO readonly_runtime_binding(singleton,owner,generation) VALUES(1,?,?)",
+            )
+            .bind(owner)
+            .bind(generation)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| storage())?;
+        }
+        tx.commit().await.map_err(|_| storage())?;
+        journal.recover().await?;
+        Ok(journal)
+    }
+
+    async fn open_inner(directory: &Path, recover: bool) -> Result<Self, CoreError> {
         use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
         if let Ok(meta) = std::fs::symlink_metadata(directory) {
             if meta.file_type().is_symlink() || !meta.is_dir() {
@@ -103,7 +198,16 @@ impl Journal {
             pool,
             directory: directory.to_owned(),
             _lock: lock,
+            budget_claimed: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            write_tasks_claimed: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         };
+        if recover {
+            journal.recover().await?;
+        }
+        Ok(journal)
+    }
+
+    async fn recover(&self) -> Result<(), CoreError> {
         // A process may have stopped after sending a request. Never resend that intent.
         sqlx::query("UPDATE operations SET state=?,updated_at=? WHERE state=?")
             .bind(
@@ -113,11 +217,10 @@ impl Journal {
             )
             .bind(chrono::Utc::now().timestamp())
             .bind(OperationState::Applying.as_str())
-            .execute(&journal.pool)
+            .execute(&self.pool)
             .await
             .map_err(|_| storage())?;
-        journal.audit(None, "startup_recovery").await?;
-        Ok(journal)
+        self.audit(None, "startup_recovery").await
     }
     pub fn directory(&self) -> &Path {
         &self.directory
@@ -181,6 +284,13 @@ impl Journal {
     }
     async fn transition(&self, id: &str, event: OperationEvent) -> Result<Operation, CoreError> {
         let mut tx = self.pool.begin().await.map_err(|_| storage())?;
+        // An optimistic entry-point check may precede concurrent task admission.
+        // Membership must be checked in the same transaction as the transition.
+        if !matches!(event, OperationEvent::Finish(_))
+            && write_tasks::linked_in(&mut tx, id).await?
+        {
+            return Err(CoreError(ErrorKind::Forbidden, "task_authority_required"));
+        }
         let row = sqlx::query("SELECT state FROM operations WHERE operation_id=?")
             .bind(id)
             .fetch_optional(&mut *tx)
@@ -189,6 +299,9 @@ impl Journal {
             .ok_or(CoreError(ErrorKind::NotFound, "operation_not_found"))?;
         let current: OperationState = row.get::<&str, _>("state").parse()?;
         let state = current.transition(event)?;
+        if matches!(event, OperationEvent::Finish(_)) {
+            write_tasks::suspend_on_outcome(&mut tx, id, state).await?;
+        }
         let now = chrono::Utc::now().timestamp();
         sqlx::query("UPDATE operations SET state=?,updated_at=? WHERE operation_id=?")
             .bind(state.as_str())
@@ -213,6 +326,9 @@ impl Journal {
         preview_digest: &str,
         decision: &str,
     ) -> Result<Operation, CoreError> {
+        if write_tasks::linked(self, id).await? {
+            return Err(CoreError(ErrorKind::Forbidden, "task_authority_required"));
+        }
         let operation = self.get(id).await?;
         let event = match operation.approval_event(
             preview_digest,
@@ -234,6 +350,9 @@ impl Journal {
         self.transition(id, event).await
     }
     pub async fn begin_apply(&self, id: &str) -> Result<Operation, CoreError> {
+        if write_tasks::linked(self, id).await? {
+            return Err(CoreError(ErrorKind::Forbidden, "task_authority_required"));
+        }
         let operation = self.get(id).await?;
         let event = operation.apply_event(chrono::Utc::now().timestamp());
         if matches!(event, OperationEvent::Expire) {

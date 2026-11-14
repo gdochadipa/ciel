@@ -11,6 +11,12 @@ use crate::domain::{
 use serde_json::{json, Value};
 use std::sync::Arc;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ExecutionPolicy {
+    Legacy,
+    ReadOnly,
+}
+
 /// In-process command dispatch; no broker, queue, or transport dependency.
 #[derive(Clone)]
 pub struct CommandBus {
@@ -18,6 +24,8 @@ pub struct CommandBus {
     pub(crate) source: Arc<dyn WorkspacePort>,
     pub(crate) owner: Arc<str>,
     pub(crate) writes: Option<Arc<Writes>>,
+    policy: ExecutionPolicy,
+    authority: Option<Arc<dyn super::ports::RuntimeAuthority>>,
 }
 impl CommandBus {
     pub fn new(
@@ -34,14 +42,126 @@ impl CommandBus {
             source: Arc::new(sheets),
             owner: owner.into(),
             writes: None,
+            policy: ExecutionPolicy::Legacy,
+            authority: None,
         })
+    }
+    /// Explicit read-only construction is independent of coordinator enablement.
+    pub fn new_read_only(
+        registry: Registry,
+        owner: String,
+        source: impl WorkspacePort + 'static,
+    ) -> Result<Self, String> {
+        registry.validate_read_only()?;
+        let mut bus = Self::new(registry, owner, source)?;
+        bus.policy = ExecutionPolicy::ReadOnly;
+        Ok(bus)
+    }
+    pub(crate) fn is_read_only(&self) -> bool {
+        self.policy == ExecutionPolicy::ReadOnly
+    }
+    /// Attach command-boundary authority checks only to the read-only profile.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # use secretary_core::application::{bus::CommandBus, ports::RuntimeAuthority};
+    /// # fn attach(bus: CommandBus, guard: impl RuntimeAuthority + 'static) -> Result<(), String> {
+    /// let bus = bus.with_runtime_authority(guard)?;
+    /// # Ok(()) }
+    /// ```
+    /// # Errors
+    /// Returns an error if the legacy policy or a second guard is supplied.
+    pub fn with_runtime_authority(
+        mut self,
+        authority: impl super::ports::RuntimeAuthority + 'static,
+    ) -> Result<Self, String> {
+        if !self.is_read_only() || self.authority.is_some() {
+            return Err("runtime authority requires an unguarded read-only bus".into());
+        }
+        self.authority = Some(Arc::new(authority));
+        Ok(self)
     }
     pub fn with_writes(mut self, writes: Writes) -> Self {
         self.writes = Some(Arc::new(writes));
         self
     }
+    pub(crate) fn task_writes(&self) -> Result<&Writes, CoreError> {
+        if self.is_read_only() {
+            return Err(CoreError(ErrorKind::Forbidden, "readonly_profile"));
+        }
+        let writes = self
+            .writes
+            .as_deref()
+            .filter(|writes| writes.enabled && writes.tasks.is_some())
+            .ok_or(CoreError(ErrorKind::Unavailable, "write_tasks_unavailable"))?;
+        if writes
+            .tasks
+            .as_ref()
+            .is_none_or(|ledger| ledger.owner() != self.owner.as_ref())
+        {
+            return Err(CoreError(ErrorKind::Unavailable, "write_task_binding"));
+        }
+        Ok(writes)
+    }
     pub async fn execute(&self, command: Command) -> Result<Value, CoreError> {
+        self.check_authority()?;
+        let result = self.dispatch(command).await;
+        self.check_authority()?;
+        result
+    }
+
+    pub(crate) fn check_authority(&self) -> Result<(), CoreError> {
+        self.authority.as_ref().map_or(Ok(()), |guard| {
+            guard
+                .check()
+                .map_err(|code| CoreError(ErrorKind::Unavailable, code))
+        })
+    }
+
+    async fn dispatch(&self, command: Command) -> Result<Value, CoreError> {
         match command {
+            Command::TaskControl(command) => {
+                return super::task_authority::control(self, command).await
+            }
+            Command::TaskExecute {
+                member,
+                confirmation,
+            } => {
+                return self
+                    .task_writes()?
+                    .execute_task(self, &member, confirmation.as_ref())
+                    .await
+            }
+            other => return self.dispatch_standard(other).await,
+        }
+    }
+    async fn dispatch_standard(&self, command: Command) -> Result<Value, CoreError> {
+        // Approval credentials and an attached coordinator cannot elevate this policy.
+        // Reconciliation is observation-only and keeps its separate operator authority.
+        if self.is_read_only()
+            && !matches!(
+                &command,
+                Command::DocsList
+                    | Command::DocsDescribe(_)
+                    | Command::DocsRead(_)
+                    | Command::DocsSummary(_)
+                    | Command::DocsSummaryMany(_)
+                    | Command::DocsSearch(_)
+                    | Command::List
+                    | Command::Describe(_)
+                    | Command::Read(_)
+                    | Command::SheetSummary(_)
+                    | Command::Search(_)
+                    | Command::Reconcile { .. }
+            )
+        {
+            return Err(CoreError(ErrorKind::Forbidden, "readonly_profile"));
+        }
+        match command {
+            Command::TaskControl(_) | Command::TaskExecute { .. } => {
+                unreachable!("task commands routed above")
+            }
+
             Command::DocsList => Ok(
                 json!({"documents":self.registry.documents.iter().filter(|d|d.readable).map(|d|json!({"document":d.alias,"id":d.id,"readable":true,"writable":d.writable && self.writes.as_ref().is_some_and(|w|w.enabled)})).collect::<Vec<_>>(),"mapping_version":self.registry.version}),
             ),

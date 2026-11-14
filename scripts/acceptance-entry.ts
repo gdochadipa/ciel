@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict';
 import {getToolPluginMetadata} from 'openclaw/plugin-sdk/tool-plugin';
-import type {AnyAgentTool,OpenClawPluginApi} from 'openclaw/plugin-sdk/plugin-entry';
+import type {AnyAgentTool,OpenClawPluginApi,OpenClawPluginToolFactory,OpenClawPluginToolContext} from 'openclaw/plugin-sdk/plugin-entry';
 import {acceptanceConfiguration,syntheticOwner,syntheticToken} from './acceptance';
 
 export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'tabs'|'grid'='sheets') {
@@ -20,7 +20,7 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
   assert.equal(metadata.tools.length,26);
   let runtimeAllowed=false;
   function registry() {
-   const tools=new Map<string,Function>();
+   const tools=new Map<string,OpenClawPluginToolFactory<2>>();
    let hook:Function|undefined;
    // Only registration is represented here. Never substitute a host SDK/runtime.
    const api={
@@ -29,9 +29,9 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
      assert(runtimeAllowed,'Registration/factory construction must not access runtime services');
      return {gateway:{isAvailable:()=>false,request:()=>{throw Error('No Gateway is available in this fixture');}}};
     },
-    registerTool(factory:unknown,options:{name:string}) {
-     assert.equal(typeof factory,'function');assert(!tools.has(options.name));
-     tools.set(options.name,factory as Function);
+    registerTool(factory:OpenClawPluginToolFactory<2>,options:{name:string}) {
+     assert.equal(factory.contextVersion,2);assert.equal(typeof factory.create,'function');assert(!tools.has(options.name));
+     tools.set(options.name,factory);
     },
     on(name:string,handler:Function) {assert.equal(name,'before_tool_call');assert(!hook);hook=handler;},
    };
@@ -39,19 +39,20 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
    assert.equal(tools.size,26);assert(hook);
    assert.deepEqual([...tools.keys()].sort(),manifest.contracts.tools.toSorted());
    return {
-    tool(name:string,context:Record<string,unknown>):AnyAgentTool {
+    tool(name:string,context:OpenClawPluginToolContext<2>):AnyAgentTool {
      const factory=tools.get(name);assert(factory,`Missing registered factory ${name}`);
-     const tool=factory(context);assert(tool&&!Array.isArray(tool));assert.equal(tool.name,name);
+     const tool=factory.create(context);assert(tool&&!Array.isArray(tool));assert.equal(tool.name,name);
      return tool;
     },
     before(name:string,params:Record<string,unknown>,requester?:Record<string,unknown>) {
-     return hook!({toolName:name,params},{requester});
+     assert(hook);
+     return hook({toolName:name,params},{agentId:'synthetic-agent',sessionKey:'agent:synthetic-agent:main',sessionId:'synthetic-incarnation',abortSignal:new AbortController().signal,requester});
     },
    };
   }
   const first=registry(),second=registry();
   let current=true;
-  const owner={requesterSenderId:syntheticOwner,senderIsOwner:true,assertInvocationCurrent(){assert(current,'INVOCATION_EXPIRED');}};
+  const owner={agentId:'synthetic-agent',sessionKey:'agent:synthetic-agent:main',sessionId:'synthetic-incarnation',requesterSenderId:syntheticOwner,senderIsOwner:true,assertInvocationCurrent(){assert(current,'INVOCATION_EXPIRED');}};
   const list=first.tool('sheets_list',owner);
   const commitName=kind==='grid'?'sheets_update':kind==='tabs'?'sheets_create_tab':kind==='docs'?'docs_apply':'sheets_append';
   const previewTool=first.tool(kind==='tabs'?'sheets_preview_create_tab':kind==='docs'?'docs_preview_change':'sheets_preview_change',owner);
@@ -66,7 +67,7 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
    return result.details as any;
   }
   assert.equal((await execute(list,{})).ok,true,'Lazy bridge must use invocation-time credentials');
-  assert.equal((await execute(first.tool('sheets_list',{}),{})).error.code,'OWNER_REQUIRED');
+  assert.equal((await execute(first.tool('sheets_list',{assertInvocationCurrent(){}}),{})).error.code,'OWNER_REQUIRED');
   current=false;
   assert.equal((await execute(list,{})).error.code,'INVOCATION_EXPIRED');
   current=true;

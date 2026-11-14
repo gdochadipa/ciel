@@ -13,11 +13,13 @@ process.env.SECRETARY_APPROVAL_TOKEN='synthetic-separate-operator-token';
 const workspace=await mkdtemp(join(tmpdir(),'ciel-native-acceptance-'));
 let models=0,hook;
 const tools=new Map(),owner='+15555550123';
-const context={agentId:'synthetic-agent',workspaceDir:workspace,sessionKey:'agent:synthetic-agent:main',requesterSenderId:owner,senderIsOwner:true,sandboxed:false,memoryAudience:{kind:'owner-private',agentId:'synthetic-agent'},assertInvocationCurrent(){},assertMemoryAudienceCurrent(){}};
+const context={agentId:'synthetic-agent',workspaceDir:workspace,sessionKey:'agent:synthetic-agent:main',sessionId:'synthetic-incarnation',requesterSenderId:owner,senderIsOwner:true,sandboxed:false,memoryAudience:{kind:'owner-private',agentId:'synthetic-agent'},assertInvocationCurrent(){},assertMemoryAudienceCurrent(){}};
 const api={pluginConfig:{owner,coreUrl,approvalTransportQualified:true,summaryMemoryEnabled:true},config:{plugins:{entries:{'memory-core':{config:{dreaming:{enabled:false}}}}}},runtime:{gateway:{isAvailable:()=>false},llm:{async complete(){models++;return {text:JSON.stringify({summary:'Synthetic registered notes contain the recorded sample and subsequent approved edits [S1].',excerpt_ids:['S1']})};}}},registerTool(factory,options){tools.set(options.name,factory);},on(name,handler){assert.equal(name,'before_tool_call');hook=handler;}};
 entry.register(api);
-async function run(name,input){const result=await tools.get(name)(context).execute('native-memory-acceptance',input);assert.deepEqual(JSON.parse(result.content[0].text),result.details);return result;}
-async function approve(change){const preview=await run('docs_preview_change',change);assert.equal(preview.details.ok,true);const decision=await hook({toolName:'docs_apply',params:{operation_id:change.operation_id}},{requester:{senderId:owner,senderIsOwner:true}});assert(!decision.block);await decision.requireApproval.onResolution('allow-once');}
+const abort=new AbortController(),instances=new Map();
+for(const [name,factory] of tools){assert.equal(factory.contextVersion,2);instances.set(name,factory.create(context));}
+async function run(name,input){const result=await instances.get(name).execute('native-memory-acceptance',input,abort.signal);assert.deepEqual(JSON.parse(result.content[0].text),result.details);return result;}
+async function approve(change){const preview=await run('docs_preview_change',change);assert.equal(preview.details.ok,true);const decision=await hook({toolName:'docs_apply',params:{operation_id:change.operation_id}},{...context,abortSignal:abort.signal,requester:{senderId:owner,senderIsOwner:true}});assert(!decision.block);await decision.requireApproval.onResolution('allow-once');}
 const discovery={document:'notes',mode:'discovery_summary'};
 try{
  const first=await run('docs_read',discovery);assert.equal(first.details.ok,true,JSON.stringify(first.details));assert.equal(first.details.data.cache,'refreshed');assert.equal(models,1);

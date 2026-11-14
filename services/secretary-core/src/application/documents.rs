@@ -293,6 +293,18 @@ impl Writes {
             }
             return Ok(old.preview.public(old.state.as_str()));
         }
+        let preview = self.capture_document(bus, c).await?;
+        let preview = self.journal.create(preview).await?;
+        Ok(preview.public("previewed"))
+    }
+    pub(super) async fn capture_document(
+        &self,
+        bus: &CommandBus,
+        c: DocChange,
+    ) -> Result<Preview, CoreError> {
+        if !valid_id(&c.operation_id) {
+            return Err(CoreError::invalid());
+        }
         let registered = bus.registry.document(&c.document)?;
         let snapshot = load(bus, &c.document).await?;
         let preview = documents::prepare(
@@ -303,8 +315,7 @@ impl Writes {
             &bus.registry.version,
             chrono::Utc::now().timestamp() + 300,
         )?;
-        let preview = self.journal.create(preview).await?;
-        Ok(preview.public("previewed"))
+        Ok(preview)
     }
     pub(super) async fn docs_apply(&self, bus: &CommandBus, id: &str) -> Result<Value, CoreError> {
         if !valid_id(id) {
@@ -325,6 +336,14 @@ impl Writes {
         Ok(finished.preview.public(finished.state.as_str()))
     }
     async fn apply_document(&self, bus: &CommandBus, p: &Preview) -> Outcome {
+        self.apply_document_checked(bus, p, None).await
+    }
+    pub(super) async fn apply_document_checked(
+        &self,
+        bus: &CommandBus,
+        p: &Preview,
+        guard: Option<&dyn super::task_authority::EffectGuard>,
+    ) -> Outcome {
         if p.mapping_version != bus.registry.version {
             return Outcome::Conflict;
         }
@@ -344,6 +363,11 @@ impl Writes {
             || p.before["text"].as_str() != Some(tab.text.as_str())
         {
             return Outcome::Conflict;
+        }
+        if let Some(guard) = guard {
+            if guard.accept(p).await.is_err() {
+                return Outcome::KnownFailure;
+            }
         }
         match bus.source.write_document(registered, p).await {
             WriteOutcome::Rejected => Outcome::KnownFailure,

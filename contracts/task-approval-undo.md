@@ -1,0 +1,284 @@
+# Controlled tasks and shared undo — implementation contract
+
+Status: inverse planning/linkage, the scoped ledger, trusted native Core control
+and one-member dispatch transport are implemented locally. The new transport's
+supported Linux/SDK gate passed on 2026-11-14. Normal model tools, native lifecycle routing,
+summary-memory integration, provider undo and cleanup remain unfinished. No live
+write or service activation is enabled. See [native transport](task-native-transport.md).
+
+## Authority and lifetime
+
+Owner clarification, 2026-11-12: authorize the task's objective and boundaries,
+then let the agent work like a coding agent. This supersedes the earlier requirement
+to enumerate and approve every exact edit before the task begins.
+
+The configured owner authorizes the task through trusted OpenClaw approval. The
+grant binds the objective, registered resource scope, permitted action classes,
+constraints and current owner/conversation. The agent can discover, prepare and
+perform supported edits incrementally within that scope. Clear implementation
+decisions and additional iterations do not require another owner prompt. A model
+boolean, source content or unrelated “yes” cannot create or widen the grant.
+
+Ask a focused question when material ambiguity or a decision reserved to the owner
+blocks progress. Explain the alternatives and consequences, with a recommendation
+when available. Independent in-scope work can continue. Ask for expanded authority
+when the required objective, target scope, action class or constraints exceed the
+existing grant. Do not treat every adjustment of wording, range or execution plan
+inside that grant as a change requiring approval. Confidence alone does not confer
+new resource access or resolve an uncertain provider outcome.
+
+Each concrete operation still gets exact immutable target/before/after evidence
+before dispatch. Its digest binds the actual edit, and its authority derives from
+the current task grant under an explicit Core-enforced policy. This is not another
+per-operation human approval. Persist the grant revision, policy result and exact
+operation linkage; never overwrite an already dispatched intent. Full proposed
+diffs remain inspectable, and actual changes/outcomes must be reported.
+
+There is no five-minute task countdown. Permission ends on completion, explicit
+cancellation or new/reset conversation. Ordinary questions or an ordinary pause
+do not revoke the unfinished task. There is one active write/undo task per owner
+and trusted conversation incarnation. Undo requested after a task ends is a new
+owner-authorized task; its routine supported steps follow the same autonomy rule.
+
+The existing single-operation protocol retains its 300-second preview expiry and
+60-second native prompt timeout. Do not remove these guards or create freshly
+approved legacy previews to implement task lifetime. A versioned task execution
+path must distinguish dialog lifetime, task permission and source freshness.
+Immediately before each dispatch it must check current owner, conversation,
+process incarnation, grant revision, cancellation and each operation's scope and
+immutable intent linkage. Do not use an arbitrary model assertion as a policy
+check. The versioned native transport now implements this through explicit trusted
+composition; normal model-tool routing remains unexposed.
+
+Core or Gateway restart suspends future task dispatch. Persisted applying members
+enter the existing reconciliation path. Inspect outcomes without resending; obtain
+fresh owner confirmation for exact remaining members. A reset/cancel cannot unsend
+a request already dispatched. Such members must still be observed and reported.
+No automatic rollback is part of cancellation or recovery.
+
+## Implemented journal backend
+
+`domain::write_task` defines strict scope/context shapes. A scope declares an
+objective, mapping version, one to eight exact physical registered target/action
+bounds and a finite limit of 1–1000 admitted operations. Objective text records
+owner intent; it is not a machine-verified semantic policy. Current registry,
+source, host and runtime authority still need application/adapter checks.
+
+`journal::write_tasks::JournalWriteTasks` is an opt-in library backend. It is bound
+once per Journal instance to one owner/deployment. Read-only-bound state refuses
+attachment; read-only startup refuses adopting task-bound state. Existing legacy
+records must belong to the same owner and retain their original digests/behavior.
+
+Server-created proposal IDs/digests bind the exact scope and conversation
+incarnation. Trusted owner decisions carry the captured grant revision; replay
+cannot reactivate suspended/closed authority or authorize another identical-scope
+task. Initial proposal approval expires after the native 60-second dialog window.
+Active task authority has no five-minute countdown. Restart suspends authority;
+fresh confirmation rejects pending old captures and requires resolving interrupted
+writes before accepting new intent. Counts never reset on confirmation.
+
+Admission validates actor, mapping, physical target/range, inverse coverage, capture
+size/freshness, predecessor state and cumulative count in one transaction. Concrete
+captures retain a maximum five-minute freshness window without limiting task
+lifetime. Discarding an unsent preview uses the existing Reject transition, retains
+its spent ID/evidence/count, and permits a fresh in-scope approach. Altering the
+existing intent under the same ID conflicts.
+
+Claim rechecks live grant/membership, exact digest, source fences and freshness,
+then derives Approved and persists Applying atomically through the existing FSM.
+Its audit distinguishes task-derived authority. Existing legacy approve/begin-apply
+entry points reject linked task operations. Non-applied outcomes suspend the task
+within the same transaction that records the operation outcome. Cancellation
+revokes permission while keeping already-dispatched outcomes independently visible.
+New IDs/tasks cannot bypass unresolved original source writes; legacy Sheets
+classes without retained physical identity conservatively fence Sheets admission.
+
+Trusted lifecycle invalidation matches the complete ended context, including its
+Gateway and session incarnation. A delayed old notification cannot cancel a newer
+task or resumed Gateway grant. Compact history returns at most 20 scopes and actual
+operation-state counts from one SQLite snapshot, without before/after payloads.
+Task-reported completion is separate from individual attempt outcomes.
+
+These backend methods trust application/host callers. `TaskContext` strings are
+descriptors, not native proof. The optional application port pairs this ledger to
+its exact journal and the shared writer. Native routes require the distinct
+operator bearer; the built trusted client captures actual v2 assertion/owner and
+cancellation signal. A post-preflight challenge and atomic one-use accepted-member
+receipt fence provider dispatch. Core rechecks permission, immutable intent and
+source/inverse fences after confirmation. Ordinary legacy mutation/approval
+routes are blocked in scoped composition; history/reconcile remain observation.
+Supported SDK/HTTP/Core tests are required before qualification. This transport
+is not yet selected by the normal model tools or production startup.
+
+## Persisted original/inverse references
+
+`JournalWriteTasks::admit_inverse` loads the authoritative original from the shared
+owner-bound journal and validates the fresh capture against `Inverse` before
+committing anything. The existing admission transaction retains both preview
+digests and original/inverse IDs together with task membership, quota and audit.
+Exact replay must retain the same original link; a normal `admit` replay cannot
+silently strip that association. Claim checks the original/evidence/link again.
+
+For task members the original task must be closed. Applied members are undone in
+reverse admission order, across all resources in that task, and an earlier member
+waits for later applied members to have an applied inverse. Pending, applying,
+uncertain, reconciliation, conflict or applied inverse attempts block another
+inverse ID. Known-failure, expired and rejected attempts retain references while
+allowing a freshly captured attempt with current task authority. A definite failure
+still suspends task execution through the existing outcome/FSM rules. Uncertainty
+requires observation; it is never converted to permission by selecting a new ID.
+
+This initial inverse path does not compensate an inverse (redo). Supported legacy
+applied originals can be referenced without changing or adopting their original
+identity, preview or approval. New task authority is always required; a completed
+original's approval does not authorize undo. These are trusted library methods,
+not model-callable routes or semantic inference from a task objective. The future
+undo executor must explicitly use the inverse-admission path.
+
+`inverse_history` returns at most twenty references per page from one SQLite
+snapshot, with task/revision/digest/outcome metadata and no before/after contents.
+Pages use immutable inverse IDs so outcome changes do not reorder references.
+Restart retains links but does not restore old task authority; fresh confirmation
+retires unsent old captures while preserving their IDs and references. Evidence
+cleanup and provider round-trip verification remain separate unfinished work.
+
+## SDK evidence and remaining host qualification
+
+Runtime factories now register explicit version-2 descriptors while retaining
+the SDK authoring metadata and existing tool schemas. Each execution captures
+the host assertion, preserves its live owner getter and checks the tool's abort
+signal. The native approval hook resolves exactly one live factory binding by
+tool/agent/session key/incarnation, checks the trusted hook requester and captures
+its abort signal. Missing fields, multiple live candidates or capacity exhaustion
+deny approval. The lookup holds at most 64 live bindings per API, grants nothing
+and does not expire durable task permission on a timer. A retained callback keeps
+its original assertion; reassembling tools or changing model input cannot replace it.
+
+Each Core HTTP dispatch rechecks authority after encoding in the same synchronous
+segment as fetch. This establishes the plugin request boundary only. A dispatched
+request is never retried on cancellation; it may already have reached Core. It does
+not establish current host authority during Core's asynchronous source preflight
+or at its provider send. The new optional native transport adds that boundary:
+Core fresh preflight -> captured native confirmation -> revision-bound durable
+accepted-member receipt -> one existing adapter send/observe. It remains unexposed
+to normal model tools; supported SDK/HTTP verification passed on 2026-11-14.
+
+New tests use the actual locked registry, factory-context issuer, retained callback
+wrapper and run-scope fence. Their requester identity and incarnation change are
+synthetic fixture inputs. They do not run the host reset/new command or prove live
+continuation provenance. The full supported Linux run on 2026-11-14 passes the
+native-task transport scenario, all seven existing Google-only regressions and
+74 protected acceptance cases. Those host qualification claims remain separate;
+the new transport fixture uses a controlled WorkspacePort, not Google HTTP.
+
+Inspected the actual locked OpenClaw 2026.10.7 package locally. Its version-2 tool
+factory requires `assertInvocationCurrent`; the host context exposes optional
+`agentId`, `sessionKey` and a `sessionId` regenerated by new/reset. Required absent
+fields must deny task execution. Host fields must not be copied from tool input.
+The before-tool approval hook exposes requester and session fields but does not
+itself expose the version-2 invocation assertion. The bridge must bind approval
+callbacks to the same scoped task grant and current invocation authority.
+
+The actual reset implementation launches `before_reset` asynchronously, and
+`session_end` is detached work. Those notifications alone are not a synchronous
+dispatch fence. Before wiring execution, exercise the actual SDK's version-2
+factory, retained callback rejection, reset/abort and final-effect assertion.
+The Core must enforce its own durable grant/membership checks on each member.
+Never let one long Core request continue sending remaining members after the
+host loses authority. Fail unavailable until this transport contract is proved;
+actual target routing and owner approval remain separate live qualification.
+
+## Compound source and execution rules
+
+Use the existing awaited bus, shared writer mutex, operation FSM and journal.
+Task records bind immutable operation intent to the current scoped grant; they do
+not create another durable workflow engine. The task's final operation list need
+not be known before owner authorization. Each subsequent operation requires fresh
+bounded source capture, inverse support and durable admission under that grant.
+
+Related edits prepared together for one source can use a bounded provider batch
+with exact aggregate before/after evidence and an initial revision/fingerprint
+guard. Reject unsupported overlaps or ambiguous text replacements. For later
+iterations, track verified earlier effects and expected source transitions rather
+than comparing against the task's original pre-write revision. Do not silently
+refresh legacy approved previews or modify an existing operation's digest.
+
+Several batches or resources require explicit dependency and reverse-order
+semantics within the authorized target scope. The previous single-batch proposal
+is an optional optimization, not the task authorization model. Google and SQLite
+do not share a transaction. Sheets still has a read/write race after preflight;
+do not claim atomic compare-and-swap or unconditional undo.
+
+Persist each member's task-authorized intent and `applying` before dispatch. Send once,
+observe accepted responses, and stop remaining sends on failure, conflict or
+uncertainty. Reconciliation only observes. Report partial outcomes independently.
+The undo plan includes only resolved applied members whose evidence is retained.
+An unresolved original or inverse cannot be bypassed by a new operation ID.
+
+## Paired inverse foundation
+
+`domain::compensation::validate_reversible` checks captured forward evidence
+before approval. `domain::compensation::Inverse` prepares a candidate inverse from a sealed,
+authoritative applied operation. It grants no approval, reads no provider and
+does not persist or dispatch anything. Consumers must load the original from the
+owner-bound journal, prepare a fresh preview against current registrations/source,
+and call `validate_preview` before admitting it under the new undo task. That check binds
+the fresh request to the original physical target and exact reversed before/after.
+Expiry of the original approval does not delete undo evidence or authorize undo.
+
+| Class | Captured evidence | Candidate inverse | Refusal conditions |
+| --- | --- | --- | --- |
+| Sheets literal rectangle | Exact entered types and blanks, bounded range, source identity and mapping | Same rectangle with original literal values; null clears, empty string remains a string | Formula/unknown entered type, invalid dimensions, >100 cells, >16 KiB snapshot, >2048-byte cell text, unsafe number, changed registration/target/affected values |
+| Docs one-match plain text replacement | Exact selected-tab before/after text and original find/replacement | Reverse one unique nonempty single-line replacement | Append, deletion/empty inverse needle, ambiguous reverse match, multiline/control/private-use replacement, >2048-byte find or replacement, changed tab/body/registration |
+| Append, structured rows, inserted rows, new tabs, rich structure | Insufficient for these inverse contracts | Unavailable | Refuse admission to the new controlled task profile |
+
+Docs coverage is conditional text restoration, with normal current-source and
+required-revision validation. It does not promise restoration of formatting,
+layout, styles, tables or suggestions. Future composition must preserve untouched
+source content and reject unsupported structures at capture time. Existing legacy
+write behavior is not newly admitted or qualified by the inverse planner.
+
+## Persistence, history and cleanup obligations
+
+Keep legacy operation JSON, request/preview digests and FSM semantics unchanged.
+Add versioned task membership and original/compensating references in the same
+journal. Atomic transactions must bind task authority, grant revision and membership;
+claiming a member and persisting `applying` must not admit a stale grant.
+One active conversation task needs a durable uniqueness constraint.
+
+Retain evidence until explicit owner-approved cleanup. Before implementing purge,
+introduce a distinct evidence-unavailable representation retaining spent operation
+IDs, request/preview digests, owner, target identity, original/inverse links,
+outcomes and audit. Old preview/approval/apply/reconcile requests must not recreate
+authority or refill removed evidence. Never modify existing previews in place to
+fake tombstones or delete operation rows to free their IDs.
+
+Cleanup preview must select completed tasks/age ranges and disclose affected undo
+coverage and estimated reusable bytes. Under the shared writer boundary, check
+live task/grant/dialog/inverse/recovery/native-memory references, then atomically
+commit approved removal and audit only if the selection and references still
+match. Protect unresolved or dependent evidence. A task-history response must
+distinguish unavailable undo from a nonexistent original task.
+
+Pause new writes when capture cannot be retained safely. Report reusable database
+pages separately from physical file shrinkage, WAL size and backup copies. Cleanup
+of operational evidence does not clean OpenClaw personal memory or backups.
+
+## Required acceptance before calling item 5 complete
+
+1. Actual built SDK to authenticated Core/bus/journal and simulated Google: scoped
+   task authorization, several incrementally prepared edits, exact per-operation
+   capture, no repeated prompts for clear in-scope work, and focused clarification
+   for unresolved owner decisions or expanded authority.
+2. Wrong/missing owner/incarnation, retained approval callback, duplicate approval,
+   out-of-scope action/target, new/reset/cancel, ordinary pause and restart confirmation.
+3. Same-source compound edits without self-conflict, human drift, partial outcome,
+   crash around every persistence boundary and exact no-duplicate send counts.
+4. Sheets/Docs paired round trips, original history retained, unrelated content
+   preserved, new task authority for undo, later-edit conflict and uncertain inverse
+   observed without resend. A pure planner test is not provider round-trip proof.
+5. Compatible retained legacy records, bounded history, cleanup/tombstone replay
+   protection, concurrent undo selection, low disk and interrupted cleanup.
+6. Formatting, warnings-denied Clippy, full verifier, relevant Google simulations
+   and protected admission regressions with actual locks/SDK. Keep all target/live
+   approval, service and write activation evidence separately qualified.

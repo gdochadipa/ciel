@@ -2,8 +2,34 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Secretary Core",
-    "version": "0.3.0",
-    "description": "Secretary Core bounded reads and opt-in structured writes. JSON serialization is valid YAML. Legacy workbook views remain read-only. 64 KiB request, 2 MiB provider response, 10 second provider timeout, two read retries; writes never retried automatically. SQLite durable intent and owner-bound approvals; operator-only reconciliation. Google Sheets lacks atomic compare-and-swap: a human edit after preflight may still race the RAW request. Generic registered grid reads are independent of domain profiles. Registered Google Docs supports bounded body-text reads and owner-approved append_text/one-match replace_text with required revision control through the same journal/FSM. No arbitrary resource URL, range or batch request is accepted from tool input."
+    "version": "0.4.0",
+    "x-readonly-profile": {
+      "availability": "Explicit Rust read-only constructors and opt-in task-budget profile. Manifest service start-readonly is wired but hard-denied before resources until release/promotion admission is implemented; legacy startup remains unchanged.",
+      "allowed_tools": [
+        "sheets_list",
+        "sheets_describe",
+        "sheets_read",
+        "sheets_search",
+        "docs_list",
+        "docs_describe",
+        "docs_read",
+        "docs_search"
+      ],
+      "summary_context_modes": "Existing read modes remain available with their existing bounds.",
+      "other_decoded_tools_and_approval": "HTTP 403 readonly_profile, before provider access or mutation intent creation.",
+      "operator_reconciliation": "Existing observation-only operator route remains available with a distinct operator bearer; it never sends provider mutations.",
+      "credentials": "Explicit profile requires a Core token of at least 32 bytes. Attaching its disabled journal coordinator requires a distinct operator token of at least 32 bytes.",
+      "admission": "This constructor and offline registry validation provide no live qualification, bounded-run receipt, permanent-start authorization or deployment mechanism.",
+      "budgets": "One operator-created active task per protected owner/deployment; server reservations, exact model-visible bytes, cumulative rows/document Unicode scalars, restart-safe conservative accounting. See contracts/read-task-budget.md."
+    },
+    "description": "Secretary Core bounded reads and opt-in structured writes. JSON serialization is valid YAML. Legacy workbook views remain read-only. 64 KiB request, 2 MiB provider response, 10 second provider timeout, two read retries; writes never retried automatically. SQLite durable intent and owner-bound approvals; operator-only reconciliation. Google Sheets lacks atomic compare-and-swap: a human edit after preflight may still race the RAW request. Generic registered grid reads are independent of domain profiles. Registered Google Docs supports bounded body-text reads and owner-approved append_text/one-match replace_text with required revision control through the same journal/FSM. No arbitrary resource URL, range or batch request is accepted from tool input.",
+    "x-native-task-profile": {
+      "availability": "Trusted composition API only; production startup and 26 model tools retain their existing behavior. Disabled without explicit scoped ledger attachment.",
+      "authority": "Actual current SDK v2 owner context plus distinct operator bearer; no model boolean grants scope.",
+      "dispatch": "One awaited member; fresh preflight, native challenge, durable one-use receipt, shared FSM and observer.",
+      "lifetime": "No task TTL; dialog/capture/dispatch handshake have separate bounds.",
+      "qualification": "New supported Linux/SDK and live target qualification remain separate. Native summary memory must be disabled until fencing integration."
+    }
   },
   "servers": [
     {
@@ -97,6 +123,41 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "application/vnd.ciel.read-budget+json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "result",
+                    "model_text"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "result": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/paths/~1v1~1tools~1sheets_list/post/responses/200/content/application~1json/schema"
+                        },
+                        {
+                          "$ref": "#/components/schemas/Error"
+                        }
+                      ]
+                    },
+                    "model_text": {
+                      "type": "string",
+                      "maxLength": 1048576
+                    }
+                  },
+                  "description": "Opt-in budget profile only. model_text is the exact whole model-visible UTF-8 JSON string; the bridge verifies semantic equality to result. No legacy application/json response change."
+                }
+              }
+            },
+            "headers": {
+              "x-ciel-budgeted-result": {
+                "schema": {
+                  "const": "v1"
+                },
+                "description": "Present only for the task-budget media type."
               }
             }
           },
@@ -170,7 +231,19 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-ciel-read-reservation",
+            "in": "header",
+            "required": false,
+            "description": "Required in the explicit task-budget profile; server-created and bound to this exact tool. Never a tool input task selector.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
       }
     },
     "/v1/tools/sheets_describe": {
@@ -256,6 +329,41 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "application/vnd.ciel.read-budget+json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "result",
+                    "model_text"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "result": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/paths/~1v1~1tools~1sheets_describe/post/responses/200/content/application~1json/schema"
+                        },
+                        {
+                          "$ref": "#/components/schemas/Error"
+                        }
+                      ]
+                    },
+                    "model_text": {
+                      "type": "string",
+                      "maxLength": 1048576
+                    }
+                  },
+                  "description": "Opt-in budget profile only. model_text is the exact whole model-visible UTF-8 JSON string; the bridge verifies semantic equality to result. No legacy application/json response change."
+                }
+              }
+            },
+            "headers": {
+              "x-ciel-budgeted-result": {
+                "schema": {
+                  "const": "v1"
+                },
+                "description": "Present only for the task-budget media type."
               }
             }
           },
@@ -329,7 +437,19 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-ciel-read-reservation",
+            "in": "header",
+            "required": false,
+            "description": "Required in the explicit task-budget profile; server-created and bound to this exact tool. Never a tool input task selector.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
       }
     },
     "/v1/tools/sheets_read": {
@@ -480,6 +600,41 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "application/vnd.ciel.read-budget+json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "result",
+                    "model_text"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "result": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/paths/~1v1~1tools~1sheets_read/post/responses/200/content/application~1json/schema"
+                        },
+                        {
+                          "$ref": "#/components/schemas/Error"
+                        }
+                      ]
+                    },
+                    "model_text": {
+                      "type": "string",
+                      "maxLength": 1048576
+                    }
+                  },
+                  "description": "Opt-in budget profile only. model_text is the exact whole model-visible UTF-8 JSON string; the bridge verifies semantic equality to result. No legacy application/json response change."
+                }
+              }
+            },
+            "headers": {
+              "x-ciel-budgeted-result": {
+                "schema": {
+                  "const": "v1"
+                },
+                "description": "Present only for the task-budget media type."
               }
             }
           },
@@ -553,7 +708,19 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-ciel-read-reservation",
+            "in": "header",
+            "required": false,
+            "description": "Required in the explicit task-budget profile; server-created and bound to this exact tool. Never a tool input task selector.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
       }
     },
     "/v1/tools/sheets_search": {
@@ -823,6 +990,41 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "application/vnd.ciel.read-budget+json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "result",
+                    "model_text"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "result": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/paths/~1v1~1tools~1sheets_search/post/responses/200/content/application~1json/schema"
+                        },
+                        {
+                          "$ref": "#/components/schemas/Error"
+                        }
+                      ]
+                    },
+                    "model_text": {
+                      "type": "string",
+                      "maxLength": 1048576
+                    }
+                  },
+                  "description": "Opt-in budget profile only. model_text is the exact whole model-visible UTF-8 JSON string; the bridge verifies semantic equality to result. No legacy application/json response change."
+                }
+              }
+            },
+            "headers": {
+              "x-ciel-budgeted-result": {
+                "schema": {
+                  "const": "v1"
+                },
+                "description": "Present only for the task-budget media type."
               }
             }
           },
@@ -896,7 +1098,19 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-ciel-read-reservation",
+            "in": "header",
+            "required": false,
+            "description": "Required in the explicit task-budget profile; server-created and bound to this exact tool. Never a tool input task selector.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
       }
     },
     "/v1/tools/reports_wedding": {
@@ -2109,6 +2323,41 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "application/vnd.ciel.read-budget+json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "result",
+                    "model_text"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "result": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/paths/~1v1~1tools~1docs_list/post/responses/200/content/application~1json/schema"
+                        },
+                        {
+                          "$ref": "#/components/schemas/Error"
+                        }
+                      ]
+                    },
+                    "model_text": {
+                      "type": "string",
+                      "maxLength": 1048576
+                    }
+                  },
+                  "description": "Opt-in budget profile only. model_text is the exact whole model-visible UTF-8 JSON string; the bridge verifies semantic equality to result. No legacy application/json response change."
+                }
+              }
+            },
+            "headers": {
+              "x-ciel-budgeted-result": {
+                "schema": {
+                  "const": "v1"
+                },
+                "description": "Present only for the task-budget media type."
               }
             }
           },
@@ -2192,7 +2441,19 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-ciel-read-reservation",
+            "in": "header",
+            "required": false,
+            "description": "Required in the explicit task-budget profile; server-created and bound to this exact tool. Never a tool input task selector.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
       }
     },
     "/v1/tools/docs_describe": {
@@ -2246,6 +2507,41 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "application/vnd.ciel.read-budget+json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "result",
+                    "model_text"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "result": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/paths/~1v1~1tools~1docs_describe/post/responses/200/content/application~1json/schema"
+                        },
+                        {
+                          "$ref": "#/components/schemas/Error"
+                        }
+                      ]
+                    },
+                    "model_text": {
+                      "type": "string",
+                      "maxLength": 1048576
+                    }
+                  },
+                  "description": "Opt-in budget profile only. model_text is the exact whole model-visible UTF-8 JSON string; the bridge verifies semantic equality to result. No legacy application/json response change."
+                }
+              }
+            },
+            "headers": {
+              "x-ciel-budgeted-result": {
+                "schema": {
+                  "const": "v1"
+                },
+                "description": "Present only for the task-budget media type."
               }
             }
           },
@@ -2329,7 +2625,19 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-ciel-read-reservation",
+            "in": "header",
+            "required": false,
+            "description": "Required in the explicit task-budget profile; server-created and bound to this exact tool. Never a tool input task selector.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
       }
     },
     "/v1/tools/docs_read": {
@@ -2629,6 +2937,41 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "application/vnd.ciel.read-budget+json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "result",
+                    "model_text"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "result": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/paths/~1v1~1tools~1docs_read/post/responses/200/content/application~1json/schema"
+                        },
+                        {
+                          "$ref": "#/components/schemas/Error"
+                        }
+                      ]
+                    },
+                    "model_text": {
+                      "type": "string",
+                      "maxLength": 1048576
+                    }
+                  },
+                  "description": "Opt-in budget profile only. model_text is the exact whole model-visible UTF-8 JSON string; the bridge verifies semantic equality to result. No legacy application/json response change."
+                }
+              }
+            },
+            "headers": {
+              "x-ciel-budgeted-result": {
+                "schema": {
+                  "const": "v1"
+                },
+                "description": "Present only for the task-budget media type."
               }
             }
           },
@@ -2712,7 +3055,19 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-ciel-read-reservation",
+            "in": "header",
+            "required": false,
+            "description": "Required in the explicit task-budget profile; server-created and bound to this exact tool. Never a tool input task selector.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
       }
     },
     "/v1/tools/docs_preview_change": {
@@ -3861,6 +4216,41 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "application/vnd.ciel.read-budget+json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "result",
+                    "model_text"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "result": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/paths/~1v1~1tools~1docs_search/post/responses/200/content/application~1json/schema"
+                        },
+                        {
+                          "$ref": "#/components/schemas/Error"
+                        }
+                      ]
+                    },
+                    "model_text": {
+                      "type": "string",
+                      "maxLength": 1048576
+                    }
+                  },
+                  "description": "Opt-in budget profile only. model_text is the exact whole model-visible UTF-8 JSON string; the bridge verifies semantic equality to result. No legacy application/json response change."
+                }
+              }
+            },
+            "headers": {
+              "x-ciel-budgeted-result": {
+                "schema": {
+                  "const": "v1"
+                },
+                "description": "Present only for the task-budget media type."
               }
             }
           },
@@ -3944,6 +4334,415 @@
               }
             }
           }
+        },
+        "parameters": [
+          {
+            "name": "x-ciel-read-reservation",
+            "in": "header",
+            "required": false,
+            "description": "Required in the explicit task-budget profile; server-created and bound to this exact tool. Never a tool input task selector.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/read-budget/reserve": {
+      "post": {
+        "operationId": "reserve_read_task_invocation",
+        "security": [
+          {
+            "CoreBearer": []
+          }
+        ],
+        "description": "Opt-in read-only task budget. No operation approval or provider mutation authority. Operator create/increase use explicit limits; close/status use {}. No caller owner/generation/task selector.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "tool"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "tool": {
+                    "enum": [
+                      "sheets_list",
+                      "sheets_describe",
+                      "sheets_read",
+                      "sheets_search",
+                      "docs_list",
+                      "docs_describe",
+                      "docs_read",
+                      "docs_search"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded task-accounting result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadAdmission"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Wrong bearer"
+          },
+          "403": {
+            "description": "Budget profile unavailable"
+          },
+          "409": {
+            "description": "Scope/reservation/lifecycle conflict"
+          },
+          "503": {
+            "description": "Runtime fenced or unavailable"
+          }
+        }
+      }
+    },
+    "/v1/read-budget/local-error": {
+      "post": {
+        "operationId": "settle_read_local_validation_error",
+        "security": [
+          {
+            "CoreBearer": []
+          }
+        ],
+        "description": "Opt-in read-only task budget. No operation approval or provider mutation authority. Operator create/increase use explicit limits; close/status use {}. No caller owner/generation/task selector.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "reservation",
+                  "tool"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "reservation": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "tool": {
+                    "enum": [
+                      "sheets_list",
+                      "sheets_describe",
+                      "sheets_read",
+                      "sheets_search",
+                      "docs_list",
+                      "docs_describe",
+                      "docs_read",
+                      "docs_search"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded task-accounting result",
+            "content": {
+              "application/vnd.ciel.read-budget+json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "result",
+                    "model_text"
+                  ],
+                  "properties": {
+                    "result": {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    "model_text": {
+                      "type": "string",
+                      "maxLength": 256
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Wrong bearer"
+          },
+          "403": {
+            "description": "Budget profile unavailable"
+          },
+          "409": {
+            "description": "Scope/reservation/lifecycle conflict"
+          },
+          "503": {
+            "description": "Runtime fenced or unavailable"
+          }
+        }
+      }
+    },
+    "/v1/read-budget/operator/{action}": {
+      "post": {
+        "operationId": "control_read_task",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "description": "Opt-in read-only task budget. No operation approval or provider mutation authority. Operator create/increase use explicit limits; close/status use {}. No caller owner/generation/task selector.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ReadTaskLimits"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded task-accounting result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Wrong bearer"
+          },
+          "403": {
+            "description": "Budget profile unavailable"
+          },
+          "409": {
+            "description": "Scope/reservation/lifecycle conflict"
+          },
+          "503": {
+            "description": "Runtime fenced or unavailable"
+          }
+        },
+        "parameters": [
+          {
+            "name": "action",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "create",
+                "increase",
+                "close",
+                "status"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "/v1/write-tasks/native": {
+      "post": {
+        "operationId": "native_task_control",
+        "description": "Trusted native adapter only; strict 64 KiB input. Disabled unless a scoped ledger is explicitly composed with enabled writes; read-only denies. No model tool activates this path. See contracts/task-native-transport.md.",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NativeTaskControl"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Command result. Control returns retained task or preview state; confirmation acknowledgement is not provider acceptance or success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data",
+                    "owner"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "type": "object"
+                    },
+                    "owner": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Operator authentication required before decoding."
+          },
+          "403": {
+            "description": "Read-only policy or scope denial."
+          },
+          "409": {
+            "description": "Stale context/revision/member or spent/unknown confirmation."
+          },
+          "503": {
+            "description": "Scoped runtime not attached or native confirmation unavailable."
+          }
+        }
+      }
+    },
+    "/v1/write-tasks/execute": {
+      "post": {
+        "operationId": "native_task_execute",
+        "description": "Trusted native adapter only; strict 64 KiB input. Disabled unless a scoped ledger is explicitly composed with enabled writes; read-only denies. No model tool activates this path. See contracts/task-native-transport.md.",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NativeTaskMember"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "At most one ready and one result NDJSON frame. Failure can return result without ready. Cancellation before durable dispatch acceptance prevents sending; already accepted one-member effects may finish. Never resend after lost result.",
+            "content": {
+              "application/vnd.ciel.task-dispatch+ndjson;version=1": {
+                "schema": {
+                  "type": "string",
+                  "maxLength": 524288
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Operator authentication required before decoding."
+          },
+          "403": {
+            "description": "Read-only policy or scope denial."
+          },
+          "409": {
+            "description": "Stale context/revision/member or spent/unknown confirmation."
+          },
+          "503": {
+            "description": "Scoped runtime not attached or native confirmation unavailable."
+          }
+        }
+      }
+    },
+    "/v1/write-tasks/confirm": {
+      "post": {
+        "operationId": "native_task_confirm",
+        "description": "Trusted native adapter only; strict 64 KiB input. Disabled unless a scoped ledger is explicitly composed with enabled writes; read-only denies. No model tool activates this path. See contracts/task-native-transport.md.",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NativeTaskChallenge"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Command result. Control returns retained task or preview state; confirmation acknowledgement is not provider acceptance or success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data",
+                    "owner"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "type": "object"
+                    },
+                    "owner": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Operator authentication required before decoding."
+          },
+          "403": {
+            "description": "Read-only policy or scope denial."
+          },
+          "409": {
+            "description": "Stale context/revision/member or spent/unknown confirmation."
+          },
+          "503": {
+            "description": "Scoped runtime not attached or native confirmation unavailable."
+          }
         }
       }
     }
@@ -3957,7 +4756,7 @@
       "OperatorBearer": {
         "type": "http",
         "scheme": "bearer",
-        "description": "Distinct operator-only approval token. Never exposed to model tool arguments."
+        "description": "Distinct operator credential for authorized legacy decisions, observation-only reconciliation and read-only task lifecycle; task increases grant no mutation authority. Never supplied as model input. Explicit scoped native task composition also uses this trusted adapter credential; it cannot elevate read-only policy."
       }
     },
     "schemas": {
@@ -4883,6 +5682,610 @@
           "coverage"
         ],
         "additionalProperties": false
+      },
+      "ReadTaskLimits": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "calls",
+          "rows",
+          "document_characters",
+          "output_bytes",
+          "in_flight"
+        ],
+        "properties": {
+          "calls": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "rows": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "document_characters": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000000
+          },
+          "output_bytes": {
+            "type": "integer",
+            "minimum": 512,
+            "maximum": 67108864
+          },
+          "in_flight": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16
+          }
+        },
+        "description": "Explicit operator limits; in_flight <= calls, monotonic increases and protected ceilings are enforced by Core."
+      },
+      "ReadGrant": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "rows",
+          "document_characters",
+          "output_bytes"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "rows": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "document_characters": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1048576
+          },
+          "output_bytes": {
+            "type": "integer",
+            "minimum": 256,
+            "maximum": 1048576
+          }
+        }
+      },
+      "ReadAdmission": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "grant",
+          "model_text",
+          "code"
+        ],
+        "properties": {
+          "grant": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReadGrant"
+              }
+            ]
+          },
+          "model_text": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "code": {
+            "enum": [
+              "admitted",
+              "read_task_required",
+              "read_budget_exhausted"
+            ]
+          }
+        }
+      },
+      "NativeTaskContext": {
+        "type": "object",
+        "required": [
+          "gateway_instance",
+          "agent_id",
+          "session_key",
+          "session_id"
+        ],
+        "properties": {
+          "gateway_instance": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "agent_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "session_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "session_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "additionalProperties": false,
+        "description": "Trusted adapter descriptors, never standalone native proof. Runtime also enforces UTF-8 byte/control bounds."
+      },
+      "NativeTaskScope": {
+        "type": "object",
+        "required": [
+          "objective",
+          "mapping_version",
+          "max_operations",
+          "targets"
+        ],
+        "properties": {
+          "objective": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "mapping_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "max_operations": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "targets": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "spreadsheet",
+                    "spreadsheet_id",
+                    "view",
+                    "sheet_id",
+                    "range"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "grid"
+                    },
+                    "spreadsheet": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    "spreadsheet_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "view": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    "sheet_id": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "range": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "document",
+                    "document_id",
+                    "tab_id"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "document"
+                    },
+                    "document": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    "document_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "tab_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "NativeTaskMember": {
+        "type": "object",
+        "required": [
+          "task_id",
+          "context",
+          "grant_revision",
+          "operation_id"
+        ],
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "context": {
+            "$ref": "#/components/schemas/NativeTaskContext"
+          },
+          "grant_revision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "operation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "additionalProperties": false
+      },
+      "NativeTaskChallenge": {
+        "type": "object",
+        "required": [
+          "member",
+          "preview_digest",
+          "nonce"
+        ],
+        "properties": {
+          "member": {
+            "$ref": "#/components/schemas/NativeTaskMember"
+          },
+          "preview_digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "nonce": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "NativeTaskControl": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "action",
+              "context",
+              "scope"
+            ],
+            "properties": {
+              "action": {
+                "const": "propose"
+              },
+              "context": {
+                "$ref": "#/components/schemas/NativeTaskContext"
+              },
+              "scope": {
+                "$ref": "#/components/schemas/NativeTaskScope"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "action",
+              "context",
+              "task_id"
+            ],
+            "properties": {
+              "action": {
+                "const": "review"
+              },
+              "context": {
+                "$ref": "#/components/schemas/NativeTaskContext"
+              },
+              "task_id": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "action",
+              "context",
+              "task_id",
+              "change"
+            ],
+            "properties": {
+              "action": {
+                "const": "capture"
+              },
+              "context": {
+                "$ref": "#/components/schemas/NativeTaskContext"
+              },
+              "task_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "change": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "operation_id",
+                      "spreadsheet",
+                      "view",
+                      "action",
+                      "fields"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "grid"
+                      },
+                      "operation_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "spreadsheet": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "view": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "action": {
+                        "const": "update"
+                      },
+                      "fields": {
+                        "type": "object",
+                        "required": [
+                          "range",
+                          "values"
+                        ],
+                        "properties": {
+                          "range": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 64
+                          },
+                          "values": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 100,
+                            "items": {
+                              "type": "array",
+                              "minItems": 1,
+                              "maxItems": 100,
+                              "items": {
+                                "type": [
+                                  "string",
+                                  "number",
+                                  "boolean",
+                                  "null"
+                                ]
+                              }
+                            }
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "operation_id",
+                      "document",
+                      "tab_id",
+                      "action",
+                      "fields"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "document"
+                      },
+                      "operation_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "document": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "tab_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "action": {
+                        "const": "replace_text"
+                      },
+                      "fields": {
+                        "type": "object",
+                        "required": [
+                          "find",
+                          "replacement"
+                        ],
+                        "properties": {
+                          "find": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          },
+                          "replacement": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "action",
+              "context",
+              "task_id",
+              "operation_id"
+            ],
+            "properties": {
+              "action": {
+                "const": "discard"
+              },
+              "context": {
+                "$ref": "#/components/schemas/NativeTaskContext"
+              },
+              "task_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "operation_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "action",
+              "context",
+              "task_id",
+              "scope_digest",
+              "grant_revision",
+              "decision"
+            ],
+            "properties": {
+              "action": {
+                "const": "decide"
+              },
+              "context": {
+                "$ref": "#/components/schemas/NativeTaskContext"
+              },
+              "task_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "scope_digest": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "grant_revision": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "decision": {
+                "enum": [
+                  "approve",
+                  "reject"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "action",
+              "context",
+              "task_id",
+              "reason",
+              "grant_revision"
+            ],
+            "properties": {
+              "action": {
+                "const": "end"
+              },
+              "context": {
+                "$ref": "#/components/schemas/NativeTaskContext"
+              },
+              "task_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "reason": {
+                "enum": [
+                  "completed",
+                  "cancelled"
+                ]
+              },
+              "grant_revision": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "action",
+              "context"
+            ],
+            "properties": {
+              "action": {
+                "const": "invalidate"
+              },
+              "context": {
+                "$ref": "#/components/schemas/NativeTaskContext"
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
       }
     }
   }

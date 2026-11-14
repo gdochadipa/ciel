@@ -13,9 +13,13 @@ impl Fixture {
         Self(path)
     }
     fn run(&self, args: &[&str]) -> Output {
+        self.run_with_env(args, &[])
+    }
+    fn run_with_env(&self, args: &[&str], environment: &[(&str, &str)]) -> Output {
         let mut child = Command::new(env!("CARGO_BIN_EXE_secretary-core"))
             .args(args)
             .env_clear()
+            .envs(environment.iter().copied())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
@@ -93,6 +97,106 @@ fn offline_check_needs_no_runtime_credentials_and_never_discloses_config_values(
 }
 
 #[test]
+fn explicit_readonly_check_rejects_write_grants_without_changing_legacy_checks() {
+    let f = Fixture::new();
+    let path = f.config();
+    let original = std::fs::read(&path).unwrap();
+    let check = || {
+        f.run(&[
+            "registry",
+            "check",
+            "--config",
+            path.to_str().unwrap(),
+            "--profile",
+            "readonly",
+        ])
+    };
+    let ready = check();
+    assert!(ready.status.success());
+    assert_eq!(data(&ready)["profile"], "readonly");
+    assert_eq!(data(&ready)["live_access_checked"], false);
+    assert_eq!(data(&ready)["activation_changed"], false);
+    assert_eq!(data(&ready)["configuration_changed"], false);
+    let mut writable: Value = serde_json::from_slice(&original).unwrap();
+    writable["documents"][0]["writable"] = json!(true);
+    let bytes = writable.to_string();
+    std::fs::write(&path, &bytes).unwrap();
+    let denied = check();
+    assert_eq!(denied.status.code(), Some(1));
+    assert_eq!(data(&denied)["error"]["code"], "registry_write_permissions");
+    assert!(f
+        .run(&["registry", "check", "--config", path.to_str().unwrap()])
+        .status
+        .success());
+    for result in [&ready, &denied] {
+        let output = String::from_utf8_lossy(&result.stdout).to_string()
+            + &String::from_utf8_lossy(&result.stderr);
+        assert!(!output.contains("CANARY"));
+        assert!(!output.contains(path.to_str().unwrap()));
+    }
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), bytes);
+    assert_eq!(std::fs::read_dir(&f.0).unwrap().count(), 1);
+}
+
+#[test]
+fn readonly_checks_all_registered_grants_and_never_falls_back_on_unknown_profiles() {
+    let f = Fixture::new();
+    let path = f.config();
+    let template: Value =
+        serde_json::from_str(include_str!("../../../config/workspace.example.json")).unwrap();
+    let mut create_tab = template.clone();
+    create_tab["spreadsheets"][0]["create_tabs"] = json!(true);
+    let mut grid = template.clone();
+    grid["spreadsheets"][0]["views"][0]["writable_range"] = json!("B2:C8");
+    let mut dormant: Value =
+        serde_json::from_str(include_str!("../../../config/spreadsheets.example.json")).unwrap();
+    dormant["spreadsheets"][0]["readable"] = json!(false);
+    for configured in [create_tab, grid, dormant] {
+        std::fs::write(&path, configured.to_string()).unwrap();
+        // These are valid existing configurations, but cannot enter the narrow profile.
+        assert!(f
+            .run(&["registry", "check", "--config", path.to_str().unwrap()])
+            .status
+            .success());
+        let denied = f.run(&[
+            "registry",
+            "check",
+            "--config",
+            path.to_str().unwrap(),
+            "--profile",
+            "readonly",
+        ]);
+        assert_eq!(denied.status.code(), Some(1));
+        assert_eq!(data(&denied)["error"]["code"], "registry_write_permissions");
+    }
+    std::fs::write(&path, template.to_string()).unwrap();
+    for profile in ["", "ReadOnly", "legacy", "controlled_write", "readonly "] {
+        let result = f.run(&[
+            "registry",
+            "check",
+            "--config",
+            path.to_str().unwrap(),
+            "--profile",
+            profile,
+        ]);
+        assert_eq!(result.status.code(), Some(1));
+        assert_eq!(data(&result)["error"]["code"], "profile_unknown");
+    }
+    let duplicate = f.run(&[
+        "registry",
+        "check",
+        "--config",
+        path.to_str().unwrap(),
+        "--profile",
+        "readonly",
+        "--profile",
+        "readonly",
+    ]);
+    assert_eq!(duplicate.status.code(), Some(2));
+    assert_eq!(data(&duplicate)["error"]["code"], "usage");
+}
+
+#[test]
 fn init_creates_a_private_inactive_template_and_never_overwrites_existing_files() {
     let f = Fixture::new();
     let path = f.0.join("new.json");
@@ -167,6 +271,98 @@ fn syntax_schema_and_domain_errors_are_sanitized_and_share_core_rules() {
         assert!(!output.contains("CANARY"));
         assert_eq!(std::fs::read(&path).unwrap(), bytes);
     }
+}
+
+#[test]
+fn duplicate_json_keys_cannot_hide_registry_mappings_or_registration_intent() {
+    let f = Fixture::new();
+    let path = f.config();
+    let template = include_str!("../../../config/workspace.example.json");
+    // Escaped keys have the same meaning as their decoded spelling.
+    for field in ["headers", "formulas"] {
+        let bytes = template.replace(
+            &format!("\"{field}\": {{}}"),
+            &format!(
+                r#""{field}": {{"B2":"PRIVATE_FIRST_CANARY","\u00422":"PRIVATE_LAST_CANARY"}}"#
+            ),
+        );
+        std::fs::write(&path, &bytes).unwrap();
+        for profile in [vec![], vec!["--profile", "readonly"]] {
+            let mut args = vec!["registry", "check", "--config", path.to_str().unwrap()];
+            args.extend(profile);
+            let result = f.run(&args);
+            assert_eq!(result.status.code(), Some(1));
+            assert_eq!(data(&result)["error"]["code"], "registry_schema_invalid");
+            assert!(result.stderr.is_empty());
+            assert!(!String::from_utf8_lossy(&result.stdout).contains("PRIVATE"));
+        }
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), bytes);
+    }
+
+    let base = f.config();
+    let addition = f.0.join("addition.json");
+    let candidate = f.0.join("candidate.json");
+    let bytes = r#"{"version":"next","resource":{"kind":"document","alias":"PRIVATE_FIRST_CANARY","alias":"PRIVATE_LAST_CANARY","id":"PRIVATE_ID_CANARY"}}"#;
+    std::fs::write(&addition, bytes).unwrap();
+    let result = f.add(&base, &addition, &candidate);
+    assert_eq!(result.status.code(), Some(1));
+    assert_eq!(data(&result)["error"]["code"], "registry_schema_invalid");
+    assert!(result.stderr.is_empty());
+    assert!(!String::from_utf8_lossy(&result.stdout).contains("PRIVATE"));
+    assert!(!candidate.exists());
+    assert_eq!(std::fs::read_to_string(addition).unwrap(), bytes);
+}
+
+#[cfg(unix)]
+#[test]
+fn startup_rejects_ambiguous_or_unsafe_registry_before_opening_credentials() {
+    let f = Fixture::new();
+    let path = f.config();
+    let credentials = f.0.join("PRIVATE_CREDENTIAL_CANARY");
+    assert!(Command::new("mkfifo")
+        .arg(&credentials)
+        .status()
+        .unwrap()
+        .success());
+    let state = f.0.join("must-not-exist");
+    let duplicate = include_str!("../../../config/workspace.example.json").replace(
+        "\"headers\": {}",
+        r#""headers": {"B2":"PRIVATE_FIRST_CANARY","B2":"PRIVATE_LAST_CANARY"}"#,
+    );
+    std::fs::write(&path, &duplicate).unwrap();
+    let link = f.0.join("link.json");
+    std::os::unix::fs::symlink(&path, &link).unwrap();
+    let oversized = f.0.join("large.json");
+    std::fs::write(&oversized, vec![b' '; 1024 * 1024 + 1]).unwrap();
+    for (input, error) in [
+        (&path, "InvalidSchema"),
+        (&link, "UnsafeFile"),
+        (&oversized, "TooLarge"),
+    ] {
+        // Any attempt to open the credential FIFO hangs until the fixture's
+        // deadline; denial must happen before secrets, journal or listener.
+        let result = f.run_with_env(
+            &[],
+            &[
+                ("SECRETARY_CONFIG", input.to_str().unwrap()),
+                ("SECRETARY_CORE_TOKEN", "PRIVATE_TOKEN_CANARY"),
+                ("SECRETARY_OWNER", "PRIVATE_OWNER_CANARY"),
+                ("SECRETARY_STATE_DIR", state.to_str().unwrap()),
+                (
+                    "GOOGLE_APPLICATION_CREDENTIALS",
+                    credentials.to_str().unwrap(),
+                ),
+            ],
+        );
+        assert_eq!(result.status.code(), Some(1));
+        assert!(result.stdout.is_empty());
+        let message = String::from_utf8_lossy(&result.stderr);
+        assert!(message.contains(error), "{message}");
+        assert!(!message.contains("PRIVATE"));
+        assert!(!message.contains(f.0.to_str().unwrap()));
+        assert!(!state.exists());
+    }
+    assert_eq!(std::fs::read_to_string(path).unwrap(), duplicate);
 }
 
 #[test]

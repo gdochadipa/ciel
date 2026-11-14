@@ -1,0 +1,16 @@
+{
+  "schema": "ciel.readonly.service-policy.v1",
+  "revision": "example-policy-01",
+  "core": {
+    "uid": 10001,
+    "gid": 10001
+  },
+  "gateway": {
+    "uid": 10002,
+    "gid": 10002
+  },
+  "listener": "127.0.0.1:8787",
+  "filesystem": "linux-root-owned-no-acl.v1",
+  "launcher": "ciel.readonly.launcher.v1",
+  "endpoints": "google-production.v1"
+}

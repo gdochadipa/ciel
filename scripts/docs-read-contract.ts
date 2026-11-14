@@ -17,3 +17,10 @@ const validateSheets=ajv.compile({$ref:'urn:ciel:core-contract#/paths/~1v1~1tool
 export function assertSheetsReadResponse(response:unknown) {
  assert(validateSheets(response),ajv.errorsText(validateSheets.errors));
 }
+
+const budgetValidators=Object.fromEntries(['sheets_list','sheets_describe','sheets_read','sheets_search','docs_list','docs_describe','docs_read','docs_search'].map(tool=>[tool,ajv.compile({$ref:`urn:ciel:core-contract#/paths/~1v1~1tools~1${tool}/post/responses/200/content/application~1vnd.ciel.read-budget+json/schema`})]));
+export function assertReadBudgetResponse(tool:string,response:unknown) {
+ const validate=budgetValidators[tool];
+ assert(validate,'Unsupported budgeted read tool');
+ assert(validate(response),ajv.errorsText(validate.errors));
+}

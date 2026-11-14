@@ -4,6 +4,14 @@ use serde::Deserialize;
 /// Typed in-process application requests, including reads and mutations.
 /// HTTP names and JSON decoding belong to presentation.
 pub enum Command {
+    /// Trusted native scope control, authenticated before decoding.
+    TaskControl(super::task_authority::TaskControl),
+    /// One member with a host confirmation after source preflight.
+    TaskExecute {
+        member: super::task_authority::TaskMember,
+        confirmation: std::sync::Arc<dyn super::task_authority::DispatchConfirmation>,
+    },
+
     DocsList,
     DocsDescribe(DocumentRequest),
     DocsRead(DocumentRead),

@@ -19,6 +19,7 @@ pub struct GoogleClient {
     base: Arc<str>,
     docs_base: Arc<str>,
     auth: Arc<Auth>,
+    read_only: bool,
 }
 enum Auth {
     Static(String),
@@ -36,6 +37,20 @@ pub struct ServiceAccount {
     pub private_key: String,
 }
 impl GoogleClient {
+    /// Permanently lower this client's capabilities to source observation only.
+    ///
+    /// This cannot raise grants or qualify a host. Production composition uses
+    /// protected credentials/read scopes; disposable tests may lower a static client.
+    ///
+    /// # Examples
+    /// ```
+    /// let client = secretary_core::GoogleClient::static_token("http://127.0.0.1:9", "synthetic")?.read_only();
+    /// # Ok::<(), String>(())
+    /// ```
+    pub fn read_only(mut self) -> Self {
+        self.read_only = true;
+        self
+    }
     fn client() -> Result<reqwest::Client, String> {
         reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
@@ -58,6 +73,7 @@ impl GoogleClient {
             base: base.trim_end_matches('/').into(),
             docs_base: base.trim_end_matches('/').into(),
             auth: Arc::new(Auth::Static(token.into())),
+            read_only: false,
         })
     }
     pub fn service_account(email: String, pem: &str) -> Result<Self, String> {
@@ -106,6 +122,41 @@ impl GoogleClient {
         if email.is_empty() {
             return Err("missing service account email".into());
         }
+        Self::with_key(email, key, scopes, false)
+    }
+
+    #[cfg(any(test, all(target_os = "linux", target_env = "gnu")))]
+    pub(crate) fn read_only_key(
+        email: String,
+        key: jsonwebtoken::EncodingKey,
+        sheets: bool,
+        documents: bool,
+    ) -> Result<Self, String> {
+        let scopes = [
+            (
+                sheets,
+                "https://www.googleapis.com/auth/spreadsheets.readonly",
+            ),
+            (
+                documents,
+                "https://www.googleapis.com/auth/documents.readonly",
+            ),
+        ]
+        .into_iter()
+        .filter_map(|(enabled, scope)| enabled.then_some(scope))
+        .collect::<Vec<_>>();
+        if scopes.is_empty() || email.is_empty() {
+            return Err("read-only credential capabilities missing".into());
+        }
+        Self::with_key(email, key, scopes, true)
+    }
+
+    fn with_key(
+        email: String,
+        key: jsonwebtoken::EncodingKey,
+        scopes: Vec<&'static str>,
+        read_only: bool,
+    ) -> Result<Self, String> {
         Ok(Self {
             client: Self::client()?,
             base: "https://sheets.googleapis.com/v4".into(),
@@ -116,6 +167,7 @@ impl GoogleClient {
                 scopes,
                 cache: tokio::sync::Mutex::new(None),
             }),
+            read_only,
         })
     }
     async fn token(&self) -> Result<String, CoreError> {
@@ -208,6 +260,9 @@ impl GoogleClient {
         document: &crate::domain::registry::Document,
         preview: &crate::domain::operation::Preview,
     ) -> WriteOutcome {
+        if self.read_only {
+            return WriteOutcome::Rejected;
+        }
         let result = tokio::time::timeout(Duration::from_secs(10), async {
             let request = crate::domain::documents::requests(preview)?;
             let token = self.token().await?;
@@ -263,6 +318,9 @@ impl GoogleClient {
         s: &Spreadsheet,
         p: &crate::domain::operation::Preview,
     ) -> WriteOutcome {
+        if self.read_only {
+            return WriteOutcome::Rejected;
+        }
         let result = tokio::time::timeout(Duration::from_secs(10), async {
             let token = self.token().await?;
             let response = self
@@ -311,6 +369,9 @@ impl GoogleClient {
         p: &crate::domain::operation::Preview,
         row: Option<usize>,
     ) -> WriteOutcome {
+        if self.read_only {
+            return WriteOutcome::Rejected;
+        }
         let result =
             tokio::time::timeout(Duration::from_secs(10), self.write_inner(s, v, p, row)).await;
         match result {
@@ -535,5 +596,92 @@ impl crate::application::ports::WorkspacePort for GoogleClient {
         row: Option<usize>,
     ) -> crate::application::ports::PortFuture<'a, WriteOutcome> {
         Box::pin(self.write_values(s, v, p, row))
+    }
+}
+
+#[cfg(test)]
+mod readonly_tests {
+    use super::*;
+    use crate::{
+        application::ports::WorkspacePort,
+        domain::{
+            operation::{Preview, ResourceKind},
+            registry::Registry,
+        },
+    };
+
+    #[tokio::test]
+    async fn readonly_adapter_rejects_all_mutations_before_auth_or_network() {
+        let registry: Registry =
+            serde_json::from_str(include_str!("../../../../config/workspace.example.json"))
+                .unwrap();
+        let client = GoogleClient::static_token("http://127.0.0.1:9", "synthetic")
+            .unwrap()
+            .read_only();
+        let preview = Preview {
+            resource_kind: ResourceKind::Sheets,
+            operation_id: "synthetic".into(),
+            actor: "owner".into(),
+            spreadsheet: "operations".into(),
+            view: "overview".into(),
+            action: "append".into(),
+            record_id: String::new(),
+            fields: json!({}),
+            before: Value::Null,
+            after: Value::Null,
+            mapping_version: "v1".into(),
+            source_revision: "r1".into(),
+            expires_at: 0,
+            preview_digest: String::new(),
+        };
+        let sheet = &registry.spreadsheets[0];
+        assert_eq!(
+            client
+                .write_values(sheet, &sheet.views[0], &preview, None)
+                .await,
+            WriteOutcome::Rejected
+        );
+        assert_eq!(
+            client.write_grid(sheet, &preview).await,
+            WriteOutcome::Rejected
+        );
+        assert_eq!(
+            client.create_tab(sheet, &preview).await,
+            WriteOutcome::Rejected
+        );
+        assert_eq!(
+            client
+                .write_document(&registry.documents[0], &preview)
+                .await,
+            WriteOutcome::Rejected
+        );
+    }
+
+    #[test]
+    fn snapshot_key_factory_can_only_derive_registered_read_scopes() {
+        let key = jsonwebtoken::EncodingKey::from_rsa_pem(include_bytes!(
+            "../../tests/support/synthetic-rsa.pem"
+        ))
+        .unwrap();
+        let client = GoogleClient::read_only_key(
+            "synthetic@test.iam.gserviceaccount.com".into(),
+            key,
+            true,
+            true,
+        )
+        .unwrap();
+        assert!(client.read_only);
+        let Auth::Service { scopes, .. } = client.auth.as_ref() else {
+            panic!("service identity required")
+        };
+        assert_eq!(
+            scopes,
+            &[
+                "https://www.googleapis.com/auth/spreadsheets.readonly",
+                "https://www.googleapis.com/auth/documents.readonly"
+            ]
+        );
+        assert_eq!(client.base.as_ref(), "https://sheets.googleapis.com/v4");
+        assert_eq!(client.docs_base.as_ref(), "https://docs.googleapis.com/v1");
     }
 }

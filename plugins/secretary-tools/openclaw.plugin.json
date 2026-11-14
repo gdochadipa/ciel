@@ -27,6 +27,10 @@
       "summaryMemoryEnabled": {
         "type": "boolean",
         "default": false
+      },
+      "readOnlyRuntime": {
+        "type": "boolean",
+        "default": false
       }
     },
     "additionalProperties": false

@@ -23,11 +23,13 @@ sha2="0.10"
 sqlx={version="0.7",default-features=false,features=["sqlite","runtime-tokio"]}
 uuid={version="1",features=["v4"]}
 tokio={version="1",features=["full"]}
+[target.'cfg(unix)'.dependencies]
+libc="0.2"
 ''')
 lines=[]
 for name in ('domain','application','presentation'):
     lines.append('#[path='+json.dumps(str(src/'src'/name/'mod.rs'))+'] pub mod '+name+';')
-lines.append('pub mod infrastructure { #[path='+json.dumps(str(src/'src/infrastructure/journal.rs'))+'] pub mod journal; }')
+lines.append('pub mod infrastructure { '+ ' '.join('#[path='+json.dumps(str(src/'src/infrastructure'/f'{name}.rs'))+'] '+visibility+'mod '+name+';' for name,visibility in (('journal','pub '),('config','pub '),('service_check','pub '),('service_files',''))) +' }')
 lines.append('pub use domain::{error::CoreError,registry::Registry,registry,projection,write_model}; pub use infrastructure::journal; pub use application::writes; pub use presentation::http::{router,AppState};')
 (target/'src/lib.rs').write_text('\n'.join(lines))
 for name in ('adapter','write_adapter','write_journal','command_bus'):

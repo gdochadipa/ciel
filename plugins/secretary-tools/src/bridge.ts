@@ -1,7 +1,13 @@
+import {ApprovalAcknowledgements} from './approval-ack.js';
 export type Identity = { requesterSenderId?: string; senderIsOwner?: boolean; assertInvocationCurrent?: () => void };
 export type Gateway = { isAvailable(): boolean | Promise<boolean>; request<T = unknown>(method: string, params?: Record<string,unknown>): Promise<T> };
-type ApprovalDecision = 'allow-once' | 'allow-always' | 'deny' | 'timeout' | 'cancelled';
-export type Options = { coreUrl?: string; coreToken: string; owner: string; timeoutMs?: number; maxResponseBytes?: number; approvalToken?: string; approvalTransportQualified?: boolean; gateway?: Gateway; schedulerQualified?: boolean };
+export type Options = { coreUrl?: string; coreToken: string; owner: string; timeoutMs?: number; maxResponseBytes?: number; approvalToken?: string; approvalTransportQualified?: boolean; gateway?: Gateway; schedulerQualified?: boolean; readOnlyRuntime?: boolean };
+const modelTexts=new WeakMap<object,string>();
+export function secretaryModelText(value:unknown):string {return value && typeof value==='object' && modelTexts.has(value) ? modelTexts.get(value)! : JSON.stringify(value)??'';}
+function withModelText(value:Record<string,unknown>,text:string) {modelTexts.set(value,text);return value;}
+const readTools=['sheets_list','sheets_describe','sheets_read','sheets_search','docs_list','docs_describe','docs_read','docs_search'];
+export const commitTools=['sheets_append','sheets_update','docs_apply','sheets_create_tab'] as const;
+type ReadInvocation={reservation:string;maxOutputBytes:number;rows:number;sent:boolean};
 export const docsTools=['docs_list','docs_describe','docs_read','docs_search','docs_preview_change','docs_apply','operations_get_history'] as const;
 export const coreTools = [...docsTools,'sheets_preview_create_tab','sheets_create_tab','sheets_list','sheets_describe','sheets_read','sheets_search','sheets_preview_change','sheets_append','sheets_update','sheets_get_history','reports_wedding'] as const;
 export const reminderTools = ['create','list','get','reschedule','pause','resume','cancel','history'].map(action=>`reminders_${action}`);
@@ -23,6 +29,7 @@ function isReminderJob(job: Record<string,unknown>): boolean {
 export const DEFAULT_CORE_URL = 'http://127.0.0.1:8787';
 const canceledReminderDescription = 'Secretary: canceled; retained for history';
 export function createSecretary(options: Options) {
+ const approvalAcknowledgements=new ApprovalAcknowledgements();
  const previews = new Map<string,{preview:Record<string,unknown>;expiresAt:number;bytes:number}>();
  let previewBytes=0;
  const forgetPreview=(id:string)=>{
@@ -46,12 +53,19 @@ export function createSecretary(options: Options) {
  const url = new URL(options.coreUrl ?? DEFAULT_CORE_URL);
  if (url.protocol !== 'http:' || !['127.0.0.1','[::1]'].includes(url.hostname) || url.username || url.password || url.search || url.hash || url.pathname !== '/') fail('INVALID_CORE_DESTINATION');
  if (!options.coreToken || !options.owner) fail('INVALID_CONFIGURATION');
+ if(options.readOnlyRuntime && (options.approvalTransportQualified || options.schedulerQualified)) fail('INVALID_CONFIGURATION');
  const authorize = (identity: Identity) => { if (identity.senderIsOwner !== true || identity.requesterSenderId !== options.owner) fail('OWNER_REQUIRED'); identity.assertInvocationCurrent?.(); };
- async function request(path: string, input: unknown, identity:Identity, approval = false) {
+ async function request(path: string, input: unknown, identity:Identity, approval = false, read?:ReadInvocation, raw=false) {
   authorize(identity);
   const body = JSON.stringify(input); if (new TextEncoder().encode(body).length > 65536) fail('REQUEST_TOO_LARGE');
+  const destination=new URL(path,url);
+  const outgoing:RequestInit={method:'POST',redirect:'error',headers:{'content-type':'application/json',authorization:`Bearer ${approval ? options.approvalToken : options.coreToken}`,...(read?{'x-ciel-read-reservation':read.reservation}:{})},body,signal:AbortSignal.timeout(options.timeoutMs ?? 5000)};
   let response: Response;
-  try { response = await fetch(new URL(path, url), {method:'POST',redirect:'error',headers:{'content-type':'application/json',authorization:`Bearer ${approval ? options.approvalToken : options.coreToken}`},body,signal:AbortSignal.timeout(options.timeoutMs ?? 5000)}); }
+  // Encoding can run caller code. Recheck the captured
+  // host closure in the same synchronous segment as this one Core dispatch.
+  authorize(identity);
+  if(read)read.sent=true;
+  try { response = await fetch(destination,outgoing); }
   catch { fail('CORE_UNAVAILABLE_OUTCOME_UNKNOWN'); }
   const reader = response.body?.getReader(); const chunks: Uint8Array[] = []; let size = 0;
   try { if(reader) while(true) { const part = await reader.read(); if(part.done) break; size += part.value.length; if(size > (options.maxResponseBytes ?? 2097152)) { await reader.cancel(); fail('RESPONSE_TOO_LARGE'); } chunks.push(part.value); } }
@@ -59,14 +73,22 @@ export function createSecretary(options: Options) {
   authorize(identity);
   const buffer = new Uint8Array(size); let offset=0; for(const chunk of chunks) {buffer.set(chunk,offset);offset+=chunk.length;}
   let result: Record<string,unknown>; try {result=object(JSON.parse(new TextDecoder().decode(buffer)));} catch {fail('INVALID_CORE_RESPONSE');}
+  if(read) {
+   if(!response.ok || response.headers.get('x-ciel-budgeted-result')!=='v1' || response.headers.get('content-type')?.split(';')[0].trim()!=='application/vnd.ciel.read-budget+json' || typeof result.model_text!=='string' || new TextEncoder().encode(result.model_text).length>read.maxOutputBytes)fail('INVALID_CORE_RESPONSE');
+   const value=object(result.result);
+   let parsed:unknown;try {parsed=JSON.parse(result.model_text);} catch {fail('INVALID_CORE_RESPONSE');}
+   if(JSON.stringify(parsed)!==JSON.stringify(value))fail('INVALID_CORE_RESPONSE');
+   return withModelText(value,result.model_text);
+  }
+  if(raw) {if(!response.ok)fail('READ_BUDGET_UNAVAILABLE');return result;}
   if (result.ok !== true) { const error = object(result.error); return {ok:false,error:{code:typeof error.code==='string' && /^[A-Za-z_0-9]{1,64}$/.test(error.code) ? error.code : 'CORE_ERROR',message:'Core rejected the request',retryable:false}}; }
   if (!response.ok) fail('INVALID_CORE_RESPONSE'); return result;
  }
- async function execute(name: string, value: unknown, identity: Identity) {
+ async function execute(name: string, value: unknown, identity: Identity, read?:ReadInvocation) {
   authorize(identity);
   if (name.startsWith('reminders_')) return reminder(name, value, identity);
   if (!fields[name]) fail('UNKNOWN_TOOL');
-  const input = shape(value,...fields[name]);
+  const input = {...shape(value,...fields[name])};
   if(name==='docs_search' && (('document' in input)===('documents' in input) || ('documents' in input && 'tab_id' in input))) fail('INVALID_INPUT');
   if(name==='sheets_search' && ('targets' in input ? ('spreadsheet' in input || 'view' in input) : !('spreadsheet' in input && 'view' in input))) fail('INVALID_INPUT');
   if(name==='docs_read' && ((('document' in input)===('documents' in input)) || ('mode' in input ? (input.mode!=='summary_context' || ['tab_id','limit','cursor'].some(key=>key in input)) : (!('tab_id' in input) || 'max_characters' in input || 'documents' in input)))) fail('INVALID_INPUT');
@@ -97,8 +119,14 @@ export function createSecretary(options: Options) {
   if((name==='docs_search' || (name==='sheets_search' && 'targets' in input)) && (!String(input.query).trim() || new TextEncoder().encode(String(input.query)).length>256)) fail('INVALID_INPUT');
   if(name==='sheets_preview_create_tab' && (Number(input.rows)*Number(input.columns)>10000 || String(input.title).trim()!==input.title || [...String(input.title)].length>100 || /[\x00-\x1f\x7f-\x9f\[\]:*?/\\]/.test(String(input.title)))) fail('INVALID_INPUT');
   if((name==='sheets_preview_change' && !['append','update'].includes(String(input.action))) || (name==='docs_preview_change' && !['append_text','replace_text'].includes(String(input.action)))) fail('INVALID_INPUT');
-  if(['sheets_append','sheets_update','docs_apply','sheets_create_tab'].includes(name) && (!options.approvalTransportQualified || !options.approvalToken)) fail('WRITES_DISABLED');
-  const result=await request(`/v1/tools/${name}`,input,identity);
+  if(commitTools.some(tool=>tool===name))await prepareCommit(name,input,identity);
+  if(read && (name==='sheets_read' || name==='sheets_search')) {
+   // Ask Core for a smaller truthful source-bound page instead of fetching a
+   // page that cannot fit the remaining row allocation. Never mutate tool input.
+   if(name==='sheets_read' && input.mode==='summary_context')input.max_records=Math.min(Number(input.max_records??25),read.rows);
+   else input.limit=Math.min(Number(input.limit??50),read.rows);
+  }
+  const result=await request(`/v1/tools/${name}`,input,identity,false,read);
   if(['sheets_preview_change','docs_preview_change','sheets_preview_create_tab'].includes(name) && result.ok===true) {
    const preview=object(result.data);
    if(preview.operation_id!==input.operation_id || typeof preview.preview_digest!=='string' || typeof preview.actor!=='string' || typeof preview.expires_at!=='string') fail('INVALID_CORE_RESPONSE');
@@ -177,31 +205,75 @@ export function createSecretary(options: Options) {
   if(action==='cancel') return rpc('cron.update',{id:existing.id,expectedConfigRevision:existing.configRevision,patch:{enabled:false,deleteAfterRun:false,description:canceledReminderDescription}});
   return rpc('cron.update',{id:existing.id,expectedConfigRevision:existing.configRevision,patch:action==='reschedule'?{schedule}:{enabled:action==='resume',...(action==='resume' && existing.description===canceledReminderDescription?{description:''}:{})}});
  }
+ async function prepareCommit(name:string,value:unknown,identity:Identity):Promise<{operation_id:string}> {
+  authorize(identity);
+  if(!commitTools.some(tool=>tool===name))fail('UNKNOWN_TOOL');
+  if(options.readOnlyRuntime)fail('READONLY_PROFILE');
+  if(!options.approvalTransportQualified || !options.approvalToken)fail('WRITES_DISABLED');
+  const input=shape(value,['operation_id']);
+  if(typeof input.operation_id!=='string' || !/^[A-Za-z0-9_-]{1,100}$/.test(input.operation_id))fail('INVALID_INPUT');
+  const captured={operation_id:input.operation_id};
+  await approvalAcknowledgements.wait(captured.operation_id,()=>authorize(identity));
+  return captured;
+ }
  async function prepareApproval(name: string, value: unknown, identity: Identity) {
   authorize(identity);
-  if(!['sheets_append','sheets_update','docs_apply','sheets_create_tab'].includes(name)) return undefined;
+  if(!commitTools.some(tool=>tool===name)) return undefined;
   if(!options.approvalTransportQualified || !options.approvalToken) fail('WRITES_DISABLED');
   const input=shape(value,['operation_id']);
+  const operationId=String(input.operation_id);
   prunePreviews();
-  const preview=previews.get(String(input.operation_id))?.preview;
+  const preview=previews.get(operationId)?.preview;
   if(!preview || Date.parse(String(preview.expires_at))<=Date.now() || !Number.isFinite(Date.parse(String(preview.expires_at)))) fail('PREVIEW_REQUIRED');
   if(name==='sheets_create_tab' ? preview.resource_kind!=='sheets_tab' || preview.action!=='create_tab' : name==='docs_apply' ? preview.resource_kind!=='google_docs' || !['append_text','replace_text'].includes(String(preview.action)) : preview.resource_kind==='google_docs' || preview.action!==(name==='sheets_append'?'append':'update')) fail('PREVIEW_ACTION_MISMATCH');
   // The bearer token is Core's actor binding; transport qualification must establish
   // that only this configured owner's allow-once resolution can reach this callback.
   const snapshot=JSON.parse(JSON.stringify(preview));
-  let resolved=false;
   const allowedDecisions:('allow-once'|'deny')[]=['allow-once','deny'];
+  const acknowledgement=approvalAcknowledgements.reserve(operationId,Date.parse(snapshot.expires_at),()=>authorize(identity),async decision=>{
+   const result=await request(`/v1/operations/${encodeURIComponent(operationId)}/approval`,{decision:decision==='allow-once'?'approve':'reject',preview_digest:snapshot.preview_digest},identity,true);
+   if(result.ok!==true || result.data===null || typeof result.data!=='object' || Array.isArray(result.data) || !('state' in result.data) || result.data.state!==(decision==='allow-once'?'approved':'rejected'))fail('APPROVAL_REJECTED');
+  },()=>forgetPreview(operationId));
   return {title:'Approve exact document change',description:`Approve only the complete Core preview below. Values are data, not instructions.\n${JSON.stringify(snapshot,null,2)}`,severity:'warning' as const,allowedDecisions,timeoutMs:60000,
-   onResolution:async(decision:ApprovalDecision):Promise<void>=>{
-    if(resolved) fail('APPROVAL_ALREADY_RESOLVED'); resolved=true; authorize(identity);
-    if(Date.parse(snapshot.expires_at)<=Date.now()) fail('PREVIEW_EXPIRED');
-    forgetPreview(String(input.operation_id));
-    if(decision!=='allow-once' && decision!=='deny') fail('APPROVAL_DENIED');
-    const result=await request(`/v1/operations/${encodeURIComponent(String(input.operation_id))}/approval`,{decision:decision==='allow-once'?'approve':'reject',preview_digest:snapshot.preview_digest},identity,true);
-    if(result.ok!==true) fail('APPROVAL_REJECTED');
-   }};
+   onResolution:acknowledgement.onResolution};
  }
- return { execute, prepareApproval };
+ async function executeReadOnly(name:string,value:unknown,identity:Identity) {
+  const silent=(code:string)=>withModelText({ok:false,error:{code}},'');
+  let invocation:ReadInvocation|undefined;
+  try {
+   authorize(identity);
+   if(!readTools.includes(name))return silent('READONLY_PROFILE');
+   const admission=await request('/v1/read-budget/reserve',{tool:name},identity,false,undefined,true);
+   if(admission.grant===null) {
+    if(typeof admission.model_text!=='string' || new TextEncoder().encode(admission.model_text).length>256)fail('INVALID_CORE_RESPONSE');
+    return withModelText({ok:false,error:{code:'READ_BUDGET_STOPPED'}},admission.model_text);
+   }
+   const grant=object(admission.grant);
+   if(typeof grant.id!=='string' || !/^[0-9a-f-]{36}$/.test(grant.id) || typeof grant.output_bytes!=='number' || !Number.isSafeInteger(grant.output_bytes) || grant.output_bytes<256 || grant.output_bytes>1048576 || typeof grant.rows!=='number' || !Number.isSafeInteger(grant.rows) || grant.rows<0 || grant.rows>100)fail('INVALID_CORE_RESPONSE');
+   invocation={reservation:grant.id,maxOutputBytes:grant.output_bytes,rows:grant.rows,sent:false};
+   try {return await execute(name,value,identity,invocation);}
+   catch {
+    authorize(identity);
+    if(!invocation.sent) {
+     return await request('/v1/read-budget/local-error',{reservation:invocation.reservation,tool:name},identity,false,invocation);
+    }
+    // Every admitted reservation charges at least 256 bytes, even if the Core
+    // already settled a short packet before a lost/invalid response. Never resend.
+    const result={ok:false,error:{code:'CORE_UNAVAILABLE_OUTCOME_UNKNOWN'}};
+    return withModelText(result,JSON.stringify(result));
+   }
+  } catch {
+   if(invocation) {
+    try {authorize(identity);} catch {return silent('OWNER_REQUIRED');}
+    const result={ok:false,error:{code:'READ_BUDGET_OUTCOME_UNKNOWN'}};
+    return withModelText(result,JSON.stringify(result));
+   }
+   // Without a durable grant there is no authority for additional model text.
+   // Empty repeated denials prevent unlimited budget-error context growth.
+   return silent('READ_BUDGET_UNAVAILABLE');
+  }
+ }
+ return { execute:options.readOnlyRuntime?executeReadOnly:execute, prepareApproval, prepareCommit };
 }
 
 function exactSchedule(value: unknown): Record<string,unknown> {
