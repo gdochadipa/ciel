@@ -188,6 +188,179 @@ async fn capture(f: &Fixture, task: &Value, id: &str, grid: bool) -> Value {
     )
     .await
 }
+async fn capture_compound(f: &Fixture, task: &Value, id: &str) -> Value {
+    control(&f.app, json!({"action":"capture","task_id":task["task_id"],"context":context(),"change":{
+        "kind":"document","operation_id":id,"document":"notes","tab_id":"t.0","action":"replace_text_batch",
+        "fields":{"replacements":[{"find":"old","replacement":"new"},{"find":"note","replacement":"record"}]}
+    }})).await
+}
+async fn capture_doc(f: &Fixture, task: &Value, id: &str, compound: bool) -> Value {
+    if compound {
+        capture_compound(f, task, id).await
+    } else {
+        capture(f, task, id, false).await
+    }
+}
+async fn dispatch(f: &Fixture, task: &Value, id: &str) -> Value {
+    let mut stream = post(&f.app, "/v1/write-tasks/execute", member(task, id), NATIVE)
+        .await
+        .into_body()
+        .into_data_stream();
+    let first: Value = serde_json::from_slice(&stream.next().await.unwrap().unwrap()).unwrap();
+    if first["type"] != "ready" {
+        return first;
+    }
+    assert_eq!(
+        post(
+            &f.app,
+            "/v1/write-tasks/confirm",
+            first["challenge"].clone(),
+            NATIVE
+        )
+        .await
+        .status(),
+        200
+    );
+    serde_json::from_slice(&stream.next().await.unwrap().unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn compound_members_keep_exact_replay_counts_and_partial_outcomes_on_human_drift() {
+    let f = fixture(true).await;
+    let task = grant(&f).await;
+    let first = capture_compound(&f, &task, "batch").await;
+    assert_eq!(capture_compound(&f, &task, "batch").await, first);
+    assert_eq!(
+        dispatch(&f, &task, "batch").await["data"]["state"],
+        "applied"
+    );
+    assert_eq!(f.source.sends.load(Ordering::SeqCst), 1);
+    let next = json!({"action":"capture","task_id":task["task_id"],"context":context(),"change":{
+        "kind":"document","operation_id":"following","document":"notes","tab_id":"t.0","action":"replace_text_batch",
+        "fields":{"replacements":[{"find":"new","replacement":"next"},{"find":"record","replacement":"memo"}]}
+    }});
+    let fresh = control(&f.app, next.clone()).await;
+    assert_eq!(fresh["before"], first["after"]);
+    assert_ne!(fresh["source_revision"], first["source_revision"]);
+    let mut changed = next;
+    changed["change"]["fields"]["replacements"][0]["replacement"] = json!("different");
+    let (status, refused) =
+        value(post(&f.app, "/v1/write-tasks/native", changed, NATIVE).await).await;
+    assert_eq!(status, 409);
+    assert_eq!(refused["error"]["code"], "operation_conflict");
+    f.source.doc.lock().await["revisionId"] = json!("human-revision");
+    assert_eq!(
+        dispatch(&f, &task, "following").await["data"]["state"],
+        "conflict"
+    );
+    assert_eq!(f.source.sends.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        f.journal.get("batch").await.unwrap().state.as_str(),
+        "applied"
+    );
+    assert_eq!(
+        f.journal.get("following").await.unwrap().state.as_str(),
+        "conflict"
+    );
+    let review = control(
+        &f.app,
+        json!({"action":"review","task_id":task["task_id"],"context":context()}),
+    )
+    .await;
+    assert_eq!(review["admitted_operations"], 2);
+}
+
+#[tokio::test]
+async fn compound_finish_persistence_failure_recovers_by_observation_without_another_send() {
+    let f = fixture(true).await;
+    let task = grant(&f).await;
+    capture_compound(&f, &task, "interrupted-batch").await;
+    let pool = sqlx::SqlitePool::connect(&format!(
+        "sqlite://{}",
+        f._dir.path().join("secretary.sqlite3").display()
+    ))
+    .await
+    .unwrap();
+    sqlx::query("CREATE TRIGGER fail_compound_finish BEFORE UPDATE OF state ON operations WHEN NEW.state='applied' BEGIN SELECT RAISE(ABORT,'synthetic finish failure'); END").execute(&pool).await.unwrap();
+    let failed = dispatch(&f, &task, "interrupted-batch").await;
+    assert_eq!(failed["ok"], false);
+    assert_eq!(
+        f.journal
+            .get("interrupted-batch")
+            .await
+            .unwrap()
+            .state
+            .as_str(),
+        "applying"
+    );
+    assert_eq!(f.source.sends.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM write_task_dispatches WHERE operation_id='interrupted-batch'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
+    sqlx::query("DROP TRIGGER fail_compound_finish")
+        .execute(&pool)
+        .await
+        .unwrap();
+    pool.close().await;
+    let Fixture {
+        app,
+        journal,
+        source,
+        _dir,
+    } = f;
+    drop(app);
+    drop(journal);
+    let recovered = Journal::open(_dir.path()).await.unwrap();
+    assert_eq!(
+        recovered
+            .get("interrupted-batch")
+            .await
+            .unwrap()
+            .state
+            .as_str(),
+        "reconciliation"
+    );
+    let tasks = JournalWriteTasks::open(recovered.clone(), "owner", "deployment")
+        .await
+        .unwrap();
+    let registry = serde_json::from_value(json!({"version":"v1","spreadsheets":[],"documents":[{"alias":"notes","id":"doc","readable":true,"writable":true}]})).unwrap();
+    let app = router(
+        AppState::new(registry, CORE.into(), "owner".into(), source.clone())
+            .unwrap()
+            .with_writes(Writes::with_task_ledger(tasks, true), NATIVE.into())
+            .unwrap(),
+    );
+    for _ in 0..2 {
+        let (status, observed) = value(
+            post(
+                &app,
+                "/v1/operations/interrupted-batch/reconcile",
+                json!({}),
+                NATIVE,
+            )
+            .await,
+        )
+        .await;
+        assert_eq!(status, 200, "{observed}");
+        assert_eq!(observed["data"]["state"], "applied");
+        assert_eq!(source.sends.load(Ordering::SeqCst), 1);
+    }
+    assert_eq!(
+        recovered
+            .get("interrupted-batch")
+            .await
+            .unwrap()
+            .preview
+            .after["text"],
+        "new record\n"
+    );
+}
 fn member(task: &Value, id: &str) -> Value {
     json!({"task_id":task["task_id"],"context":context(),"grant_revision":task["grant_revision"],"operation_id":id})
 }
@@ -230,10 +403,15 @@ async fn native_controls_authenticate_before_decode_and_disabled_routes_have_no_
 }
 #[tokio::test]
 async fn owner_grant_admits_and_dispatches_exactly_one_docs_or_grid_member_after_preflight() {
-    for grid in [false, true] {
+    for profile in 0..3 {
+        let grid = profile == 1;
         let f = fixture(true).await;
         let task = grant(&f).await;
-        let p = capture(&f, &task, "one", grid).await;
+        let p = if profile == 2 {
+            capture_compound(&f, &task, "one").await
+        } else {
+            capture(&f, &task, "one", grid).await
+        };
         let response = post(
             &f.app,
             "/v1/write-tasks/execute",
@@ -303,165 +481,200 @@ async fn owner_grant_admits_and_dispatches_exactly_one_docs_or_grid_member_after
 }
 #[tokio::test]
 async fn cancellation_between_ready_and_confirm_prevents_the_provider_send() {
-    let f = fixture(true).await;
-    let task = grant(&f).await;
-    capture(&f, &task, "cancel", false).await;
-    let mut stream = post(
-        &f.app,
-        "/v1/write-tasks/execute",
-        member(&task, "cancel"),
-        NATIVE,
-    )
-    .await
-    .into_body()
-    .into_data_stream();
-    let ready: Value = serde_json::from_slice(&stream.next().await.unwrap().unwrap()).unwrap();
-    cancel(&f, &task).await;
-    assert_eq!(
-        post(
+    for compound in [false, true] {
+        let f = fixture(true).await;
+        let task = grant(&f).await;
+        capture_doc(&f, &task, "cancel", compound).await;
+        let mut stream = post(
             &f.app,
-            "/v1/write-tasks/confirm",
-            ready["challenge"].clone(),
-            NATIVE
+            "/v1/write-tasks/execute",
+            member(&task, "cancel"),
+            NATIVE,
         )
         .await
-        .status(),
-        200
-    );
-    let result: Value = serde_json::from_slice(&stream.next().await.unwrap().unwrap()).unwrap();
-    assert_eq!(result["data"]["state"], "known_failure");
-    assert_eq!(f.source.sends.load(Ordering::SeqCst), 0);
-    assert_eq!(
-        f.journal.get("cancel").await.unwrap().state.as_str(),
-        "known_failure"
-    );
+        .into_body()
+        .into_data_stream();
+        let ready: Value = serde_json::from_slice(&stream.next().await.unwrap().unwrap()).unwrap();
+        cancel(&f, &task).await;
+        assert_eq!(
+            post(
+                &f.app,
+                "/v1/write-tasks/confirm",
+                ready["challenge"].clone(),
+                NATIVE
+            )
+            .await
+            .status(),
+            200
+        );
+        let result: Value = serde_json::from_slice(&stream.next().await.unwrap().unwrap()).unwrap();
+        assert_eq!(result["data"]["state"], "known_failure");
+        assert_eq!(f.source.sends.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            f.journal.get("cancel").await.unwrap().state.as_str(),
+            "known_failure"
+        );
+    }
 }
 #[tokio::test]
 async fn cancellation_after_accepted_dispatch_keeps_the_one_outcome_and_denies_following_work() {
-    let f = fixture(true).await;
-    let task = grant(&f).await;
-    capture(&f, &task, "accepted", false).await;
-    f.source.outcome.store(3, Ordering::SeqCst);
-    let mut stream = post(
-        &f.app,
-        "/v1/write-tasks/execute",
-        member(&task, "accepted"),
-        NATIVE,
-    )
-    .await
-    .into_body()
-    .into_data_stream();
-    let ready: Value = serde_json::from_slice(&stream.next().await.unwrap().unwrap()).unwrap();
-    assert_eq!(
-        post(
+    for compound in [false, true] {
+        let f = fixture(true).await;
+        let task = grant(&f).await;
+        capture_doc(&f, &task, "accepted", compound).await;
+        f.source.outcome.store(3, Ordering::SeqCst);
+        let mut stream = post(
             &f.app,
-            "/v1/write-tasks/confirm",
-            ready["challenge"].clone(),
-            NATIVE
+            "/v1/write-tasks/execute",
+            member(&task, "accepted"),
+            NATIVE,
         )
         .await
-        .status(),
-        200
-    );
-    let result = tokio::spawn(async move { stream.next().await.unwrap().unwrap() });
-    tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        f.source.send_started.notified(),
-    )
-    .await
-    .unwrap();
-    assert_eq!(f.source.sends.load(Ordering::SeqCst), 1);
-    // The receipt precedes the provider send. Cancellation may revoke following
-    // work while this already accepted effect is waiting for its source response.
-    let pool = sqlx::SqlitePool::connect(&format!(
-        "sqlite://{}",
-        f._dir.path().join("secretary.sqlite3").display()
-    ))
-    .await
-    .unwrap();
-    assert_eq!(
-        sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM write_task_dispatches WHERE operation_id='accepted'"
+        .into_body()
+        .into_data_stream();
+        let ready: Value = serde_json::from_slice(&stream.next().await.unwrap().unwrap()).unwrap();
+        assert_eq!(
+            post(
+                &f.app,
+                "/v1/write-tasks/confirm",
+                ready["challenge"].clone(),
+                NATIVE
+            )
+            .await
+            .status(),
+            200
+        );
+        let result = tokio::spawn(async move { stream.next().await.unwrap().unwrap() });
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            f.source.send_started.notified(),
         )
-        .fetch_one(&pool)
         .await
-        .unwrap(),
-        1
-    );
-    cancel(&f, &task).await;
-    f.source.send_release.notify_one();
-    let bytes = tokio::time::timeout(std::time::Duration::from_secs(5), result)
-        .await
-        .unwrap()
         .unwrap();
-    let result: Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(result["data"]["state"], "applied");
-    assert_eq!(
-        f.journal.get("accepted").await.unwrap().state.as_str(),
-        "applied"
-    );
-    let reads = f.source.reads.load(Ordering::SeqCst);
-    let (status, failure) = value(post(&f.app, "/v1/write-tasks/native", json!({
+        assert_eq!(f.source.sends.load(Ordering::SeqCst), 1);
+        // The receipt precedes the provider send. Cancellation may revoke following
+        // work while this already accepted effect is waiting for its source response.
+        let pool = sqlx::SqlitePool::connect(&format!(
+            "sqlite://{}",
+            f._dir.path().join("secretary.sqlite3").display()
+        ))
+        .await
+        .unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM write_task_dispatches WHERE operation_id='accepted'"
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+            1
+        );
+        cancel(&f, &task).await;
+        f.source.send_release.notify_one();
+        let bytes = tokio::time::timeout(std::time::Duration::from_secs(5), result)
+            .await
+            .unwrap()
+            .unwrap();
+        let result: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(result["data"]["state"], "applied");
+        assert_eq!(
+            f.journal.get("accepted").await.unwrap().state.as_str(),
+            "applied"
+        );
+        let reads = f.source.reads.load(Ordering::SeqCst);
+        let (status, failure) = value(post(&f.app, "/v1/write-tasks/native", json!({
         "action":"capture", "task_id":task["task_id"], "context":context(),
         "change":{"kind":"document","operation_id":"following","document":"notes","tab_id":"t.0","action":"replace_text","fields":{"find":"new","replacement":"next"}}
     }), NATIVE).await).await;
-    assert_eq!(status, 409);
-    assert_eq!(failure["error"]["code"], "write_task_not_active");
-    assert_eq!(f.source.reads.load(Ordering::SeqCst), reads);
-    assert_eq!(f.source.sends.load(Ordering::SeqCst), 1);
-    pool.close().await;
+        assert_eq!(status, 409);
+        assert_eq!(failure["error"]["code"], "write_task_not_active");
+        assert_eq!(f.source.reads.load(Ordering::SeqCst), reads);
+        assert_eq!(f.source.sends.load(Ordering::SeqCst), 1);
+        pool.close().await;
+    }
 }
 
 #[tokio::test]
 async fn dropped_native_request_retires_checkpoint_without_reopening_applying_or_sending() {
-    let f = fixture(true).await;
-    let task = grant(&f).await;
-    capture(&f, &task, "drop", false).await;
-    let mut stream = post(
-        &f.app,
-        "/v1/write-tasks/execute",
-        member(&task, "drop"),
-        NATIVE,
-    )
-    .await
-    .into_body()
-    .into_data_stream();
-    let ready: Value = serde_json::from_slice(&stream.next().await.unwrap().unwrap()).unwrap();
-    drop(stream);
-    assert_eq!(
-        post(
-            &f.app,
-            "/v1/write-tasks/confirm",
-            ready["challenge"].clone(),
-            NATIVE
-        )
-        .await
-        .status(),
-        409
-    );
-    assert_eq!(f.source.sends.load(Ordering::SeqCst), 0);
-    assert_eq!(
-        f.journal.get("drop").await.unwrap().state.as_str(),
-        "applying"
-    );
-    let result = to_bytes(
-        post(
+    for compound in [false, true] {
+        let f = fixture(true).await;
+        let task = grant(&f).await;
+        capture_doc(&f, &task, "drop", compound).await;
+        let mut stream = post(
             &f.app,
             "/v1/write-tasks/execute",
             member(&task, "drop"),
             NATIVE,
         )
         .await
-        .into_body(),
-        262144,
-    )
-    .await
-    .unwrap();
-    assert_eq!(
-        serde_json::from_slice::<Value>(&result).unwrap()["ok"],
-        false
-    );
-    assert_eq!(f.source.sends.load(Ordering::SeqCst), 0);
+        .into_body()
+        .into_data_stream();
+        let ready: Value = serde_json::from_slice(&stream.next().await.unwrap().unwrap()).unwrap();
+        drop(stream);
+        assert_eq!(
+            post(
+                &f.app,
+                "/v1/write-tasks/confirm",
+                ready["challenge"].clone(),
+                NATIVE
+            )
+            .await
+            .status(),
+            409
+        );
+        assert_eq!(f.source.sends.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            f.journal.get("drop").await.unwrap().state.as_str(),
+            "applying"
+        );
+        let result = to_bytes(
+            post(
+                &f.app,
+                "/v1/write-tasks/execute",
+                member(&task, "drop"),
+                NATIVE,
+            )
+            .await
+            .into_body(),
+            262144,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Value>(&result).unwrap()["ok"],
+            false
+        );
+        assert_eq!(f.source.sends.load(Ordering::SeqCst), 0);
+        let stored = f.journal.get("drop").await.unwrap().preview;
+        let binding: secretary_core::application::task_authority::TaskMember =
+            serde_json::from_value(member(&task, "drop")).unwrap();
+        let Fixture {
+            app,
+            journal,
+            source,
+            _dir,
+        } = f;
+        drop(app);
+        drop(journal);
+        let recovered = Journal::open(_dir.path()).await.unwrap();
+        assert_eq!(
+            recovered.get("drop").await.unwrap().state.as_str(),
+            "reconciliation"
+        );
+        assert_eq!(
+            recovered.get("drop").await.unwrap().preview.fields,
+            stored.fields
+        );
+        let ledger = JournalWriteTasks::open(recovered, "owner", "deployment")
+            .await
+            .unwrap();
+        use secretary_core::application::task_authority::TaskLedger;
+        assert_eq!(
+            TaskLedger::claim(&ledger, &binding).await.err().unwrap().1,
+            "write_task_not_active"
+        );
+        assert_eq!(source.sends.load(Ordering::SeqCst), 0);
+    }
 }
 #[tokio::test]
 async fn stale_context_and_out_of_scope_capture_do_not_read_sources() {
@@ -488,89 +701,91 @@ async fn stale_context_and_out_of_scope_capture_do_not_read_sources() {
 
 #[tokio::test]
 async fn drift_stale_revision_and_uncertain_outcomes_never_create_a_second_send() {
-    let f = fixture(true).await;
-    let task = grant(&f).await;
-    capture(&f, &task, "drift", false).await;
-    let mut stale = member(&task, "drift");
-    stale["grant_revision"] = json!(0);
-    let bytes = to_bytes(
-        post(&f.app, "/v1/write-tasks/execute", stale, NATIVE)
+    for compound in [false, true] {
+        let f = fixture(true).await;
+        let task = grant(&f).await;
+        capture_doc(&f, &task, "drift", compound).await;
+        let mut stale = member(&task, "drift");
+        stale["grant_revision"] = json!(0);
+        let bytes = to_bytes(
+            post(&f.app, "/v1/write-tasks/execute", stale, NATIVE)
+                .await
+                .into_body(),
+            262144,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Value>(&bytes).unwrap()["error"]["code"],
+            "write_task_stale_member"
+        );
+        assert_eq!(f.source.reads.load(Ordering::SeqCst), 1);
+        f.source.doc.lock().await["revisionId"] = json!("human-change");
+        let bytes = to_bytes(
+            post(
+                &f.app,
+                "/v1/write-tasks/execute",
+                member(&task, "drift"),
+                NATIVE,
+            )
             .await
             .into_body(),
-        262144,
-    )
-    .await
-    .unwrap();
-    assert_eq!(
-        serde_json::from_slice::<Value>(&bytes).unwrap()["error"]["code"],
-        "write_task_stale_member"
-    );
-    assert_eq!(f.source.reads.load(Ordering::SeqCst), 1);
-    f.source.doc.lock().await["revisionId"] = json!("human-change");
-    let bytes = to_bytes(
-        post(
-            &f.app,
-            "/v1/write-tasks/execute",
-            member(&task, "drift"),
-            NATIVE,
+            262144,
         )
         .await
-        .into_body(),
-        262144,
-    )
-    .await
-    .unwrap();
-    assert_eq!(
-        serde_json::from_slice::<Value>(&bytes).unwrap()["data"]["state"],
-        "conflict"
-    );
-    assert_eq!(f.source.sends.load(Ordering::SeqCst), 0);
-    let f = fixture(true).await;
-    let task = grant(&f).await;
-    capture(&f, &task, "lost", false).await;
-    f.source.outcome.store(2, Ordering::SeqCst);
-    let mut stream = post(
-        &f.app,
-        "/v1/write-tasks/execute",
-        member(&task, "lost"),
-        NATIVE,
-    )
-    .await
-    .into_body()
-    .into_data_stream();
-    let ready: Value = serde_json::from_slice(&stream.next().await.unwrap().unwrap()).unwrap();
-    assert_eq!(
-        post(
-            &f.app,
-            "/v1/write-tasks/confirm",
-            ready["challenge"].clone(),
-            NATIVE
-        )
-        .await
-        .status(),
-        200
-    );
-    let result: Value = serde_json::from_slice(&stream.next().await.unwrap().unwrap()).unwrap();
-    assert_eq!(result["data"]["state"], "uncertain");
-    assert_eq!(f.source.sends.load(Ordering::SeqCst), 1);
-    let result = to_bytes(
-        post(
+        .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Value>(&bytes).unwrap()["data"]["state"],
+            "conflict"
+        );
+        assert_eq!(f.source.sends.load(Ordering::SeqCst), 0);
+        let f = fixture(true).await;
+        let task = grant(&f).await;
+        capture_doc(&f, &task, "lost", compound).await;
+        f.source.outcome.store(2, Ordering::SeqCst);
+        let mut stream = post(
             &f.app,
             "/v1/write-tasks/execute",
             member(&task, "lost"),
             NATIVE,
         )
         .await
-        .into_body(),
-        262144,
-    )
-    .await
-    .unwrap();
-    assert_eq!(
-        serde_json::from_slice::<Value>(&result).unwrap()["error"]["code"],
-        "write_task_not_active"
-    );
-    assert_eq!(f.source.sends.load(Ordering::SeqCst), 1);
+        .into_body()
+        .into_data_stream();
+        let ready: Value = serde_json::from_slice(&stream.next().await.unwrap().unwrap()).unwrap();
+        assert_eq!(
+            post(
+                &f.app,
+                "/v1/write-tasks/confirm",
+                ready["challenge"].clone(),
+                NATIVE
+            )
+            .await
+            .status(),
+            200
+        );
+        let result: Value = serde_json::from_slice(&stream.next().await.unwrap().unwrap()).unwrap();
+        assert_eq!(result["data"]["state"], "uncertain");
+        assert_eq!(f.source.sends.load(Ordering::SeqCst), 1);
+        let result = to_bytes(
+            post(
+                &f.app,
+                "/v1/write-tasks/execute",
+                member(&task, "lost"),
+                NATIVE,
+            )
+            .await
+            .into_body(),
+            262144,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Value>(&result).unwrap()["error"]["code"],
+            "write_task_not_active"
+        );
+        assert_eq!(f.source.sends.load(Ordering::SeqCst), 1);
+    }
 }
 
 #[tokio::test]
@@ -712,52 +927,54 @@ async fn discarded_capture_is_retained_and_an_in_scope_revision_needs_no_new_own
 
 #[tokio::test]
 async fn accepted_receipt_failure_rolls_back_before_any_provider_send() {
-    let f = fixture(true).await;
-    let task = grant(&f).await;
-    capture(&f, &task, "rollback", false).await;
-    let pool = sqlx::SqlitePool::connect(&format!(
-        "sqlite://{}",
-        f._dir.path().join("secretary.sqlite3").display()
-    ))
-    .await
-    .unwrap();
-    sqlx::query("CREATE TRIGGER reject_dispatch BEFORE INSERT ON write_task_dispatches BEGIN SELECT RAISE(FAIL,'synthetic failure'); END").execute(&pool).await.unwrap();
-    let mut stream = post(
-        &f.app,
-        "/v1/write-tasks/execute",
-        member(&task, "rollback"),
-        NATIVE,
-    )
-    .await
-    .into_body()
-    .into_data_stream();
-    let ready: Value = serde_json::from_slice(&stream.next().await.unwrap().unwrap()).unwrap();
-    assert_eq!(
-        post(
-            &f.app,
-            "/v1/write-tasks/confirm",
-            ready["challenge"].clone(),
-            NATIVE
-        )
-        .await
-        .status(),
-        200
-    );
-    let result: Value = serde_json::from_slice(&stream.next().await.unwrap().unwrap()).unwrap();
-    assert_eq!(result["data"]["state"], "known_failure");
-    assert_eq!(f.source.sends.load(Ordering::SeqCst), 0);
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM write_task_dispatches")
-        .fetch_one(&pool)
+    for compound in [false, true] {
+        let f = fixture(true).await;
+        let task = grant(&f).await;
+        capture_doc(&f, &task, "rollback", compound).await;
+        let pool = sqlx::SqlitePool::connect(&format!(
+            "sqlite://{}",
+            f._dir.path().join("secretary.sqlite3").display()
+        ))
         .await
         .unwrap();
-    assert_eq!(count, 0);
-    let audit: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM audit WHERE event='task_dispatch_accepted'")
+        sqlx::query("CREATE TRIGGER reject_dispatch BEFORE INSERT ON write_task_dispatches BEGIN SELECT RAISE(FAIL,'synthetic failure'); END").execute(&pool).await.unwrap();
+        let mut stream = post(
+            &f.app,
+            "/v1/write-tasks/execute",
+            member(&task, "rollback"),
+            NATIVE,
+        )
+        .await
+        .into_body()
+        .into_data_stream();
+        let ready: Value = serde_json::from_slice(&stream.next().await.unwrap().unwrap()).unwrap();
+        assert_eq!(
+            post(
+                &f.app,
+                "/v1/write-tasks/confirm",
+                ready["challenge"].clone(),
+                NATIVE
+            )
+            .await
+            .status(),
+            200
+        );
+        let result: Value = serde_json::from_slice(&stream.next().await.unwrap().unwrap()).unwrap();
+        assert_eq!(result["data"]["state"], "known_failure");
+        assert_eq!(f.source.sends.load(Ordering::SeqCst), 0);
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM write_task_dispatches")
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(audit, 0);
-    pool.close().await;
+        assert_eq!(count, 0);
+        let audit: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM audit WHERE event='task_dispatch_accepted'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(audit, 0);
+        pool.close().await;
+    }
 }
 
 #[tokio::test]

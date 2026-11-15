@@ -54,7 +54,10 @@ for(const profile of ['trusted-client','model-tools'])test(profile+': one actual
    assert.equal((await client.discard(grant.taskId,'sdk-discarded')).state,'rejected');
    for(const [index,find,replacement] of [[1,'old','new'],[2,'new','second'],[3,'second','final']]){
     const operation_id='sdk-task-'+index;if(index===3)await core.fixture('uncertain');
-    const preview=await client.capture(grant.taskId,{kind:'document',operation_id,document:'notes',tab_id:'t.0',action:'replace_text',fields:{find,replacement}});assert.equal(preview.state,'previewed');
+    const change={kind:'document',operation_id,document:'notes',tab_id:'t.0',action:index===1?'replace_text':'replace_text_batch',fields:index===1?{find,replacement}:{replacements:[{find,replacement},{find:index===2?'note':'record',replacement:index===2?'record':'memo'}]}};
+    const preview=await client.capture(grant.taskId,change);assert.equal(preview.state,'previewed');
+    if(index===2)assert.equal(preview.after.text,'second record\n');
+    assert.equal((await client.capture(grant.taskId,change)).preview_digest,preview.preview_digest);
     const result=await client.execute(grant.taskId,grant.revision,operation_id);assert.equal(result.data.state,index===3?'uncertain':'applied');
     const replay=await client.execute(grant.taskId,grant.revision,operation_id);assert.equal(replay.ok,false);assert.equal((await core.fixture('counts')).sends,index);
    }

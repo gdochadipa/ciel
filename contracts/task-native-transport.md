@@ -313,3 +313,23 @@ four Docs sends/one grid send and native note refresh after a delivered reset.
 Workspace traffic records95 Docs/57 Sheets requests. All219 source hashes remain
 unchanged and owned cleanup succeeds. Synthetic requester/session inputs and
 Google/model stand-ins do not qualify real host command routing or owner UI.
+
+
+## Same-tab compound member profile
+
+The scoped model capture schema includes `replace_text_batch` with 2..16
+independent reversible replacements in one registered plain-text tab. This is one
+member/count, one native checkpoint and one revision-bound Google send. The owner
+scope prompt discloses this counting rule. No new tool, operator credential,
+provider retry, automatic rebase or production activation is introduced. See
+[compound contract](task-approval-undo.md#same-tab-compound-capture). Exact forward
+and inverse source projection rejects overlap/cascades/ambiguity before admission.
+The supported Linux gate agent-xxvu2vp7 passes 222 Rust/37 doctests, 107 Bun,
+55 actual SDK Node cases, all 7 Google scenarios and 75 protected cases. The actual
+SDK/Core cases exercise single and compound members under one scope decision;
+normal startup/model tools/Google fixture observes 2 session scope decisions,
+5 Docs sends containing 7 replacement requests, 1 grid send and native note refresh.
+Uncertainty is reconciled by observation without resend. All 221 recorded source
+hashes are unchanged. These remain local/simulated proofs, not live owner/UI/Google
+qualification or production activation.
+Cross-tab/resource dependency composition and provider undo remain separate work.

@@ -20,15 +20,17 @@ http.createServer(async(req,res)=>{
    const body=await pending;if(typeof body.text!=='string')return send(400,{error:{code:400}});
    setText(state.document.tabs[0],body.text);state.document.revisionId=`rev-${++state.revision}`;await pm.state.set(STATE,state);return send(200,{edited:true});
   }
-  if(req.method==='GET'&&url.pathname==='/__fixture/stats')return send(200,{applies:state.applies});
+  if(req.method==='GET'&&url.pathname==='/__fixture/stats')return send(200,{applies:state.applies,batchRequests:state.batchRequests||0});
   if(req.method==='GET'&&['/v1/documents/demo-document','/v1/documents/reference-document'].includes(url.pathname)){
    if(url.searchParams.get('includeTabsContent')!=='true'||url.searchParams.get('suggestionsViewMode')!=='SUGGESTIONS_INLINE')return send(400,{error:{code:400,message:'Explicit tabs/suggestion view required'}});
    return send(200,url.pathname.endsWith('/reference-document')?reference:state.document);
   }
   if(req.method==='POST'&&url.pathname==='/v1/documents/demo-document:batchUpdate'){
    const body=await pending;
-   if(!keys(body,['requests','writeControl'])||!keys(body.writeControl,['requiredRevisionId'])||body.writeControl.requiredRevisionId!==state.document.revisionId||!Array.isArray(body.requests)||body.requests.length!==1)return send(400,{error:{code:400,message:'Invalid request or stale required revision'}});
-   const request=body.requests[0];let reply={};
+   if(!keys(body,['requests','writeControl'])||!keys(body.writeControl,['requiredRevisionId'])||body.writeControl.requiredRevisionId!==state.document.revisionId||!Array.isArray(body.requests)||body.requests.length<1||body.requests.length>16)return send(400,{error:{code:400,message:'Invalid request or stale required revision'}});
+   const replies=[];
+   for(const request of body.requests){
+   let reply={};
    if(keys(request,['insertText'])){
     const insert=request.insertText;
     if(!keys(insert,['text','endOfSegmentLocation'])||!keys(insert.endOfSegmentLocation,['tabId'])||typeof insert.text!=='string')return send(400,{error:{code:400}});
@@ -41,10 +43,13 @@ http.createServer(async(req,res)=>{
     const before=text(tab),matches=before.split(replace.containsText.text).length-1;
     setText(tab,before.split(replace.containsText.text).join(replace.replaceText));reply={replaceAllText:{occurrencesChanged:matches}};
    }else return send(501,{error:{code:501,message:'Request not modeled'}});
+   replies.push(reply);
+   }
+   state.batchRequests=(state.batchRequests||0)+body.requests.length;
    state.document.revisionId=`rev-${++state.revision}`;state.applies++;const lose=state.loss;state.loss=false;
    await pm.state.set(STATE,state);
    if(lose)return req.socket.destroy();
-   return send(200,{documentId:seed.documentId,writeControl:{requiredRevisionId:state.document.revisionId},replies:[reply]});
+   return send(200,{documentId:seed.documentId,writeControl:{requiredRevisionId:state.document.revisionId},replies});
   }
   return send(501,{error:{code:501,message:'Endpoint not modeled'}});
  }catch{return send(400,{error:{code:400,message:'Invalid synthetic request'}});}

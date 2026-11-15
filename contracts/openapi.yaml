@@ -5052,7 +5052,8 @@
           "action": {
             "enum": [
               "append_text",
-              "replace_text"
+              "replace_text",
+              "replace_text_batch"
             ]
           },
           "record_id": {
@@ -6158,6 +6159,75 @@
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 2048
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "operation_id",
+                      "document",
+                      "tab_id",
+                      "action",
+                      "fields"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "document"
+                      },
+                      "operation_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "document": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "tab_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "action": {
+                        "const": "replace_text_batch"
+                      },
+                      "fields": {
+                        "type": "object",
+                        "required": [
+                          "replacements"
+                        ],
+                        "properties": {
+                          "replacements": {
+                            "type": "array",
+                            "minItems": 2,
+                            "maxItems": 16,
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "find",
+                                "replacement"
+                              ],
+                              "properties": {
+                                "find": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                },
+                                "replacement": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                }
+                              },
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "additionalProperties": false

@@ -284,6 +284,11 @@ impl Writes {
         bus: &CommandBus,
         c: DocChange,
     ) -> Result<Value, CoreError> {
+        // Compound capture belongs to the scoped task route; legacy approval
+        // profiles retain their original supported actions and digests.
+        if !matches!(c.action.as_str(), "append_text" | "replace_text") {
+            return Err(CoreError::invalid());
+        }
         if !valid_id(&c.operation_id) {
             return Err(CoreError::invalid());
         }

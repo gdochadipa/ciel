@@ -6,6 +6,7 @@ use super::{
     registry::Document,
     write_model::valid_id,
 };
+pub(crate) mod compound;
 use serde::Deserialize;
 use serde_json::{json, Value};
 #[derive(Clone, Deserialize)]
@@ -233,6 +234,10 @@ pub fn prepare(
                 .ok_or_else(CoreError::invalid)?;
             format!("{body}{text}\n")
         }
+        "replace_text_batch" => {
+            let edits = compound::parse(&c.fields)?;
+            format!("{}\n", compound::prepare(body, &edits)?)
+        }
         "replace_text" => {
             if fields.len() != 2 {
                 return Err(CoreError::invalid());
@@ -281,16 +286,27 @@ pub fn requests(preview: &Preview) -> Result<Value, CoreError> {
     if preview.resource_kind != ResourceKind::GoogleDocs || !valid_tab(&preview.view) {
         return Err(CoreError::invalid());
     }
-    let request = match preview.action.as_str() {
-        "append_text" => {
-            json!({"insertText":{"endOfSegmentLocation":{"tabId":preview.view},"text":preview.fields["text"]}})
-        }
-        "replace_text" => {
-            json!({"replaceAllText":{"tabsCriteria":{"tabIds":[preview.view]},"containsText":{"text":preview.fields["find"],"matchCase":true,"searchByRegex":false},"replaceText":preview.fields["replacement"]}})
-        }
+    let requests = match preview.action.as_str() {
+        "append_text" => vec![
+            json!({"insertText":{"endOfSegmentLocation":{"tabId":preview.view},"text":preview.fields["text"]}}),
+        ],
+        "replace_text" => vec![replacement_request(
+            &preview.view,
+            &preview.fields["find"],
+            &preview.fields["replacement"],
+        )],
+        "replace_text_batch" => compound::requests(&preview.fields, &preview.view)?,
         _ => return Err(CoreError::invalid()),
     };
-    Ok(json!({"writeControl":{"requiredRevisionId":preview.source_revision},"requests":[request]}))
+    Ok(json!({"writeControl":{"requiredRevisionId":preview.source_revision},"requests":requests}))
+}
+
+fn replacement_request(
+    tab: &str,
+    find: impl serde::Serialize,
+    replacement: impl serde::Serialize,
+) -> Value {
+    json!({"replaceAllText":{"tabsCriteria":{"tabIds":[tab]},"containsText":{"text":find,"matchCase":true,"searchByRegex":false},"replaceText":replacement}})
 }
 
 /// Literal, nonoverlapping matches in projected body text; offsets are Unicode scalars.

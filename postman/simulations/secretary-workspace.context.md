@@ -199,3 +199,38 @@ agent-i3hl29kj/acceptance.log; agent-i3hl29kj/source-check.json.
 Retirement evidence: agent-vqot3_rl/verification.log;
 agent-vqot3_rl/simulations/secretary-acceptance.6ojZ9T/{sim.ndjson,task-client.log};
 agent-vqot3_rl/acceptance.log; agent-vqot3_rl/source-check.json.
+
+
+## Same-tab compound extension — supported, 2026-11-16
+
+- id: same-tab-compound-source-projection
+- status: supported
+- claim: A scoped compound member sends 2..16 independent unique replacements in
+  one Docs tab as one revision-bound batch, observes its aggregate result and
+  never resends after a lost response.
+- reason: The Core uses the existing Google adapter and FSM. The stand-in now
+  stages ordered requests in a private copy and commits once after validation.
+  Google documents batch validation/atomic application and requiredRevisionId;
+  local simulation does not qualify live collaborator behavior or owner routing.
+- verification: agent-xxvu2vp7 full/protected stages exit 0 on 2026-11-16 with
+  actual locked SDK lifecycle/build/validation, 42 Python, 222 Rust/37 doctests,
+  107 Bun (HTTP enabled,zero skips),55 actual SDK Node,7 script cases, all 7 Google
+  scenarios and 75 protected cases. The task fixture observes 2 scope decisions
+  for 2 sessions, 5 Docs sends containing 7 replacements, 1 grid send, native note
+  refresh and lost-batch-response observation without resend. Actual SDK/Core
+  tests use one scope decision across incremental single/compound members and
+  reject replay/retained authority. Rust cases cover human drift, partial outcomes,
+  applying/receipt/finish persistence interruption and recovery with exact send
+  counts. Workspace records 101 google-docs/57 google member requests. All 221
+  source hashes remain unchanged; owned cleanup succeeds. Error/slow injected
+  conditions lack member request events; their caller outcomes qualify those
+  local scenarios. Live owner/UI/collaborator/model behavior remains unqualified.
+- source: https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/batchUpdate;
+  services/secretary-core/src/domain/documents/compound.rs;
+  postman/mocks/google-docs/default.js; scripts/acceptance-task-tools.mjs;
+  plugins/secretary-tools/test/task-native-core.node.mjs.
+- updated_at: 2026-11-16
+
+Compound evidence: agent-xxvu2vp7/{verification.log,acceptance.log,source-check.json,
+full-stage-summary.json,stages.json,result.json};
+agent-xxvu2vp7/simulations/secretary-acceptance.53nFKE/{sim.ndjson,task-client.log}.

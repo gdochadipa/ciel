@@ -42,19 +42,25 @@ try{
   assert.equal((await member('tasks_execute',{task_id,grant_revision,operation_id})).ok,false);
  }
  assert.equal((await fixture(docsUrl,'/__fixture/stats')).applies,2);assert.equal(models,3);
+ const compound={kind:'document',operation_id:'task-doc-compound',document:'notes',tab_id:'t.0',action:'replace_text_batch',fields:{replacements:[{find:'Hello',replacement:'Greetings'},{find:'final',replacement:'ready'}]}};
+ const compoundPreview=await member('tasks_capture',{task_id,change:compound});assert.equal(compoundPreview.data.after.text,'Greetings ready\n');
+ assert.equal((await member('tasks_capture',{task_id,change:compound})).data.preview_digest,compoundPreview.data.preview_digest);
+ const compoundResult=await member('tasks_execute',{task_id,grant_revision,operation_id:compound.operation_id});assert.equal(compoundResult.data.state,'applied');assert.equal(compoundResult.summary_memory.status,'refreshed');
+ assert.equal((await member('tasks_execute',{task_id,grant_revision,operation_id:compound.operation_id})).ok,false);
+ assert.deepEqual(await fixture(docsUrl,'/__fixture/stats'),{applies:3,batchRequests:4});assert.equal(models,4);
  const grid={kind:'grid',operation_id:'task-grid-one',spreadsheet:'operations',view:'overview',action:'update',fields:{range:'B7:C7',values:[['Task literal',false]]}};
  assert.equal((await member('tasks_capture',{task_id,change:grid})).data.state,'previewed');
  assert.equal((await member('tasks_execute',{task_id,grant_revision,operation_id:grid.operation_id})).data.state,'applied');
- assert.equal((await fixture(sheetsUrl,'/__fixture/stats')).gridWrites,gridBefore.gridWrites+1);assert.equal(models,3);
- const lost=docsChange('task-doc-lost','final','observed');await member('tasks_capture',{task_id,change:lost});
+ assert.equal((await fixture(sheetsUrl,'/__fixture/stats')).gridWrites,gridBefore.gridWrites+1);assert.equal(models,4);
+ const lost={...compound,operation_id:'task-doc-lost',fields:{replacements:[{find:'ready',replacement:'observed'},{find:'Greetings',replacement:'Welcome'}]}};await member('tasks_capture',{task_id,change:lost});
  await fixture(docsUrl,'/__fixture/lose-next-response',{});
  const uncertain=await member('tasks_execute',{task_id,grant_revision,operation_id:lost.operation_id});assert.equal(uncertain.data.state,'uncertain');
  assert.equal((await member('tasks_execute',{task_id,grant_revision,operation_id:lost.operation_id})).ok,false);
- assert.equal((await fixture(docsUrl,'/__fixture/stats')).applies,3);
+ assert.equal((await fixture(docsUrl,'/__fixture/stats')).applies,4);
  assert.equal((await run('docs_read',{document:'notes',mode:'discovery_summary'})).error.code,'SUMMARY_MEMORY_RECONCILIATION_REQUIRED');
  const response=await fetch(coreUrl+'/v1/operations/'+lost.operation_id+'/reconcile',{method:'POST',headers:{authorization:'Bearer synthetic-separate-operator-token','content-type':'application/json'},body:'{}',signal:AbortSignal.timeout(5000)});assert.equal((await response.json()).data.state,'applied');
  const history=await run('operations_get_history',{operation_id:lost.operation_id});assert.equal(history.data.operation.state,'applied');
- const observed=await member('tasks_inspect',{task_id});assert.equal(observed.data.phase,'suspended');assert.equal(observed.data.admitted_operations,4);
+ const observed=await member('tasks_inspect',{task_id});assert.equal(observed.data.phase,'suspended');assert.equal(observed.data.admitted_operations,5);
  // An ended session retires Core permission without touching resolved outcomes.
  const ended=lifecycleHooks.get('before_reset');assert(ended);await ended({},context);
  assert.equal((await run('tasks_inspect',{task_id})).error.code,'INVOCATION_EXPIRED');
@@ -65,9 +71,9 @@ try{
  assert.notEqual(successor.task_id,task_id);
  const resumed=docsChange('task-doc-successor','observed','continued');await member('tasks_capture',{task_id:successor.task_id,change:resumed});
  assert.equal((await member('tasks_execute',{task_id:successor.task_id,grant_revision:successor.grant_revision,operation_id:resumed.operation_id})).data.state,'applied');
- assert.equal((await fixture(docsUrl,'/__fixture/stats')).applies,4);
+ assert.equal((await fixture(docsUrl,'/__fixture/stats')).applies,5);
  assert.equal((await member('tasks_inspect',{task_id:successor.task_id})).data.admitted_operations,1);
  assert.equal((await member('tasks_end',{task_id:successor.task_id,grant_revision:successor.grant_revision,reason:'completed'})).data.phase,'closed');
- assert.equal(prompts,2);assert.equal(models,5);
- console.log(JSON.stringify({acceptance:'passed',scenario:'native-task-model-tools',owner_prompts:prompts,docs_sends:4,grid_sends:1,scope:'built model tools/normal startup/Core/journal/native note IO with simulated Google/model; host authority/owner routing are synthetic, not live qualification'}));
+ assert.equal(prompts,2);assert.equal(models,6);
+ console.log(JSON.stringify({acceptance:'passed',scenario:'native-task-model-tools',owner_prompts:prompts,docs_sends:5,docs_replacement_requests:7,grid_sends:1,scope:'built model tools/normal startup/Core/journal/native note IO with simulated Google/model; host authority/owner routing are synthetic, not live qualification'}));
 }finally{await rm(workspace,{recursive:true,force:true});}

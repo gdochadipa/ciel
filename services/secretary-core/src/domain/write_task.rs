@@ -134,7 +134,7 @@ impl WriteTarget {
                 tab_id,
             } => {
                 p.resource_kind == ResourceKind::GoogleDocs
-                    && p.action == "replace_text"
+                    && matches!(p.action.as_str(), "replace_text" | "replace_text_batch")
                     && p.spreadsheet == *document
                     && p.record_id == *document_id
                     && p.view == *tab_id
@@ -307,7 +307,11 @@ impl TaskScope {
                     document, tab_id, ..
                 },
                 TaskCapture::Document(c),
-            ) => c.document == *document && c.tab_id == *tab_id && c.action == "replace_text",
+            ) => {
+                c.document == *document
+                    && c.tab_id == *tab_id
+                    && matches!(c.action.as_str(), "replace_text" | "replace_text_batch")
+            }
             _ => false,
         });
         if !allowed {

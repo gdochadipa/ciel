@@ -218,6 +218,26 @@ uncertainty. Reconciliation only observes. Report partial outcomes independently
 The undo plan includes only resolved applied members whose evidence is retained.
 An unresolved original or inverse cannot be bypassed by a new operation ID.
 
+### Same-tab compound capture
+
+Scoped `tasks_capture` also accepts a document `replace_text_batch` with
+`fields: {replacements: [{find, replacement}, ...]}`. It contains 2..16 unique,
+case-sensitive, nonempty single-line literal replacements, each side at most 2048
+UTF-8 bytes. All belong to one registered editable tab. Original match intervals
+and reverse intervals must be disjoint; ordered projection must equal independent
+source-span projection and reverse exactly. Overlaps, cascades, ambiguous reverse
+matches, unsupported structures and no-op aggregates are rejected.
+
+The batch is one immutable member and consumes one max_operations unit. It sends
+one `batchUpdate` with ordered replaceAllText requests and the captured
+requiredRevisionId. Exact aggregate before/after evidence uses the existing FSM,
+source fences, owner grant, native dispatch checkpoint and send receipt. It never
+rebases an existing preview. Later batches capture fresh revisions after earlier
+verified effects. Drift stops dispatch; uncertainty blocks later sends and permits
+only observation. Task history retains partial outcomes independently. Legacy
+model tools retain their existing action set. This does not add cross-tab/resource
+batching, a dependency scheduler, provider undo execution or cleanup authority.
+
 ## Paired inverse foundation
 
 `domain::compensation::validate_reversible` checks captured forward evidence
@@ -233,6 +253,7 @@ Expiry of the original approval does not delete undo evidence or authorize undo.
 | --- | --- | --- | --- |
 | Sheets literal rectangle | Exact entered types and blanks, bounded range, source identity and mapping | Same rectangle with original literal values; null clears, empty string remains a string | Formula/unknown entered type, invalid dimensions, >100 cells, >16 KiB snapshot, >2048-byte cell text, unsafe number, changed registration/target/affected values |
 | Docs one-match plain text replacement | Exact selected-tab before/after text and original find/replacement | Reverse one unique nonempty single-line replacement | Append, deletion/empty inverse needle, ambiguous reverse match, multiline/control/private-use replacement, >2048-byte find or replacement, changed tab/body/registration |
+| Docs same-tab compound | Exact aggregate body before/after and 2..16 independent replacements | Reverse request order, with unique disjoint reverse intervals and exact text restoration | Overlap/cascade, ambiguous reverse match, unsupported structure, changed tab/body/registration or evidence mismatch |
 | Append, structured rows, inserted rows, new tabs, rich structure | Insufficient for these inverse contracts | Unavailable | Refuse admission to the new controlled task profile |
 
 Docs coverage is conditional text restoration, with normal current-source and

@@ -270,6 +270,9 @@ fn body(value: &Value) -> Result<&str, CoreError> {
 }
 
 fn document(p: &Preview, operation_id: &str) -> Result<DocChange, CoreError> {
+    if p.action == "replace_text_batch" {
+        return compound_document(p, operation_id);
+    }
     if p.action != "replace_text"
         || !super::documents::valid_tab(&p.view)
         || p.fields.as_object().is_none_or(|fields| fields.len() != 2)
@@ -302,6 +305,26 @@ fn document(p: &Preview, operation_id: &str) -> Result<DocChange, CoreError> {
         tab_id: p.view.clone(),
         action: "replace_text".into(),
         fields: json!({"find":replacement,"replacement":find}),
+    })
+}
+
+fn compound_document(p: &Preview, operation_id: &str) -> Result<DocChange, CoreError> {
+    use super::documents::{compound, valid_tab};
+    if !valid_tab(&p.view) {
+        return Err(unavailable());
+    }
+    let edits = compound::parse(&p.fields).map_err(|_| unavailable())?;
+    let before = body(&p.before)?;
+    let after = body(&p.after)?;
+    if compound::prepare(before, &edits).map_err(|_| unavailable())? != after {
+        return Err(unavailable());
+    }
+    Ok(DocChange {
+        operation_id: operation_id.into(),
+        document: p.spreadsheet.clone(),
+        tab_id: p.view.clone(),
+        action: "replace_text_batch".into(),
+        fields: json!({"replacements": compound::inverse(&edits)}),
     })
 }
 
