@@ -129,7 +129,7 @@ class ServiceCheckLinux(unittest.TestCase):
         self.write_json(self.manifest["release_file"], {
             "format_version": 2, "source_commit": "a" * 40,
             "build_host": {"system": "Linux", "machine": "aarch64", "libc": ["glibc", "2.36"]},
-            "tool_versions": {"rustc": "synthetic"}, "tool_count": 26,
+            "tool_versions": {"rustc": "synthetic"}, "tool_count": 33,
             "production_writes": False, "starts_services": False, "activates_plugins": False,
             "lock_hashes": {"Cargo.lock": "b" * 64, "bun.lock": "c" * 64},
             "artifact_hashes": hashes,

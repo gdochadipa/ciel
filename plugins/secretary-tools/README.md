@@ -1,6 +1,6 @@
 # Secretary OpenClaw bridge
 
-Owner-only plugin for registered Google Sheets, Google Docs and native reminders, targeting the actual **OpenClaw 2026.10.7** SDK. The 26 tools use one loopback Rust Core for deterministic reads and controlled writes. Wedding-specific views/reports are optional domain profiles; general resource access uses `config/workspace.example.json`.
+Owner-only plugin for registered Google Sheets, Google Docs and native reminders, targeting the actual **OpenClaw 2026.10.7** SDK. The 33 declared tools use one loopback Rust Core for deterministic reads and controlled writes. Wedding-specific views/reports are optional domain profiles; general resource access uses `config/workspace.example.json`.
 
 ## Resource capabilities
 
@@ -26,7 +26,7 @@ increases the budget or closes/creates a task. Recreating a tool or changing a
 tool-call ID cannot reset counters. The separate operator bearer is never read by
 this bridge profile. Native summaries, model completions, reminders and mutations
 are disabled; `summaryMemoryEnabled:true` is rejected. Tool metadata still declares
-26 tools, so a host must separately qualify its effective exposure/routing. This
+33 tools (including seven disabled task tools), so a host must separately qualify its effective exposure/routing. This
 option grants no startup admission or live host authority. See the
 [budget protocol](../../contracts/read-task-budget.md).
 
@@ -45,8 +45,7 @@ approval. The bounded lookup retains at most 64 live factory bindings per host
 API; it refuses additional bindings rather than evicting live authority. Retained
 callbacks keep their original guard and cannot borrow a later invocation. These
 bindings carry no task grant and impose no task countdown. New native invocations
-must obtain fresh host authority; durable scoped task issuance/execution is still
-unavailable. The synchronous guard covers the plugin's Core-request dispatch,
+must obtain fresh host authority; scoped task issuance/execution requires the separate opt-in profile below. The synchronous guard covers the plugin's Core-request dispatch,
 not the subsequent provider send inside Core. Live owner routing, reset/new and
 continuation provenance require separate host qualification.
 
@@ -146,3 +145,40 @@ Selected Docs summaries: docs_read also accepts documents (1–3 distinct readab
 T038 native memory: operator option summaryMemoryEnabled (default false) enables per-Doc initial notes under the trusted agent memory/ciel-docs directory, via the actual SDK safe-root helpers and existing runtime.llm.complete. Host-only docs_read {document,mode:"discovery_summary",refresh?:boolean} uses dated seven-day discovery notes; ordinary source read/search and applied/history paths maintain them. This requires current owner-private local host authority, sandboxed=false and explicit memory-core dreaming.enabled=false; no policy/provider/fs grant is changed. Pending source outcomes stay fenced until observed reconciliation, and memory refresh failure is distinct from an applied write. The separate summary_memory text item reports persistence status while Core JSON remains compatible. See [native memory](../../.agent/rules/memory.md). Native effects are tested with supported Node24; run build before the Node factory tests. Generic native recall, physical erasure, target installation and live model quality/token counts remain unqualified.
 
 T039 citable Sheets context: sheets_read {spreadsheet,view,mode:"summary_context",max_records?} returns a typed prefix of one registered view with R1..Rn references, original cell ranges, source evidence and explicit coverage. max_records1–100/default25; no limit/cursor in this mode. Complete packet<=64KiB, whole errors and four-second Core deadline. Legacy read/cursor remains compatible;26tools. The existing model generates source-grounded prose; no model endpoint, totals, source writes or Sheets memory is added. See [Sheets summaries](../../contracts/openapi.yaml).
+
+
+## Scoped task tools (opt-in, default off)
+
+The seven `tasks_*` tools connect model intent to the native task transport and
+one-member executor. `tasks_propose` requests one owner decision for a bounded
+objective, exact registered physical targets/mapping and finite operation count.
+`tasks_resume` requests fresh confirmation after suspension/restart without
+resetting usage. `tasks_inspect` observes retained scope/counts; `tasks_capture`
+prepares one immutable literal-grid/unique-Docs-replacement member;
+`tasks_execute` sends that member once through the native preflight/confirmation
+protocol; `tasks_discard` retires unsent intent and `tasks_end` closes permission.
+Clarify ambiguity, reserved owner decisions or scope expansion; ordinary in-scope
+edits do not request another prompt. No five-minute task expiry is introduced.
+
+Plugin `taskToolsEnabled`, `taskTransportQualified` and
+`approvalTransportQualified` must all be true. Their defaults remain false;
+`readOnlyRuntime` rejects all task tools. The normal Core binary requires the
+separate `SECRETARY_WRITE_TASKS_ENABLED=true`, writes enabled, a state directory
+and a stable `SECRETARY_DEPLOYMENT_ID`. Selecting this profile closes legacy
+mutation/approval routes. Existing configuration examples keep it disabled.
+The normal host tool allowlist must separately admit the task tools; the shipped
+legacy allowlist grants no new task exposure.
+
+Tools capture current native authority, wait for the exact grant ACK and use the
+operator credential only inside trusted composition. Missing approval or changed
+scope cannot execute a proposal. If grant ACK is lost, inspect the returned task
+ID; after an unknown member outcome, inspect history/reconcile without resending.
+`ok:true` still requires checking `data.state`. With summary memory enabled,
+execution uses the existing note fence/refresh and returns `summary_memory`
+separately from the source-write outcome. Supported Linux verification on
+2026-11-15 passes the official SDK build/validation, 214 Rust tests/37 doctests,
+99 Bun tests, 51 Node/SDK cases, all seven Google simulations and 75 protected
+cases; all 215 recorded inputs remain unchanged. The model-tool/real-Core and
+normal-startup Google task paths pass with synthetic owner/provider/model inputs.
+Live owner/host/provider qualification remains separate. No service, Google write,
+native job or outbound delivery is activated by these additions.

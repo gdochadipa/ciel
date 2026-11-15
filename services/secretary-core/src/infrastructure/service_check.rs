@@ -548,7 +548,9 @@ impl Release {
         };
         if self.format_version != 2
             || !hex(&self.source_commit, 40)
-            || self.tool_count != 26
+            // Inventory of this release, not its effective read-only exposure.
+            // Compatibility still requires the exact compiled plugin manifest.
+            || self.tool_count != 33
             || self.production_writes
             || self.starts_services
             || self.activates_plugins
@@ -669,7 +671,7 @@ mod tests {
             fixture.json(manifest["release_file"].as_str().unwrap(), json!({
                 "format_version":2,"source_commit":"a".repeat(40),
                 "build_host":{"system":"Linux","machine":"x86_64","libc":["glibc","2.39"]},
-                "tool_versions":{"rustc":"synthetic"},"tool_count":26,
+                "tool_versions":{"rustc":"synthetic"},"tool_count":33,
                 "production_writes":false,"starts_services":false,"activates_plugins":false,
                 "lock_hashes":{"Cargo.lock":"b".repeat(64),"bun.lock":"c".repeat(64)},"artifact_hashes":hashes
             }));
@@ -881,5 +883,22 @@ mod tests {
             value["artifact_hashes"]["../escape"] = json!("a".repeat(64))
         });
         assert_eq!(fixture.inspect().unwrap_err(), "release_invalid");
+    }
+
+    #[test]
+    fn declared_tool_inventory_must_match_this_release_without_activating_it() {
+        for count in [0, 26, 32, 34] {
+            let mut fixture = Fixture::new();
+            fixture.change_json("/opt/secretary/release.json", |value| {
+                value["tool_count"] = json!(count)
+            });
+            assert_eq!(fixture.inspect().unwrap_err(), "release_invalid");
+        }
+        let mut fixture = Fixture::new();
+        let report = fixture.inspect().unwrap();
+        assert_eq!(report["checks"]["release_hashes"], "passed");
+        assert_eq!(report["readiness"], "incomplete");
+        assert_eq!(report["service_started"], false);
+        assert_eq!(report["journal_opened"], false);
     }
 }

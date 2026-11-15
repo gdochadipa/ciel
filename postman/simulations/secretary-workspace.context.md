@@ -126,3 +126,40 @@ documents.rs, presentation/task_native.rs and tests/task_native.rs.
   WJbq61zd/simulations/secretary-acceptance.PFiOLx/client.log;
   WJbq61zd/acceptance.log; WJbq61zd/source-check.json
 - updated_at: 2026-11-15
+
+
+## Model task tools and normal startup — supported simulation, 2026-11-15
+
+- id: model-task-startup-composition
+- status: supported
+- claim: The built default tasks_* tools can perform sequential bounded Docs/grid
+  edits after one scope decision through the normal Core binary's opt-in profile,
+  while keeping uncertain Docs outcomes fenced and preserving native note refresh.
+- reason: agent-i3hl29kj runs the built tools through the normal Core binary's
+  separate fresh task journal against both Google stand-ins. Actual outcomes,
+  send counters and member traffic support this bounded simulated path. Existing
+  mocks/provider adapters/locks are unchanged; no live target authority is inferred.
+- verification: Full Linux gate on 2026-11-15 passes the official SDK build,
+  51 Node/SDK cases (including model-tool/real-Core and actual v2 issuance), all
+  seven Google scenarios and75 protected cases. The new Google task case observes
+  one scope decision, two applied Docs replacements, one grid write and an
+  accepted/lost Docs result; exact three Docs/one grid send counters prove no
+  resend. Native stale fencing, reread/refresh, observation-only reconciliation
+  and task closure pass. Workspace traffic includes89 google-docs and57 google
+  requests. Final215-input source check is unchanged and owned cleanup succeeds.
+  Earlier svzHLA8M functional stages passed but its final integrity check failed
+  because the SDK reordered manifest keys. The ordering-only correction is
+  semantically identical JSON and the actual build/source-hash repro turns green.
+  The supported rerun uses approved direct Docker calls with the same isolated
+  runner stages; real host requester/approval UI, Google and model remain unqualified.
+- source: scripts/acceptance.sh; scripts/acceptance-task-tools.mjs;
+  plugins/secretary-tools/src/task-tools.ts; plugins/secretary-tools/src/index.ts;
+  services/secretary-core/src/main.rs;
+  plugins/secretary-tools/test/task-tools.node.mjs;
+  plugins/secretary-tools/test/native-authority.node.mjs;
+  plugins/secretary-tools/test/task-native-core.node.mjs.
+- updated_at: 2026-11-15
+
+Evidence for the model-task claim: agent-i3hl29kj/verification.log;
+agent-i3hl29kj/simulations/secretary-acceptance.lQIAP0/{sim.ndjson,task-client.log};
+agent-i3hl29kj/acceptance.log; agent-i3hl29kj/source-check.json.

@@ -115,6 +115,8 @@ else:sys.exit(8)
         self.assertIn('Copyright (c) 2026 gdochadipa', (output / 'LICENSE').read_text())
         self.assertTrue((output / 'bin/secretary-core').stat().st_mode & 0o111)
         self.assertIn('SECRETARY_WRITES_ENABLED=false', (output / 'templates/service.env.example').read_text())
+        self.assertIn('SECRETARY_WRITE_TASKS_ENABLED=false', (output / 'templates/service.env.example').read_text())
+        self.assertEqual(receipt['tool_count'], 33)
         self.assertFalse(json.loads((output / 'templates/qualification.example.json').read_text())['qualified'])
         self.assertFalse(json.loads((output / 'templates/registry.example.json').read_text())['spreadsheets'][0]['create_tabs'])
         verified = self.run_cli('verify', '--release', output, '--revision', revision)
@@ -279,6 +281,32 @@ else:sys.exit(8)
         self.assertIn('install-files', result.stdout)
         self.assertIn('never starts', result.stdout)
         self.assertEqual(list(self.directory.iterdir()), [])
+
+
+    def test_archive_verifier_preserves_legacy_tools_and_rejects_active_task_defaults(self):
+        import io
+        import tarfile
+        import install
+        manifest = json.loads((ROOT / 'plugins/secretary-tools/openclaw.plugin.json').read_text())
+        def archive(value):
+            path = self.directory / 'plugin.tgz'
+            with tarfile.open(path, 'w:gz') as packed:
+                for name, data in [('package/package.json', b'{}'), ('package/dist/index.js', b'// synthetic'),
+                                   ('package/openclaw.plugin.json', json.dumps(value).encode())]:
+                    member = tarfile.TarInfo(name)
+                    member.size = len(data)
+                    packed.addfile(member, io.BytesIO(data))
+            return path
+        self.assertEqual(len(install.plugin_contract(archive(manifest))), 33)
+        for key in ('taskToolsEnabled', 'taskTransportQualified'):
+            manifest['configSchema']['properties'][key]['default'] = True
+            with self.assertRaisesRegex(install.InstallerError, 'inactive defaults differ'):
+                install.plugin_contract(archive(manifest))
+            manifest['configSchema']['properties'][key]['default'] = False
+        manifest['contracts']['tools'] = [name for name in manifest['contracts']['tools'] if not name.startswith('tasks_')]
+        for key in ('taskToolsEnabled', 'taskTransportQualified'):
+            del manifest['configSchema']['properties'][key]
+        self.assertEqual(len(install.plugin_contract(archive(manifest))), 26)
 
 
 if __name__ == '__main__':

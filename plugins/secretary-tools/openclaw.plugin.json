@@ -20,6 +20,14 @@
         "type": "boolean",
         "default": false
       },
+      "taskToolsEnabled": {
+        "type": "boolean",
+        "default": false
+      },
+      "taskTransportQualified": {
+        "type": "boolean",
+        "default": false
+      },
       "schedulerQualified": {
         "type": "boolean",
         "default": false
@@ -69,7 +77,14 @@
       "reminders_pause",
       "reminders_resume",
       "reminders_cancel",
-      "reminders_history"
+      "reminders_history",
+      "tasks_propose",
+      "tasks_resume",
+      "tasks_inspect",
+      "tasks_capture",
+      "tasks_execute",
+      "tasks_discard",
+      "tasks_end"
     ]
   }
 }

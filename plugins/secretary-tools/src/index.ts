@@ -6,6 +6,10 @@ import {bindNativeInvocation,NativeApprovalAuthority} from './native-authority.j
 import {bindNativeSessionInvocation,registerNativeSessionLifecycle} from './native-lifecycle.js';
 import {executeWithSummaryMemory} from './summary-memory.js';
 import {createSecretary, secretaryModelText, reminderTools, secretaryToolNames, commitTools, type Options} from './bridge.js';
+import {taskToolNames,taskToolSchemas,taskToolDescriptions,isTaskTool,isTaskApprovalTool,taskToolInput} from './task-tool-specs.js';
+import {taskToolClient,TaskToolApprovals,executeTaskTool} from './task-tools.js';
+// Tasks use native host composition; the legacy bridge cannot grant scope.
+const allToolNames=[...secretaryToolNames,...taskToolNames];
 const reminderDescriptions:Record<string,string>={
  reminders_create:'Create a reminder using a stable reminder_id and an exact timestamp with offset or a five-field cron schedule. Clarify ambiguous dates first. Reuse the ID to reconcile a retry; a changed request conflicts. Execution does not prove message delivery.',
  reminders_list:'List owner-scoped native reminders, including disabled and retained completed jobs. A scheduler discovery error means the list is incomplete; do not infer that a reminder is missing.',
@@ -52,6 +56,9 @@ const selectors:Record<string,Record<string,unknown>>={
 };
 const schemas=Object.fromEntries(Object.entries(specs).map(([name,[required,properties]])=>[name,{type:'object',additionalProperties:false,required,properties,...(selectors[name]??{})}]));
 
+Object.assign(schemas,taskToolSchemas);
+Object.assign(documentDescriptions,taskToolDescriptions);
+
 // Authoring metadata is constructed without reading credentials or connecting to a host.
 const bridges=new WeakMap<OpenClawPluginApi,ReturnType<typeof createSecretary>>();
 function bridgeFor(api:OpenClawPluginApi) {
@@ -65,6 +72,10 @@ function bridgeFor(api:OpenClawPluginApi) {
  }
  return bridge;
 }
+const taskApprovals=new WeakMap<OpenClawPluginApi,TaskToolApprovals>();
+function taskApprovalsFor(api:OpenClawPluginApi):TaskToolApprovals {
+ let approvals=taskApprovals.get(api);if(approvals===undefined){approvals=new TaskToolApprovals();taskApprovals.set(api,approvals);}return approvals;
+}
 const nativeAuthorities=new WeakMap<OpenClawPluginApi,NativeApprovalAuthority>();
 function authorityFor(api:OpenClawPluginApi):NativeApprovalAuthority {
  let authority=nativeAuthorities.get(api);
@@ -73,13 +84,21 @@ function authorityFor(api:OpenClawPluginApi):NativeApprovalAuthority {
 }
 function createTool(api:OpenClawPluginApi,context:OpenClawPluginToolContext,name:string):AnyAgentTool {
  const toolContext=bindNativeSessionInvocation(api,context);
- if(commitTools.some(tool=>tool===name))authorityFor(api).remember(name,toolContext);
+ const taskApproval=isTaskApprovalTool(name)&&api.pluginConfig?.taskToolsEnabled===true&&api.pluginConfig?.readOnlyRuntime!==true;
+ if(commitTools.some(tool=>tool===name)||taskApproval)authorityFor(api).remember(name,toolContext);
  return {
    name,label:name,description:documentDescriptions[name]??reminderDescriptions[name]??'Owner-only secretary operation; input cannot set actor, credentials, host or outbound recipient.',
    parameters:Type.Unsafe(schemas[name]),
    async execute(_toolCallId,params,signal) {
     const invocation=bindNativeInvocation(toolContext,signal);
     try {
+     if(isTaskTool(name)){
+      const client=taskToolClient(api,invocation,signal),input=taskToolInput(name,params);
+      const result=await executeTaskTool(name,input,invocation,client,taskApprovalsFor(api));
+      invocation.assertInvocationCurrent();
+      if(invocation.senderIsOwner!==true||invocation.requesterSenderId!==api.pluginConfig?.owner)throw new Error('OWNER_REQUIRED');
+      return {content:[{type:'text',text:JSON.stringify(result)}],details:result};
+     }
      // Core acknowledgement must precede optional memory fencing as well as apply.
      // Carry the captured ID across that await instead of rereading mutable args.
      const captured=commitTools.some(tool=>tool===name)
@@ -101,11 +120,13 @@ const entry=defineToolPlugin({
   owner:Type.String({minLength:1}),
   coreUrl:Type.Optional(Type.String({default:'http://127.0.0.1:8787'})),
   approvalTransportQualified:Type.Optional(Type.Boolean({default:false})),
+  taskToolsEnabled:Type.Optional(Type.Boolean({default:false})),
+  taskTransportQualified:Type.Optional(Type.Boolean({default:false})),
   schedulerQualified:Type.Optional(Type.Boolean({default:false})),
   summaryMemoryEnabled:Type.Optional(Type.Boolean({default:false})),
   readOnlyRuntime:Type.Optional(Type.Boolean({default:false})),
  },{additionalProperties:false}),
- tools:tool=>secretaryToolNames.map(name=>tool({
+ tools:tool=>allToolNames.map(name=>tool({
   name,label:name,description:documentDescriptions[name]??reminderDescriptions[name]??'Owner-only secretary operation; input cannot set actor, credentials, host or outbound recipient.',
   parameters:Type.Unsafe(schemas[name]),
   factory:({api,toolContext}):AnyAgentTool=>createTool(api,toolContext,name),
@@ -115,8 +136,17 @@ const entry=defineToolPlugin({
 // explicitly opt runtime factories into the SDK's host-bound v2 authority.
 entry.register=(api)=>{
  registerNativeSessionLifecycle(api);
- for(const name of secretaryToolNames)api.registerTool({contextVersion:2,create:context=>createTool(api,context,name)},{name});
+ for(const name of allToolNames)api.registerTool({contextVersion:2,create:context=>createTool(api,context,name)},{name});
  api.on('before_tool_call',async(event,context)=>{
+  if(isTaskTool(event.toolName)){
+   if(api.pluginConfig?.readOnlyRuntime===true)return {block:true,blockReason:'Read-only runtime forbids tasks'};
+   if(!isTaskApprovalTool(event.toolName))return;
+   try{
+    const native=authorityFor(api).capture(event.toolName,context);
+    const input=taskToolInput(event.toolName,event.params),client=taskToolClient(api,native,context.abortSignal);
+    return {requireApproval:await taskApprovalsFor(api).prepare(event.toolName,input,native,client)};
+   }catch{return {block:true,blockReason:'Current native owner authority and qualified task transport are required'};}
+  }
   if(!commitTools.some(tool=>tool===event.toolName))return;
   if(api.pluginConfig?.readOnlyRuntime===true)return {block:true,blockReason:'Read-only runtime forbids mutations'};
   try {

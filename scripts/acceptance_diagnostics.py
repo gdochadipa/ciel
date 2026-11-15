@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 
 STAGES = ('sdk_build', 'core_build', 'core_artifact', 'simulation_start',
-          'provider_address', 'client', 'traffic')
+          'provider_address', 'client', 'task_core_start', 'task_client', 'traffic')
 CATEGORIES = {
     'address_in_use': r'\beaddrinuse\b|address already in use',
     'permission_denied': r'\beacces\b|permission denied|operation not permitted',
@@ -37,7 +37,7 @@ def main():
     parser.add_argument('--simulation-exit-code', type=int)
     args = parser.parse_args()
     logs = {name: tail(args.log_dir / name) for name in
-            ('sim.ndjson', 'sim.err', 'core.log', 'client.log', 'build.ndjson', 'build.err', 'sdk.log', 'parser.err')}
+            ('sim.ndjson', 'sim.err', 'core.log', 'client.log', 'build.ndjson', 'build.err', 'sdk.log', 'parser.err', 'task-core.log', 'task-client.log')}
     events = {'listening': 0, 'request': 0, 'error': 0}
     for line in logs['sim.ndjson'].splitlines():
         try:

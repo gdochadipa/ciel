@@ -1,4 +1,4 @@
-// Trusted composition API only. No model tool or activation flag is added here.
+// Native transport; optional model-tool composition lives in task-tools.ts.
 import type {OpenClawPluginApi,OpenClawPluginToolContext} from 'openclaw/plugin-sdk/plugin-entry';
 import {randomUUID} from 'node:crypto';
 import {bindNativeInvocation} from './native-authority.js';

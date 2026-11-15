@@ -1,8 +1,8 @@
 # Native task transport v1
 
-Status: locally implemented trusted composition API. Production startup and the
-26 model tools retain their existing behavior. They do not attach the task ledger
-or call this client. Supported Linux/SDK and live qualification are separate gates.
+Status: trusted transport plus opt-in model-task tools and normal startup
+composition. All task/qualification defaults remain false. Supported Linux/SDK
+verification for the new composition passes below; live qualification is separate.
 
 ## Composition and authentication
 
@@ -13,7 +13,7 @@ cannot bypass task source fences. Legacy history and observation-only reconcile
 remain available. Ordinary `Writes::new` retains the existing legacy profile. `JournalWriteTasks` refuses
 read-only-bound state. Read-only bus policy rejects every task control/execute
 command even with operator credentials. Disabled/ordinary coordinators return
-`write_tasks_unavailable`; no environment flag or new daemon activates this path.
+`write_tasks_unavailable`; the ordinary runtime keeps this profile until explicitly selected as described below; no new daemon is added.
 
 All three endpoints require the existing distinct operator bearer, never the
 model/Core bearer. Authentication precedes JSON decoding and source access.
@@ -32,8 +32,8 @@ Memory-enabled trusted composition instead uses `createMemoryNativeTaskClient`
 with `summaryMemoryEnabled:true`, the host API and a distinct model/Core bearer
 (`coreToken`) for history and fresh reads. The API must have the same configured
 owner, explicit summary-memory opt-in and no read-only profile. Both clients require
-explicit transport qualification; neither is activated by production startup.
-The SDK model-tool metadata does not expose these credentials or methods.
+explicit transport qualification; neither is activated by default startup.
+The SDK model-tool metadata does not expose credentials or native context.
 
 ## Native summary-memory coupling
 
@@ -201,7 +201,62 @@ regressions,Workspace/native memory and all75 protected cases; the210-input fina
 source check is unchanged. These emitter and simulated-provider integration tests
 do not establish actual live reset commands or production owner routing.
 
-Integration into normal model task-tool selection/execution, broader same-source
-composition, formal provider undo and evidence cleanup remain unfinished. Keep
+Normal model task-tool/startup composition below passes its supported Linux gate. Broader same-source composition, formal provider undo and
+evidence cleanup remain unfinished. Keep
 every live/approval/write activation gate disabled until
 its own qualification and explicit activation authorization exist.
+
+
+## Model tools and normal startup composition
+
+The manifest declares 33 tools: the existing 26 plus `tasks_propose`,
+`tasks_resume`, `tasks_inspect`, `tasks_capture`, `tasks_execute`, `tasks_discard`
+and `tasks_end`. Task tools reject before Core traffic unless `taskToolsEnabled`,
+`taskTransportQualified` and `approvalTransportQualified` are explicitly true.
+Read-only runtime rejects all task tools before reading operator credentials.
+Model arguments never contain owner/context/credentials or a caller-approved bit.
+
+Only the two scope tools request native approval in `before_tool_call`. The hook
+joins the exact current v2 factory and trusted requester, snapshots the input,
+proposes/reviews through Core and binds that proposal to its original task ID,
+scope digest and revision. A bounded 64-entry per-API map holds only pending
+proposal ordering, not permissions. Execute cannot manufacture a proposal;
+changed input cannot consume another prompt. The tool explicitly awaits the
+native client's Core grant ACK because the actual SDK callback is detached.
+Failed ACK returns the retained task ID for inspection, never an assumed grant.
+No additional owner prompt is requested for capture or one-member execute within
+the approved scope. Inspect returns scope/phase/revision/counts; operation history
+provides member outcomes. Scope expansion or unresolved intent needs owner review.
+
+Each task-tool invocation selects the existing raw or memory-aware client from
+current trusted configuration, using the distinct operator bearer and the model
+bearer for history/reads only. Memory-enabled execution cannot select the raw
+client to bypass stale fencing. Delivered reset, host expiry, owner loss and
+cancellation still withhold final confirmation after preflight. An already
+accepted effect may finish; uncertain results remain observation-only.
+
+Normal Core startup retains the legacy profile unless
+`SECRETARY_WRITE_TASKS_ENABLED=true`. The opt-in also requires
+`SECRETARY_WRITES_ENABLED=true`, a journal directory and an explicit stable
+`SECRETARY_DEPLOYMENT_ID` (1–128 ASCII letters/digits/dot/underscore/hyphen,
+starting with a letter/digit). The existing journal is bound to owner/deployment;
+opening the ledger retains counts and suspends old grants. Legacy mutation and
+approval paths then reject `task_dispatch_required`, while history/reconciliation
+remain observation-only. Invalid profile values or missing deployment fail startup.
+This is local composition, not a qualification receipt or activation authorization.
+Do not set these flags for a live target until its separate gates and owner
+activation authorization exist. Existing shipped templates remain inactive.
+
+
+Supported composition evidence (2026-11-15): after canonicalizing the manifest's
+JSON key order to the actual SDK generator, agent-i3hl29kj passes official SDK
+lifecycle/typecheck/build/validation, 42 Python, 214 Rust/37 doctests, 99 Bun,
+51 Node/SDK cases, seven script cases, all seven Google scenarios and all75
+protected Linux cases. Final source-check records215 inputs, unchanged=true;
+owned source/targets and the unused immutable test image are cleaned. The full
+and protected stages use approved direct Docker CLI calls with the same pinned
+image/locks/network/capability boundaries as the local runner. The normal-startup
+Google task case observes one scope decision, three Docs sends and one grid send,
+including uncertain-result fencing and observation-only reconciliation. Workspace
+traffic records89 Docs and57 Sheets requests. Owner/context/model/provider inputs
+remain synthetic; this is not live host/approval UI/Google qualification.

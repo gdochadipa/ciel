@@ -34,7 +34,7 @@ const {default:entry,registerNativeSessionLifecycle}=await import('../dist/index
 const manifest=JSON.parse(await readFile(new URL('../openclaw.plugin.json',import.meta.url),'utf8'));
 const logger={info(){},warn(){},error(message){throw Error(message);},debug(){}};
 
-function fixture(){
+function fixture(pluginSettings={}){
  const config={plugins:{enabled:true,allow:['secretary-tools'],entries:{'secretary-tools':{enabled:true}}}};
  const runtime={config:{current:()=>config},gateway:{isAvailable:()=>false}};
  const builder=registrySdk.t({logger,runtime,coreGatewayMethodNames:[],activateGlobalSideEffects:false});
@@ -42,7 +42,7 @@ function fixture(){
  const rootDir=dirname(dirname(source));
  const record={...manifest,source,rootDir,origin:'workspace',format:'bundle',enabled:true,status:'loaded',toolNames:[],hookNames:[],commandNames:[],gatewayMethods:[],cliRegistrars:[],serviceIds:[]};
  builder.registry.plugins.push(record);
- const api=builder.createApi(record,{config,pluginConfig:{owner:'owner',approvalTransportQualified:true},registrationMode:'full'});
+ const api=builder.createApi(record,{config,pluginConfig:{owner:'owner',approvalTransportQualified:true,...pluginSettings},registrationMode:'full'});
  entry.register(api);
  assert.equal(builder.registry.diagnostics.length,0,JSON.stringify(builder.registry.diagnostics));
  assert.equal(builder.registry.tools.length,manifest.contracts.tools.length);
@@ -191,5 +191,36 @@ test('a dispatched Core request is never retried when native cancellation ends i
   const response=tool.execute('dispatched',{});await started.promise;signal.abort(Error('synthetic cancellation'));
   pending.resolve(Response.json({ok:true,data:[]}));await assert.rejects(response,/synthetic cancellation/);
   await assert.rejects(tool.execute('no-next-send',{}),/synthetic cancellation/);assert.equal(sends,1);
+ }finally{globalThis.fetch=original;f.close();}
+});
+
+
+test('actual v2 issuer binds model task approval and final one-member confirmation to its run',async()=>{
+ const f=fixture({taskToolsEnabled:true,taskTransportQualified:true}),original=globalThis.fetch,paths=[];
+ const id='33333333-3333-4333-8333-333333333333',digest='a'.repeat(64),nonce='44444444-4444-4444-8444-444444444444';
+ const scope={objective:'Correct note',mapping_version:'v1',max_operations:4,targets:[{kind:'document',document:'notes',document_id:'doc',tab_id:'t.0'}]};let phase='proposed',revision=0,retained;
+ globalThis.fetch=async(input,init)=>{
+  const request=new Request(input,init),path=new URL(request.url).pathname,body=await request.json();paths.push(path);
+  assert.equal(request.headers.get('authorization'),'Bearer synthetic-approval');
+  if(path.endsWith('/native')){
+   if(body.action==='decide'){phase='active';revision++;}
+   return Response.json({ok:true,owner:'owner',data:{task_id:id,scope,scope_digest:digest,grant_revision:revision,phase}});
+  }
+  if(path.endsWith('/execute'))return new Response(JSON.stringify({type:'ready',owner:'owner',challenge:{member:body,nonce,preview_digest:digest}})+'\n'+JSON.stringify({type:'result',owner:'owner',ok:true,data:{state:'applied',operation_id:'op',preview_digest:digest}})+'\n',{headers:{'content-type':'application/vnd.ciel.task-dispatch+ndjson;version=1'}});
+  assert(path.endsWith('/confirm'));return Response.json({ok:true,owner:'owner',data:{confirmed:true}});
+ };
+ const abort=new AbortController(),budget=guards.a({signal:abort.signal,abort:error=>abort.abort(error)});
+ try{
+  await budget.run(async()=>{
+   const tools=f.resolve(guards.r(abort.signal)),proposal=find(tools,'tasks_propose');retained=find(tools,'tasks_execute');
+   const hook=f.builder.registry.typedHooks.find(hook=>hook.hookName==='before_tool_call');assert(hook);
+   const request={...f.context,abortSignal:abort.signal,requester:{senderId:'owner',senderIsOwner:true}};
+   const decision=await hook.handler({toolName:'tasks_propose',params:{scope}},request);assert(decision.requireApproval);
+   await decision.requireApproval.onResolution('allow-once');const grant=await proposal.execute('scope',{scope},abort.signal);assert.equal(grant.details.data.grant_revision,1);
+   const result=await retained.execute('member',{task_id:id,grant_revision:1,operation_id:'op'},abort.signal);assert.equal(result.details.data.state,'applied');
+   assert.equal(paths.filter(path=>path.endsWith('/confirm')).length,1);
+  });
+  assert(retained);await assert.rejects(retained.execute('retained',{task_id:id,grant_revision:1,operation_id:'op'},abort.signal),/scope is no longer active/);
+  assert.equal(paths.filter(path=>path.endsWith('/execute')).length,1);
  }finally{globalThis.fetch=original;f.close();}
 });

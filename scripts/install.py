@@ -86,10 +86,18 @@ def plugin_contract(archive):
         manifest = json.load(packed.extractfile('package/openclaw.plugin.json'))
     tools = manifest.get('contracts', {}).get('tools', [])
     properties = manifest.get('configSchema', {}).get('properties', {})
-    if (manifest.get('id') != 'secretary-tools' or len(tools) != 26 or len(set(tools)) != 26
+    task_tools = {'tasks_propose', 'tasks_resume', 'tasks_inspect', 'tasks_capture',
+                  'tasks_execute', 'tasks_discard', 'tasks_end'}
+    scoped = len(tools) == 33 and task_tools <= set(tools)
+    # Preserve verification of already published 26-tool bundles. New bundles
+    # declare seven additional gated tools; neither profile activates task writes.
+    supported = (len(tools) == 26 and not task_tools.intersection(tools)) or scoped
+    if (manifest.get('id') != 'secretary-tools' or not supported or len(set(tools)) != len(tools)
             or not {'sheets_preview_create_tab', 'sheets_create_tab', 'docs_search'} <= set(tools)
             or properties.get('approvalTransportQualified', {}).get('default') is not False
-            or properties.get('schedulerQualified', {}).get('default') is not False):
+            or properties.get('schedulerQualified', {}).get('default') is not False
+            or (scoped and any(properties.get(key, {}).get('default') is not False
+                               for key in ('taskToolsEnabled', 'taskTransportQualified')))):
         raise InstallerError('plugin contract or inactive defaults differ')
     return tools
 

@@ -1,13 +1,16 @@
 import {test,expect} from 'bun:test';
+import {taskToolNames} from '../src/task-tool-specs';
 import {coreTools} from '../src/bridge';
 
 test('manifest declares ownership of every secretary tool before runtime loading', async()=>{
  const manifest=await Bun.file(new URL('../openclaw.plugin.json',import.meta.url)).json();
- const expected=[...coreTools,...['create','list','get','reschedule','pause','resume','cancel','history'].map(action=>`reminders_${action}`)];
+ const expected=[...taskToolNames,...coreTools,...['create','list','get','reschedule','pause','resume','cancel','history'].map(action=>`reminders_${action}`)];
  expect(manifest.contracts?.tools?.toSorted()).toEqual(expected.toSorted());
  expect(manifest.activation?.onStartup).toBe(true);
  expect(manifest.configSchema.properties.approvalTransportQualified.default).toBe(false);
  expect(manifest.configSchema.properties.schedulerQualified.default).toBe(false);
+ expect(manifest.configSchema.properties.taskToolsEnabled.default).toBe(false);
+ expect(manifest.configSchema.properties.taskTransportQualified.default).toBe(false);
 });
 
 test('package metadata check rejects tool-contract drift without loading the host SDK',async()=>{
@@ -30,6 +33,13 @@ test('package metadata check rejects tool-contract drift without loading the hos
   const good=Bun.spawnSync([process.execPath,checker,'--root',root]);
   expect(good.exitCode).toBe(0);
   expect(good.stdout.toString()).toContain('metadata only');
+  for(const key of ['taskToolsEnabled','taskTransportQualified']){
+   manifest.configSchema.properties[key].default=true;
+   await writeFile(join(root,'openclaw.plugin.json'),JSON.stringify(manifest));
+   const active=Bun.spawnSync([process.execPath,checker,'--root',root]);expect(active.exitCode).toBe(1);expect(active.stderr.toString()).toContain('CAPABILITIES_MUST_DEFAULT_OFF');
+   manifest.configSchema.properties[key].default=false;
+  }
+  await writeFile(join(root,'openclaw.plugin.json'),JSON.stringify(manifest));
   pkg.files=['**'];
   await writeFile(join(root,'package.json'),JSON.stringify(pkg));
   const broad=Bun.spawnSync([process.execPath,checker,'--root',root]);

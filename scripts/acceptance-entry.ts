@@ -18,7 +18,7 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
   const manifest=await Bun.file(new URL('../plugins/secretary-tools/openclaw.plugin.json',import.meta.url)).json();
   assert(metadata,'Actual SDK must recognize metadata after the plugin extends register');
   assert.deepEqual(metadata.tools.map(tool=>tool.name).sort(),manifest.contracts.tools.toSorted());
-  assert.equal(metadata.tools.length,26);
+  assert.equal(metadata.tools.length,33);
   let runtimeAllowed=false;
   function registry() {
    const tools=new Map<string,OpenClawPluginToolFactory<2>>();
@@ -37,7 +37,7 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
     on:hooks.on,
    };
    entry.register(api as unknown as OpenClawPluginApi);
-   assert.equal(tools.size,26);
+   assert.equal(tools.size,33);
    assert.deepEqual([...tools.keys()].sort(),manifest.contracts.tools.toSorted());
    return {
     tool(name:string,context:OpenClawPluginToolContext<2>):AnyAgentTool {

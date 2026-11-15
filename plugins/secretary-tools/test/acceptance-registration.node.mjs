@@ -9,7 +9,7 @@ test('memory and read-only acceptance registries admit lifecycle hooks and retai
   const hooks=acceptanceHooks(),tools=new Map();
   const api={pluginConfig,on:hooks.on,registerTool(factory,options){tools.set(options.name,factory);},get runtime(){throw Error('Registration accessed native runtime');}};
   entry.register(api);
-  assert.equal(tools.size,26);assert([...tools.values()].every(factory=>factory.contextVersion===2));
+  assert.equal(tools.size,33);assert([...tools.values()].every(factory=>factory.contextVersion===2));
   assert.deepEqual(hooks.names().sort(),['before_reset','before_tool_call','session_end']);
   assert.equal(await hooks.beforeToolCall({toolName:'sheets_list',params:{}},{}),undefined);
   if(pluginConfig.readOnlyRuntime===true)assert.deepEqual(await hooks.beforeToolCall({toolName:'docs_apply',params:{}},{}),{block:true,blockReason:'Read-only runtime forbids mutations'});

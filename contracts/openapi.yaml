@@ -24,11 +24,11 @@
     },
     "description": "Secretary Core bounded reads and opt-in structured writes. JSON serialization is valid YAML. Legacy workbook views remain read-only. 64 KiB request, 2 MiB provider response, 10 second provider timeout, two read retries; writes never retried automatically. SQLite durable intent and owner-bound approvals; operator-only reconciliation. Google Sheets lacks atomic compare-and-swap: a human edit after preflight may still race the RAW request. Generic registered grid reads are independent of domain profiles. Registered Google Docs supports bounded body-text reads and owner-approved append_text/one-match replace_text with required revision control through the same journal/FSM. No arbitrary resource URL, range or batch request is accepted from tool input.",
     "x-native-task-profile": {
-      "availability": "Trusted composition API only; production startup and 26 model tools retain their existing behavior. Disabled without explicit scoped ledger attachment.",
+      "availability": "Opt-in task model tools and normal startup composition; disabled by default. Plugin taskToolsEnabled/taskTransportQualified/approvalTransportQualified must be true; Core requires SECRETARY_WRITE_TASKS_ENABLED=true, writes enabled, state directory and stable SECRETARY_DEPLOYMENT_ID. No deployment or live qualification follows from local tests.",
       "authority": "Actual current SDK v2 owner context plus distinct operator bearer; no model boolean grants scope.",
       "dispatch": "One awaited member; fresh preflight, native challenge, durable one-use receipt, shared FSM and observer.",
       "lifetime": "No task TTL; dialog/capture/dispatch handshake have separate bounds.",
-      "qualification": "New supported Linux/SDK and live target qualification remain separate. Native summary memory must be disabled until fencing integration."
+      "qualification": "Supported Linux/SDK and live target qualification remain separate. Optional native summary memory uses the shared per-source stale fence and refresh; memory result is independent of write state."
     }
   },
   "servers": [

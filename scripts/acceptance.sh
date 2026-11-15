@@ -75,7 +75,7 @@ registry="$PWD/postman/fixtures/registry.json"
 writes_enabled=false
 if [ "$scenario" = writes ]; then registry="$PWD/postman/fixtures/registry-writes.json"; writes_enabled=true; fi
 if [ "$scenario" = workspace ]; then registry="$PWD/postman/fixtures/registry-workspace.json"; writes_enabled=true; fi
-SECRETARY_CONFIG="$registry" SECRETARY_WRITES_ENABLED="$writes_enabled" \
+SECRETARY_CONFIG="$registry" SECRETARY_WRITES_ENABLED="$writes_enabled" SECRETARY_WRITE_TASKS_ENABLED=false \
 SECRETARY_STATE_DIR="$log_dir/state" SECRETARY_APPROVAL_TOKEN=synthetic-separate-operator-token \
 SECRETARY_CORE_TOKEN=synthetic-acceptance-core-token SECRETARY_OWNER=+15555550123 \
 SECRETARY_MOCK_MODE=true SECRETARY_GOOGLE_BASE_URL="$provider_base" \
@@ -87,6 +87,27 @@ if SECRETARY_ACCEPTANCE_PROVIDER_URL="$provider_base" SECRETARY_ACCEPTANCE_DOCS_
  cat "$log_dir/client.log"
 else
  exit "$?"
+fi
+if [ "$scenario" = workspace ]; then
+ # Recompose the normal binary against a fresh journal after the legacy suite.
+ # Provider fixtures remain the same disposable Google simulation.
+ stage=task_core_start
+ kill "$core_pid"
+ wait "$core_pid" 2>/dev/null || true
+ core_pid=''
+ SECRETARY_CONFIG="$registry" SECRETARY_WRITES_ENABLED=true SECRETARY_WRITE_TASKS_ENABLED=true \
+ SECRETARY_DEPLOYMENT_ID=synthetic-task-deployment SECRETARY_STATE_DIR="$log_dir/task-state" \
+ SECRETARY_APPROVAL_TOKEN=synthetic-separate-operator-token SECRETARY_CORE_TOKEN=synthetic-acceptance-core-token \
+ SECRETARY_OWNER=+15555550123 SECRETARY_MOCK_MODE=true SECRETARY_GOOGLE_BASE_URL="$provider_base" \
+ SECRETARY_GOOGLE_TOKEN=synthetic-provider-token SECRETARY_GOOGLE_DOCS_BASE_URL="$docs_base" \
+ "$core_binary" > "$log_dir/task-core.log" 2>&1 &
+ core_pid=$!
+ stage=task_client
+ if node scripts/acceptance-task-tools.mjs http://127.0.0.1:8787 "$docs_base" "$provider_base" > "$log_dir/task-client.log" 2>&1; then
+  cat "$log_dir/task-client.log"
+ else
+  exit "$?"
+ fi
 fi
 stage=traffic
 # Injected conditions short-circuit before a member request event (Postman CLI behavior).

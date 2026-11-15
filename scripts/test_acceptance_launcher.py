@@ -167,5 +167,20 @@ else echo 'unknown option secret-parser-canary' >&2; exit 9; fi''')
                         os.kill(pid, 0)
 
 
+    def test_task_stage_diagnostics_include_private_task_logs_without_exposing_them(self):
+        log = self.logs / 'task-stage'
+        log.mkdir()
+        (log / 'task-client.log').write_text('ECONNREFUSED secret-task-canary')
+        result = subprocess.run(['python3', str(ROOT / 'scripts/acceptance_diagnostics.py'),
+                                 '--log-dir', str(log), '--scenario', 'workspace', '--stage',
+                                 'task_client', '--exit-code', '1'],
+                                env=self.environment, capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        diagnostic = json.loads((log / 'diagnostic.json').read_text())
+        self.assertEqual(diagnostic['stage'], 'task_client')
+        self.assertEqual(diagnostic['error_categories'], ['connection_failed'])
+        self.assertNotIn('secret-task-canary', result.stdout + self.summary.read_text())
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -55,6 +55,13 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
         std::path::Path::new(&std::env::var("SECRETARY_CONFIG")?),
     )?;
     let enabled = std::env::var("SECRETARY_WRITES_ENABLED").as_deref() == Ok("true");
+    let task_deployment = task_deployment(
+        enabled,
+        std::env::var("SECRETARY_WRITE_TASKS_ENABLED")
+            .ok()
+            .as_deref(),
+        std::env::var("SECRETARY_DEPLOYMENT_ID").ok(),
+    )?;
     let token = std::env::var("SECRETARY_CORE_TOKEN")?;
     let google = if std::env::var("SECRETARY_MOCK_MODE").as_deref() == Ok("true") {
         GoogleClient::static_token(
@@ -102,17 +109,26 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
             },
         )?
     };
-    let mut state = AppState::new(
-        registry,
-        token.clone(),
-        std::env::var("SECRETARY_OWNER")?,
-        google,
-    )?;
+    let owner = std::env::var("SECRETARY_OWNER")?;
+    let mut state = AppState::new(registry, token.clone(), owner.clone(), google)?;
     if let Ok(directory) = std::env::var("SECRETARY_STATE_DIR") {
         let journal = secretary_core::journal::Journal::open(std::path::Path::new(&directory))
             .await
             .map_err(|_| "journal initialization failed")?;
-        let writes = secretary_core::writes::Writes::new(journal, enabled);
+        let writes = if let Some(deployment) = task_deployment {
+            // Explicit profile selection uses the same journal/writer/bus. It
+            // disables legacy mutation routes rather than leaving a bypass.
+            let tasks = secretary_core::journal::write_tasks::JournalWriteTasks::open(
+                journal,
+                &owner,
+                &deployment,
+            )
+            .await
+            .map_err(|_| "task ledger initialization failed")?;
+            secretary_core::writes::Writes::with_task_ledger(tasks, enabled)
+        } else {
+            secretary_core::writes::Writes::new(journal, enabled)
+        };
         state = state.with_writes(
             writes,
             std::env::var("SECRETARY_APPROVAL_TOKEN").unwrap_or_default(),
@@ -123,4 +139,56 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:8787").await?;
     axum::serve(listener, router(state)).await?;
     Ok(())
+}
+
+fn task_deployment(
+    writes_enabled: bool,
+    selected: Option<&str>,
+    deployment: Option<String>,
+) -> Result<Option<String>, &'static str> {
+    match selected {
+        None | Some("false") => Ok(None),
+        Some("true") if writes_enabled => deployment
+            .filter(|value| {
+                !value.is_empty()
+                    && value.len() <= 128
+                    && value.as_bytes()[0].is_ascii_alphanumeric()
+                    && value
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
+            })
+            .map(Some)
+            .ok_or("SECRETARY_DEPLOYMENT_ID is required for task writes"),
+        Some("true") => Err("task writes require SECRETARY_WRITES_ENABLED=true"),
+        Some(_) => Err("SECRETARY_WRITE_TASKS_ENABLED must be true or false"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::task_deployment;
+
+    #[test]
+    fn task_profile_requires_explicit_enablement_and_stable_deployment() {
+        assert_eq!(task_deployment(true, None, None), Ok(None));
+        assert_eq!(task_deployment(true, Some("false"), None), Ok(None));
+        assert_eq!(
+            task_deployment(false, Some("true"), Some("deployment-v1".into())),
+            Err("task writes require SECRETARY_WRITES_ENABLED=true")
+        );
+        for deployment in [None, Some("".into()), Some("bad\nidentity".into())] {
+            assert_eq!(
+                task_deployment(true, Some("true"), deployment),
+                Err("SECRETARY_DEPLOYMENT_ID is required for task writes")
+            );
+        }
+        assert_eq!(
+            task_deployment(true, Some("yes"), Some("deployment-v1".into())),
+            Err("SECRETARY_WRITE_TASKS_ENABLED must be true or false")
+        );
+        assert_eq!(
+            task_deployment(true, Some("true"), Some("deployment-v1".into())),
+            Ok(Some("deployment-v1".into()))
+        );
+    }
 }
