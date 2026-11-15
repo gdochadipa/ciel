@@ -50,6 +50,18 @@ unavailable. The synchronous guard covers the plugin's Core-request dispatch,
 not the subsequent provider send inside Core. Live owner routing, reset/new and
 continuation provenance require separate host qualification.
 
+The default entry also routes native `before_reset`/`session_end` notifications
+into a shared per-API invocation guard. Exact ended session identities invalidate
+retained tools and approval callbacks; delayed old-session notifications cannot
+invalidate their successors. Host authority is still checked on every request:
+SDK notifications are detached and cannot close every reset race by themselves.
+No hook sends a Core decision, resets usage or retries a write. Revocation storage
+is bounded to 4096 ended incarnations; overflow blocks further invocations until
+plugin restart rather than forgetting old revocations. Supported Linux verification
+passes using the actual SDK emitter tests in sra4HWst plus the corrected Workspace
+fixture and all75 protected cases in WJbq61zd. Live owner/reset routing remains
+unqualified.
+
 The bridge defaults to `http://127.0.0.1:8787`, permits literal loopback HTTP only and rejects redirects. It reads distinct Core/operator bearers from `SECRETARY_CORE_TOKEN` and `SECRETARY_APPROVAL_TOKEN` lazily at invocation. Request limit 64 KiB, response limit 2 MiB, bridge timeout 5s; raw provider errors/tokens are omitted. Core remains authoritative for schema, immutable intent, actor/action binding, expiry, audit and single-use commit.
 
 `approvalTransportQualified` defaults false and blocks Sheets commits and `docs_apply`. The registered `before_tool_call` hook presents the captured original preview and permits only allow-once/deny. The bridge waits for Core's successful approval acknowledgement before sending apply, including when the host does not await `onResolution`. Refusal, callback failure, expiry or revoked invocation authority blocks apply. A missing acknowledgement yields an unknown outcome; inspect Core history before continuing. Qualify owner-only routing, full rendering without truncation, callback ordering/failure behavior and restart handling in the actual host before enabling. No model `approved` flag is accepted.
@@ -78,6 +90,13 @@ supported SDK/Linux IO cases passed in AfTS4Z4B; all75 protected acceptance case
 passed in YW7DQYg5 on 2026-11-15 after the fixture timeout correction. The separate operator bearer is configuration,
 never tool input. See [native protocol](../../contracts/task-native-transport.md).
 
+Trusted host composition must install `registerNativeSessionLifecycle(api)`
+during registration. Bind the raw client's context with
+`bindNativeSessionInvocation(api, context, signal)`; the memory-aware client uses
+this binding automatically. Both exports share the default model factories'
+per-API lifecycle state. Lifecycle hooks do not terminate a previously accepted
+provider effect or resolve its outcome.
+
 Scope authorization uses one captured native owner decision. Core-owned task IDs,
 digests/revisions and cumulative usage survive ordinary pauses. There is no task
 countdown. Local acknowledgement barriers survive client recreation; lost grant
@@ -86,8 +105,9 @@ preflight challenge, rechecks native authority, then confirms exactly one effect
 Core rechecks its durable grant and persists an accepted-member receipt before
 using the existing adapter/observer. A lost result or expired invocation cannot
 authorize resend. The supported Linux/SDK/Core fixture and existing Google-only
-regressions for the memory-disabled client passed on 2026-11-14. Normal task-tool/lifecycle integration and live
-host qualification remain pending; existing model tools retain their legacy flow.
+regressions for the memory-disabled client passed on 2026-11-14. Normal model
+task-tool/executor composition and live host qualification remain pending;
+existing model tools retain their legacy flow.
 
 ## Native reminders and memory
 

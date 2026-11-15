@@ -3,6 +3,7 @@ import type {OpenClawPluginApi,OpenClawPluginToolContext,AnyAgentTool} from 'ope
 import {defineToolPlugin} from 'openclaw/plugin-sdk/tool-plugin';
 import {Type} from 'typebox';
 import {bindNativeInvocation,NativeApprovalAuthority} from './native-authority.js';
+import {bindNativeSessionInvocation,registerNativeSessionLifecycle} from './native-lifecycle.js';
 import {executeWithSummaryMemory} from './summary-memory.js';
 import {createSecretary, secretaryModelText, reminderTools, secretaryToolNames, commitTools, type Options} from './bridge.js';
 const reminderDescriptions:Record<string,string>={
@@ -71,7 +72,7 @@ function authorityFor(api:OpenClawPluginApi):NativeApprovalAuthority {
  return authority;
 }
 function createTool(api:OpenClawPluginApi,context:OpenClawPluginToolContext,name:string):AnyAgentTool {
- const toolContext=bindNativeInvocation(context);
+ const toolContext=bindNativeSessionInvocation(api,context);
  if(commitTools.some(tool=>tool===name))authorityFor(api).remember(name,toolContext);
  return {
    name,label:name,description:documentDescriptions[name]??reminderDescriptions[name]??'Owner-only secretary operation; input cannot set actor, credentials, host or outbound recipient.',
@@ -113,6 +114,7 @@ const entry=defineToolPlugin({
 // The authoring helper registers v1 callbacks. Preserve its static metadata, but
 // explicitly opt runtime factories into the SDK's host-bound v2 authority.
 entry.register=(api)=>{
+ registerNativeSessionLifecycle(api);
  for(const name of secretaryToolNames)api.registerTool({contextVersion:2,create:context=>createTool(api,context,name)},{name});
  api.on('before_tool_call',async(event,context)=>{
   if(!commitTools.some(tool=>tool===event.toolName))return;
@@ -126,3 +128,4 @@ entry.register=(api)=>{
 export default entry;
 
 export {createNativeTaskClient,createMemoryNativeTaskClient} from "./task-native.js";
+export {bindNativeSessionInvocation,registerNativeSessionLifecycle} from './native-lifecycle.js';

@@ -28,7 +28,9 @@ const toolsSdk=await load('tools-fou-nJCY.mjs');
 const lifecycle=await load('registry-lifecycle-C978THT2.mjs');
 const contextSdk=await load('load-context.resolve-COA_cf7U.mjs');
 const guards=await load('agent-tool-source-execution-guard-DI8a3ZFX.mjs');
-const {default:entry}=await import('../dist/index.js');
+const globalHooks=await load('hook-runner-global-trQbJiN5.mjs');
+const resetService=await load('session-reset-service-DN3eiupo.mjs');
+const {default:entry,registerNativeSessionLifecycle}=await import('../dist/index.js');
 const manifest=JSON.parse(await readFile(new URL('../openclaw.plugin.json',import.meta.url),'utf8'));
 const logger={info(){},warn(){},error(message){throw Error(message);},debug(){}};
 
@@ -52,10 +54,67 @@ function fixture(){
  function resolve(assertInvocationCurrent,extra={}){
   return toolsSdk.i({context:{...context,...extra},env:process.env,toolAllowlist:['secretary-tools'],assertInvocationCurrent,preparedRuntime:{loadContext,metadataSnapshot,registry:builder.registry}});
  }
- return {builder,context,resolve,close(){lifecycle.T(builder.registry);}};
+ return {builder,api,config,context,resolve,close(){globalHooks.o();lifecycle.T(builder.registry);}};
 }
 function find(tools,name){const tool=tools.find(tool=>tool.name===name);assert(tool,`Missing ${name}`);return tool;}
 function deferred(){let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};}
+
+test('actual Gateway new/reset session-end emitter revokes the exact old factory and leaves its successor current',async()=>{
+ for(const reason of ['new','reset']){
+  const f=fixture(),original=globalThis.fetch,observed=deferred();let sends=0;
+  globalThis.fetch=async()=>{sends++;return Response.json({ok:true,data:[]});};
+  try{
+   // Keep the supplied run assertion live to isolate revocation by the real SDK
+   // emitter/hook runner. These requester identities are still synthetic.
+   const old=find(f.resolve(()=>{}),'sheets_list');
+   const next=find(f.resolve(()=>{},{sessionId:'successor'}),'sheets_list');
+   f.api.on('session_end',()=>{observed.resolve();});globalHooks.a(f.builder.registry);
+   resetService.a({cfg:f.config,...f.context,reason,nextSessionId:'successor',storePath:join(state,'sessions.json')});
+   await Promise.race([observed.promise,new Promise((_,reject)=>{const timer=setTimeout(()=>reject(Error('Session-end hook not dispatched')),3000);timer.unref();})]);
+   assert.equal((await old.execute('old',{})).details.error.code,'INVOCATION_EXPIRED');assert.equal(sends,0);
+   assert.equal((await find(f.resolve(()=>{}),'sheets_list').execute('reissued-old',{})).details.error.code,'INVOCATION_EXPIRED');assert.equal(sends,0);
+   assert.equal((await next.execute('new',{})).details.ok,true);assert.equal(sends,1);
+   // Delayed/duplicate old-incarnation delivery must not select the successor.
+   await globalHooks.n().runSessionEnd({sessionId:'incarnation',sessionKey:f.context.sessionKey,messageCount:0,reason},f.context);
+   assert.equal((await next.execute('still-current',{})).details.ok,true);assert.equal(sends,2);
+  }finally{globalThis.fetch=original;f.close();}
+ }
+});
+
+test('lifecycle registration is idempotent and contradictory session-end payloads cannot revoke a current factory',async()=>{
+ const f=fixture(),original=globalThis.fetch;let sends=0;
+ globalThis.fetch=async()=>{sends++;return Response.json({ok:true,data:[]});};
+ try{
+  registerNativeSessionLifecycle(f.api);registerNativeSessionLifecycle(f.api);
+  assert.equal(f.builder.registry.typedHooks.filter(hook=>hook.hookName==='session_end').length,1);
+  assert.equal(f.builder.registry.typedHooks.filter(hook=>hook.hookName==='before_reset').length,1);
+  const tool=find(f.resolve(()=>{}),'sheets_list');globalHooks.a(f.builder.registry);
+  for(const event of [{sessionId:'wrong',sessionKey:f.context.sessionKey},{sessionId:f.context.sessionId,sessionKey:'wrong'}]){
+   await globalHooks.n().runSessionEnd({...event,messageCount:0,reason:'reset'},f.context);
+   assert.equal((await tool.execute('valid',{})).details.ok,true);
+  }
+  assert.equal(sends,2);
+ }finally{globalThis.fetch=original;f.close();}
+});
+
+test('actual Gateway before-reset emitter revokes a retained approval before a Core decision',async()=>{
+ const f=fixture(),original=globalThis.fetch,observed=deferred(),paths=[];
+ globalThis.fetch=async(input,init)=>{
+  const request=new Request(input,init);paths.push(new URL(request.url).pathname);
+  return Response.json({ok:true,data:{...await request.json(),resource_kind:'sheets_grid',actor:'owner',preview_digest:'synthetic-digest',expires_at:'2099-01-01T00:00:00Z',state:'previewed'}});
+ };
+ try{
+  const tools=f.resolve(()=>{});
+  await find(tools,'sheets_preview_change').execute('preview',{operation_id:'op',spreadsheet:'sheet',view:'grid',action:'update',fields:{range:'A1:A1',values:[['new']]}});
+  const hook=f.builder.registry.typedHooks.find(hook=>hook.hookName==='before_tool_call');assert(hook);
+  const decision=await hook.handler({toolName:'sheets_update',params:{operation_id:'op'}},{...f.context,toolName:'sheets_update',abortSignal:new AbortController().signal,requester:{senderId:'owner',senderIsOwner:true}});assert(decision.requireApproval);
+  f.api.on('before_reset',()=>{observed.resolve();});globalHooks.a(f.builder.registry);
+  await resetService.n({cfg:f.config,target:{agentId:f.context.agentId,canonicalKey:f.context.sessionKey},entry:{sessionId:f.context.sessionId},storePath:join(state,'sessions.json'),messages:[],reason:'reset'});
+  await Promise.race([observed.promise,new Promise((_,reject)=>{const timer=setTimeout(()=>reject(Error('Before-reset hook not dispatched')),3000);timer.unref();})]);
+  await assert.rejects(decision.requireApproval.onResolution('allow-once'),/INVOCATION_EXPIRED/);
+  assert.deepEqual(paths,['/v1/tools/sheets_preview_change']);
+ }finally{globalThis.fetch=original;f.close();}
+});
 
 test('actual registry registers only v2; resolver refuses a tool outside admitted authority',async()=>{
  const f=fixture();try{

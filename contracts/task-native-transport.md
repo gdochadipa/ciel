@@ -163,7 +163,45 @@ The SDK/Core fixture proves incremental members after one owner decision and no
 resend after uncertainty. The existing Google scenarios regress the shared apply
 refactor; they do not automatically exercise the new task protocol.
 
-Integration into normal model tool selection, native reset/new routing and summary
-memory, broader same-source composition, formal provider undo and evidence cleanup
-remain unfinished. Keep every live/approval/write activation gate disabled until
+## Native lifecycle revocation
+
+Default v2 model factories register `before_reset` and `session_end` hooks and bind
+their assertions to a per-host-API revocation set. Each hook retires only the exact
+agent/session-key/session-ID tuple; delayed old-session hooks never select a
+successor or a task ID. Hooks make no Core requests, approve nothing and do not
+change durable grants or usage. An incomplete or contradictory hook identity
+cannot select an incarnation. The host's current invocation assertion remains
+mandatory because SDK lifecycle notifications are detached and may arrive late.
+
+Trusted composition outside the default entry must call
+`registerNativeSessionLifecycle(api)` once during registration and use
+`bindNativeSessionInvocation(api, context, signal)` for the raw task client.
+The memory-aware client automatically uses that same per-API binding. A delivered
+reset/end invalidates retained callbacks, in-flight post-await checks and final
+post-preflight confirmation. A previously accepted provider effect can still
+finish; inspect existing operation evidence rather than resending it.
+
+Revocations never expire or evict older incarnations. At 4096 distinct ended
+incarnations per API, another distinct ending saturates the guard and blocks all
+subsequent invocation checks with `NATIVE_LIFECYCLE_CAPACITY`. Restarting the
+plugin clears local bookkeeping; genuine new host authority and the existing Core
+Gateway-restart reconfirmation rules still apply. This is a memory bound, not a
+task permission countdown.
+
+Supported Node24 cases use the actual pinned SDK Gateway before-reset/session-end
+emitters, registry, v2 resolver and hook runner with synthetic session/requester
+identities and Core responses. They cover new/reset revocation, retained approval
+and delayed old hooks. A separate memory-aware task case proves hook revocation
+during preflight prevents confirmation/sends. The sra4HWst supported Linux verifier
+passes official SDK build/validation,212 Rust/37 doctests,92 Bun and41 SDK Node
+cases plus six Google-only scenarios. Its Workspace fixture rejected a newly
+registered hook before native-memory execution. After correcting only fixture
+registration/test wiring, WJbq61zd passes the official build,two new registration
+regressions,Workspace/native memory and all75 protected cases; the210-input final
+source check is unchanged. These emitter and simulated-provider integration tests
+do not establish actual live reset commands or production owner routing.
+
+Integration into normal model task-tool selection/execution, broader same-source
+composition, formal provider undo and evidence cleanup remain unfinished. Keep
+every live/approval/write activation gate disabled until
 its own qualification and explicit activation authorization exist.

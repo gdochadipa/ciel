@@ -2,6 +2,7 @@
 import type {OpenClawPluginApi,OpenClawPluginToolContext} from 'openclaw/plugin-sdk/plugin-entry';
 import {randomUUID} from 'node:crypto';
 import {bindNativeInvocation} from './native-authority.js';
+import {bindNativeSessionInvocation} from './native-lifecycle.js';
 import type {ApprovalDecision} from './approval-ack.js';
 import {createSecretary} from './bridge.js';
 import {assertSummaryMemoryCurrent,executeTaskWithSummaryMemory} from './summary-memory.js';
@@ -62,7 +63,7 @@ export function createNativeTaskClient(options:NativeTaskOptions,context:OpenCla
 export function createMemoryNativeTaskClient(options:NativeTaskOptions & {coreToken:string},api:OpenClawPluginApi,context:OpenClawPluginToolContext,signal:AbortSignal|undefined):NativeTaskClient {
  if(options.summaryMemoryEnabled!==true||api.pluginConfig?.summaryMemoryEnabled!==true)fail('SUMMARY_MEMORY_DISABLED');
  if(api.pluginConfig?.owner!==options.owner||api.pluginConfig?.readOnlyRuntime===true)fail('INVALID_CONFIGURATION');
- const current=bindNativeInvocation(context,signal);
+ const current=bindNativeSessionInvocation(api,context,signal);
  const native={...current,get senderIsOwner(){return current.senderIsOwner;},assertInvocationCurrent(){assertSummaryMemoryCurrent(api,current);}};
  const bridge=createSecretary({coreUrl:options.coreUrl,owner:options.owner,coreToken:options.coreToken});
  return taskClient({...options,summaryMemoryEnabled:false},native,signal,async(operationId,dispatch)=>{

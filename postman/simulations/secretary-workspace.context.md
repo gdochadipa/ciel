@@ -89,3 +89,40 @@ documents.rs, presentation/task_native.rs and tests/task_native.rs.
   plugins/secretary-tools/src/summary-memory.ts;
   plugins/secretary-tools/test/task-memory.node.mjs
 - updated_at: 2026-11-15
+
+
+## Lifecycle fixture registration — supported retry passed, 2026-11-15
+
+- id: native-memory-fixture-hook-surface
+- status: contradicted
+- claim: The native-memory acceptance host fixture only needs to accept
+  before_tool_call when registering the built plugin.
+- reason: The default plugin also registers before_reset and session_end.
+  A fixture asserting a single hook fails before native-memory source/model/IO
+  behavior can run; this does not establish a Google or lifecycle guard defect.
+- verification: Operator run sra4HWst matches all208 frozen lifecycle inputs.
+  Official SDK lifecycle/typecheck/build/validation,212 Rust/37 doctests,
+  92 Bun/41 actual-SDK Node cases and seven script cases pass. Six earlier Google
+  scenarios pass. Workspace reaches three built-entry cases, then the native
+  memory fixture rejects before_reset at registration. Protected acceptance and
+  final source-check are not reached; cleanup removes the unused test image.
+  Extracted the unchanged restrictive registration boundary into a shared helper:
+  Node24 with the actual built plugin reproduces the same assertion, then passes
+  after accepting exactly the three registered hooks. Unknown/duplicate hooks
+  still reject and the approval callback cannot be replaced. The read-budget
+  fixture had the same stale assertion and now uses that same helper. WJbq61zd
+  reruns official SDK lifecycle/build/typecheck/validation,the two new registration
+  regressions,Workspace/native-summary-memory and all75 protected cases: all pass.
+  Its exact scope excludes the full verifier and six completed Google scenarios.
+  All210 frozen hashes match then-current source; final source-check reports
+  unchanged=true and image cleanup succeeds. Google member traffic contains70
+  Docs and51 Sheets request events. Only fixture/test wiring and this context
+  changed from sra4HWst; production sources and locks are unchanged. No live
+  host/model/Google or native-task provider qualification is inferred.
+- source: scripts/acceptance-hooks.mjs; scripts/acceptance-native-memory.mjs;
+  scripts/acceptance-read-budget.mjs;
+  plugins/secretary-tools/test/acceptance-registration.node.mjs;
+  sra4HWst/simulations/secretary-acceptance.rJ8J5A/client.log;
+  WJbq61zd/simulations/secretary-acceptance.PFiOLx/client.log;
+  WJbq61zd/acceptance.log; WJbq61zd/source-check.json
+- updated_at: 2026-11-15

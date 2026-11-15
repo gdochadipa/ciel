@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {getToolPluginMetadata} from 'openclaw/plugin-sdk/tool-plugin';
 import type {AnyAgentTool,OpenClawPluginApi,OpenClawPluginToolFactory,OpenClawPluginToolContext} from 'openclaw/plugin-sdk/plugin-entry';
 import {acceptanceConfiguration,syntheticOwner,syntheticToken} from './acceptance';
+import {acceptanceHooks} from './acceptance-hooks.mjs';
 
 export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'tabs'|'grid'='sheets') {
  const base=acceptanceConfiguration(coreUrl,'writes');
@@ -21,7 +22,7 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
   let runtimeAllowed=false;
   function registry() {
    const tools=new Map<string,OpenClawPluginToolFactory<2>>();
-   let hook:Function|undefined;
+   const hooks=acceptanceHooks();
    // Only registration is represented here. Never substitute a host SDK/runtime.
    const api={
     pluginConfig:{owner:syntheticOwner,coreUrl:base.coreUrl,approvalTransportQualified:true,schedulerQualified:false},
@@ -33,10 +34,10 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
      assert.equal(factory.contextVersion,2);assert.equal(typeof factory.create,'function');assert(!tools.has(options.name));
      tools.set(options.name,factory);
     },
-    on(name:string,handler:Function) {assert.equal(name,'before_tool_call');assert(!hook);hook=handler;},
+    on:hooks.on,
    };
    entry.register(api as unknown as OpenClawPluginApi);
-   assert.equal(tools.size,26);assert(hook);
+   assert.equal(tools.size,26);
    assert.deepEqual([...tools.keys()].sort(),manifest.contracts.tools.toSorted());
    return {
     tool(name:string,context:OpenClawPluginToolContext<2>):AnyAgentTool {
@@ -45,8 +46,7 @@ export async function runEntryAcceptance(coreUrl:string,kind:'sheets'|'docs'|'ta
      return tool;
     },
     before(name:string,params:Record<string,unknown>,requester?:Record<string,unknown>) {
-     assert(hook);
-     return hook({toolName:name,params},{agentId:'synthetic-agent',sessionKey:'agent:synthetic-agent:main',sessionId:'synthetic-incarnation',abortSignal:new AbortController().signal,requester});
+     return hooks.beforeToolCall({toolName:name,params},{agentId:'synthetic-agent',sessionKey:'agent:synthetic-agent:main',sessionId:'synthetic-incarnation',abortSignal:new AbortController().signal,requester});
     },
    };
   }

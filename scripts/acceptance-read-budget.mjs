@@ -1,14 +1,15 @@
 /** Actual built SDK factory -> protected Core HTTP/bus/journal -> synthetic Google. */
 import assert from 'node:assert/strict';
 import entry from '../plugins/secretary-tools/dist/index.js';
+import {acceptanceHooks} from './acceptance-hooks.mjs';
 const [coreUrl,owner]=process.argv.slice(2);
 assert.equal(new URL(coreUrl).hostname,'127.0.0.1');
 assert.equal(process.env.SECRETARY_APPROVAL_TOKEN,undefined);
 function registry(){
- const tools=new Map();let hook;
- const api={pluginConfig:{owner,coreUrl,readOnlyRuntime:true},get runtime(){throw Error('Readonly fixture must not access native runtime capabilities');},registerTool(factory,options){tools.set(options.name,factory);},on(name,handler){assert.equal(name,'before_tool_call');hook=handler;}};
+ const tools=new Map(),hooks=acceptanceHooks();
+ const api={pluginConfig:{owner,coreUrl,readOnlyRuntime:true},get runtime(){throw Error('Readonly fixture must not access native runtime capabilities');},registerTool(factory,options){tools.set(options.name,factory);},on:hooks.on};
  entry.register(api);
- return {tool(name){const factory=tools.get(name);assert.equal(factory.contextVersion,2);return factory.create({requesterSenderId:owner,senderIsOwner:true,assertInvocationCurrent(){}});},hook};
+ return {tool(name){const factory=tools.get(name);assert.equal(factory.contextVersion,2);return factory.create({requesterSenderId:owner,senderIsOwner:true,assertInvocationCurrent(){}});},hook:hooks.beforeToolCall};
 }
 const first=registry();let charged=256;
 async function run(registry,name,input){

@@ -14,11 +14,11 @@ function deferred(){let resolve;const promise=new Promise(done=>{resolve=done;})
 async function fixture(){
  const workspace=await mkdtemp(join(tmpdir(),'ciel-task-memory-')),original=globalThis.fetch;
  const saved=process.env.SECRETARY_CORE_TOKEN;process.env.SECRETARY_CORE_TOKEN='synthetic-core-token';
- const paths=[],histories=new Map(),tools=new Map(),abort=new AbortController();
+ const paths=[],histories=new Map(),tools=new Map(),hooks=new Map(),abort=new AbortController();
  const state={text:'old note\n',sends:0,models:0,reads:0,phase:'proposed',revision:0,outcome:'applied',current:true,audience:true,modelError:false,registryId:'doc',version:'v1',onExecute:undefined,onConfirm:undefined,onDecision:undefined,historyError:false};
  const context={agentId:'agent',sessionKey:'agent:owner',sessionId:'incarnation',workspaceDir:workspace,requesterSenderId:'owner',senderIsOwner:true,sandboxed:false,memoryAudience:{kind:'owner-private',agentId:'agent'},assertInvocationCurrent(){if(!state.current)throw Error('INVOCATION_EXPIRED');},assertMemoryAudienceCurrent(){if(!state.audience)throw Error('MEMORY_AUDIENCE_EXPIRED');}};
  const coreUrl='http://127.0.0.1:'+port++;
- const api={pluginConfig:{owner:'owner',summaryMemoryEnabled:true,coreUrl},config:{plugins:{entries:{'memory-core':{config:{dreaming:{enabled:false}}}}}},runtime:{gateway:{isAvailable:()=>false},llm:{async complete(){state.models++;if(state.modelError)throw Error('Synthetic model failure');return {text:JSON.stringify({summary:'A bounded note [S1].',excerpt_ids:['S1']})};}}},registerTool(factory,options){tools.set(options.name,factory);},on(){}};
+ const api={pluginConfig:{owner:'owner',summaryMemoryEnabled:true,coreUrl},config:{plugins:{entries:{'memory-core':{config:{dreaming:{enabled:false}}}}}},runtime:{gateway:{isAvailable:()=>false},llm:{async complete(){state.models++;if(state.modelError)throw Error('Synthetic model failure');return {text:JSON.stringify({summary:'A bounded note [S1].',excerpt_ids:['S1']})};}}},registerTool(factory,options){tools.set(options.name,factory);},on(name,handler){hooks.set(name,handler);}};
  entry.register(api);
  const note=join(workspace,'memory/ciel-docs',createHash('sha256').update('notes\0doc').digest('hex')+'.md');
  let pending;
@@ -50,9 +50,21 @@ async function fixture(){
  const options={qualified:true,coreUrl,owner:'owner',nativeToken:'synthetic-native-token',coreToken:'synthetic-core-token',summaryMemoryEnabled:true};
  const client=()=>createMemoryNativeTaskClient(options,api,context,abort.signal);
  async function run(name,input){const factory=tools.get(name);assert(factory);return factory.create(context).execute('synthetic',input,abort.signal);}
- return {workspace,note,state,paths,api,options,context,abort,client,operation,run,async close(){globalThis.fetch=original;state.current=false;await rm(workspace,{recursive:true,force:true});if(saved===undefined)delete process.env.SECRETARY_CORE_TOKEN;else process.env.SECRETARY_CORE_TOKEN=saved;}};
+ return {workspace,note,state,paths,api,options,context,abort,client,operation,run,hooks,async close(){globalThis.fetch=original;state.current=false;await rm(workspace,{recursive:true,force:true});if(saved===undefined)delete process.env.SECRETARY_CORE_TOKEN;else process.env.SECRETARY_CORE_TOKEN=saved;}};
 }
 const discovery={document:'notes',mode:'discovery_summary'};
+
+test('registered lifecycle revocation during task preflight prevents confirmation even while the host closure stays live',async()=>{
+ const f=await fixture();try{
+  f.operation('reset-grid').resource_kind='sheets_grid';
+  const retained=f.client(),before=f.hooks.get('before_reset');assert(before);
+  f.state.onExecute=()=>before({reason:'reset',messages:[]},f.context);
+  await assert.rejects(retained.execute(id,1,'reset-grid'),/INVOCATION_EXPIRED/);
+  assert.equal(f.state.current,true);assert.equal(f.state.sends,0);
+  assert.equal(f.paths.filter(path=>path.endsWith('/confirm')).length,0);
+  assert.throws(()=>f.client(),/INVOCATION_EXPIRED/);assert.deepEqual(await readdir(f.workspace),[]);
+ }finally{await f.close();}
+});
 
 test('memory-aware native task fences before execute and confirm, then refreshes the same note for incremental edits',async()=>{
  const f=await fixture();try{
