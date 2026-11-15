@@ -54,7 +54,8 @@ into a shared per-API invocation guard. Exact ended session identities invalidat
 retained tools and approval callbacks; delayed old-session notifications cannot
 invalidate their successors. Host authority is still checked on every request:
 SDK notifications are detached and cannot close every reset race by themselves.
-No hook sends a Core decision, resets usage or retries a write. Revocation storage
+No hook sends an owner decision, resets usage or retries a write. Qualified task
+contexts may send exact metadata-only retirement through the adapter below. Revocation storage
 is bounded to 4096 ended incarnations; overflow blocks further invocations until
 plugin restart rather than forgetting old revocations. Supported Linux verification
 passes using the actual SDK emitter tests in sra4HWst plus the corrected Workspace
@@ -176,9 +177,30 @@ ID; after an unknown member outcome, inspect history/reconcile without resending
 `ok:true` still requires checking `data.state`. With summary memory enabled,
 execution uses the existing note fence/refresh and returns `summary_memory`
 separately from the source-write outcome. Supported Linux verification on
-2026-11-15 passes the official SDK build/validation, 214 Rust tests/37 doctests,
-99 Bun tests, 51 Node/SDK cases, all seven Google simulations and 75 protected
-cases; all 215 recorded inputs remain unchanged. The model-tool/real-Core and
+2026-11-15 passes the official SDK build/validation, 217 Rust tests/37 doctests,
+107 Bun tests, 55 Node/SDK cases, all seven Google simulations and 75 protected
+cases; all 219 recorded inputs remain unchanged. The model-tool/real-Core and
 normal-startup Google task paths pass with synthetic owner/provider/model inputs.
 Live owner/host/provider qualification remains separate. No service, Google write,
 native job or outbound delivery is activated by these additions.
+
+
+Ordinary model-run completion keeps scoped task permission: a fresh current owner
+run in the same session continues with existing usage and no repeated scope prompt.
+A delivered reset/end immediately revokes local tools and, for enrolled qualified
+task contexts only, retires that exact Core context. Core retains an ended-context
+receipt so a delayed proposal cannot recreate it. A successor waits for retirement
+acknowledgement, then obtains its own bounded owner scope; old callbacks cannot
+close the successor. This preserves pending/uncertain source and memory evidence.
+A metadata failure blocks native task requests; a later current invocation may
+retry metadata retirement without repeating a provider effect. Enrollment is
+bounded to64 contexts, without eviction. Defaults/read-only registration does not
+read operator secrets or send lifecycle requests. Trusted raw clients opt into
+this coupling with `registerNativeTaskLifecycle` and `withNativeTaskLifecycle`.
+Unenrolled opaque grants after Gateway restart need explicit operator recovery;
+this extension does not infer old Gateway authority from descriptor strings.
+The full Linux gate verifies continuation/retirement with actual SDK/Core and
+simulated Google: ordinary turns use one scope decision; reset uses a new decision
+for its successor, without clearing uncertain-source fences or resending writes.
+All75 protected cases and the219-input unchanged-source check pass. Target/live
+owner and command routing remain unqualified.

@@ -31,6 +31,7 @@ function fixture(settings={}){
  globalThis.fetch=async(input,init)=>{
   const request=new Request(input,init),path=new URL(request.url).pathname,body=await request.json();assert.equal(request.headers.get('authorization'),'Bearer synthetic-native-token');paths.push(path);bodies.push(body);
   if(path.endsWith('/native')){
+   if(body.action==='invalidate'){phase='closed';return Response.json({ok:true,owner:'owner',data:{invalidated:true}});}
    if(body.action==='decide'){started.resolve();if(held)await ack.promise;if(refused)return Response.json({ok:false},{status:409});phase=body.decision==='approve'?'active':'closed';revision++;}
    if(body.action==='capture')return Response.json({ok:true,owner:'owner',data:{operation_id:body.change.operation_id,state:'previewed'}});
    if(body.action==='end')phase='closed';

@@ -12,12 +12,14 @@ for(const [value,path] of [[coreUrl,'/'],[docsUrl,'/google-docs/v1'],[sheetsUrl,
  const url=new URL(value);assert.equal(url.protocol,'http:');assert.equal(url.hostname,'127.0.0.1');assert.equal(url.pathname,path);assert(!url.username&&!url.password&&!url.search&&!url.hash);
 }
 process.env.SECRETARY_CORE_TOKEN='synthetic-acceptance-core-token';process.env.SECRETARY_APPROVAL_TOKEN='synthetic-separate-operator-token';
+const lifecycleHooks=new Map();
 const owner='+15555550123',workspace=await mkdtemp(join(tmpdir(),'ciel-task-tool-acceptance-')),hooks=acceptanceHooks(),tools=new Map();let prompts=0,models=0;
 const context={agentId:'synthetic-agent',workspaceDir:workspace,sessionKey:'agent:synthetic-agent:main',sessionId:'task-incarnation',requesterSenderId:owner,senderIsOwner:true,sandboxed:false,memoryAudience:{kind:'owner-private',agentId:'synthetic-agent'},assertInvocationCurrent(){},assertMemoryAudienceCurrent(){}};
-const api={pluginConfig:{owner,coreUrl,approvalTransportQualified:true,taskToolsEnabled:true,taskTransportQualified:true,summaryMemoryEnabled:true},config:{plugins:{entries:{'memory-core':{config:{dreaming:{enabled:false}}}}}},runtime:{gateway:{isAvailable:()=>false},llm:{async complete(){models++;return {text:JSON.stringify({summary:'Synthetic notes record the current bounded sample [S1].',excerpt_ids:['S1']})};}}},registerTool(factory,options){tools.set(options.name,factory);},on:hooks.on};
+const api={pluginConfig:{owner,coreUrl,approvalTransportQualified:true,taskToolsEnabled:true,taskTransportQualified:true,summaryMemoryEnabled:true},config:{plugins:{entries:{'memory-core':{config:{dreaming:{enabled:false}}}}}},runtime:{gateway:{isAvailable:()=>false},llm:{async complete(){models++;return {text:JSON.stringify({summary:'Synthetic notes record the current bounded sample [S1].',excerpt_ids:['S1']})};}}},registerTool(factory,options){tools.set(options.name,factory);},on(name,handler){hooks.on(name,handler);if(name!=='before_tool_call')lifecycleHooks.set(name,handler);}};
+let currentContext=context;
 entry.register(api);const abort=new AbortController(),instances=new Map([...tools].map(([name,factory])=>[name,factory.create(context)]));
 async function run(name,input){const result=await instances.get(name).execute('task-tool-acceptance',input,abort.signal);assert.deepEqual(JSON.parse(result.content[0].text),result.details);return result.details;}
-async function member(name,input){assert.equal(await hooks.beforeToolCall({toolName:name,params:input},{...context,abortSignal:abort.signal,requester:{senderId:owner,senderIsOwner:true}}),undefined);return run(name,input);}
+async function member(name,input){assert.equal(await hooks.beforeToolCall({toolName:name,params:input},{...currentContext,abortSignal:abort.signal,requester:{senderId:owner,senderIsOwner:true}}),undefined);return run(name,input);}
 async function fixture(base,path,body){const response=await fetch(base.replace(/\/v[14]$/,'')+path,{method:body===undefined?'GET':'POST',headers:{'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(5000)});assert(response.ok);return response.json();}
 try{
  let ready=false;for(let attempt=0;attempt<50;attempt++){
@@ -28,7 +30,7 @@ try{
  const gridBefore=await fixture(sheetsUrl,'/__fixture/stats');
  const discovered=await run('docs_read',{document:'notes',mode:'discovery_summary'});assert.equal(discovered.data.cache,'refreshed');assert.equal(models,1);
  const scope={objective:'Correct the sample note and literal grid cells',mapping_version:'generic-workspace-v1',max_operations:6,targets:[{kind:'document',document:'notes',document_id:'demo-document',tab_id:'t.0'},{kind:'grid',spreadsheet:'operations',spreadsheet_id:'generic-spreadsheet',view:'overview',sheet_id:7,range:'B4:D8'}]};
- const input={scope},decision=await hooks.beforeToolCall({toolName:'tasks_propose',params:input},{...context,abortSignal:abort.signal,requester:{senderId:owner,senderIsOwner:true}});assert(decision.requireApproval);prompts++;
+ const input={scope},decision=await hooks.beforeToolCall({toolName:'tasks_propose',params:input},{...currentContext,abortSignal:abort.signal,requester:{senderId:owner,senderIsOwner:true}});assert(decision.requireApproval);prompts++;
  await decision.requireApproval.onResolution('allow-once');const grant=await run('tasks_propose',input);assert.equal(grant.ok,true);
  const task_id=grant.data.task_id,grant_revision=grant.data.grant_revision;
  // Core's task profile must close the legacy mutation/approval bypass.
@@ -53,7 +55,19 @@ try{
  const response=await fetch(coreUrl+'/v1/operations/'+lost.operation_id+'/reconcile',{method:'POST',headers:{authorization:'Bearer synthetic-separate-operator-token','content-type':'application/json'},body:'{}',signal:AbortSignal.timeout(5000)});assert.equal((await response.json()).data.state,'applied');
  const history=await run('operations_get_history',{operation_id:lost.operation_id});assert.equal(history.data.operation.state,'applied');
  const observed=await member('tasks_inspect',{task_id});assert.equal(observed.data.phase,'suspended');assert.equal(observed.data.admitted_operations,4);
- assert.equal((await member('tasks_end',{task_id,grant_revision:observed.data.grant_revision,reason:'cancelled'})).data.phase,'closed');
- assert.equal(prompts,1);assert.equal(models,4);
- console.log(JSON.stringify({acceptance:'passed',scenario:'native-task-model-tools',owner_prompts:prompts,docs_sends:3,grid_sends:1,scope:'built model tools/normal startup/Core/journal/native note IO with simulated Google/model; host authority/owner routing are synthetic, not live qualification'}));
+ // An ended session retires Core permission without touching resolved outcomes.
+ const ended=lifecycleHooks.get('before_reset');assert(ended);await ended({},context);
+ assert.equal((await run('tasks_inspect',{task_id})).error.code,'INVOCATION_EXPIRED');
+ currentContext={...context,sessionId:'synthetic-successor'};
+ instances.clear();for(const [name,factory] of tools)instances.set(name,factory.create(currentContext));
+ const successorDecision=await hooks.beforeToolCall({toolName:'tasks_propose',params:input},{...currentContext,abortSignal:abort.signal,requester:{senderId:owner,senderIsOwner:true}});assert(successorDecision.requireApproval);prompts++;
+ await successorDecision.requireApproval.onResolution('allow-once');const successor=(await run('tasks_propose',input)).data;
+ assert.notEqual(successor.task_id,task_id);
+ const resumed=docsChange('task-doc-successor','observed','continued');await member('tasks_capture',{task_id:successor.task_id,change:resumed});
+ assert.equal((await member('tasks_execute',{task_id:successor.task_id,grant_revision:successor.grant_revision,operation_id:resumed.operation_id})).data.state,'applied');
+ assert.equal((await fixture(docsUrl,'/__fixture/stats')).applies,4);
+ assert.equal((await member('tasks_inspect',{task_id:successor.task_id})).data.admitted_operations,1);
+ assert.equal((await member('tasks_end',{task_id:successor.task_id,grant_revision:successor.grant_revision,reason:'completed'})).data.phase,'closed');
+ assert.equal(prompts,2);assert.equal(models,5);
+ console.log(JSON.stringify({acceptance:'passed',scenario:'native-task-model-tools',owner_prompts:prompts,docs_sends:4,grid_sends:1,scope:'built model tools/normal startup/Core/journal/native note IO with simulated Google/model; host authority/owner routing are synthetic, not live qualification'}));
 }finally{await rm(workspace,{recursive:true,force:true});}

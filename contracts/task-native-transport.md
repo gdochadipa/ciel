@@ -85,7 +85,9 @@ indexing or native task-tool/lifecycle activation.
   stale requests cannot close a replacement grant. Completion refuses unresolved
   members. Cancellation retains dispatched outcomes independently.
 - `invalidate`: exact ended context for trusted lifecycle notifications. Such
-  notifications are supplemental; they are not the synchronous send fence.
+  notifications are supplemental; they are not the synchronous send fence. Core
+  retains an exact ended-context receipt even if no task exists yet, preventing a
+  delayed proposal from recreating authority after invalidation.
 
 The native proposal callback captures immutable scope/ID/digest/revision, accepts
 only allow-once/deny, registers acknowledgement before returning and awaits Core
@@ -168,14 +170,17 @@ refactor; they do not automatically exercise the new task protocol.
 Default v2 model factories register `before_reset` and `session_end` hooks and bind
 their assertions to a per-host-API revocation set. Each hook retires only the exact
 agent/session-key/session-ID tuple; delayed old-session hooks never select a
-successor or a task ID. Hooks make no Core requests, approve nothing and do not
-change durable grants or usage. An incomplete or contradictory hook identity
+successor or a task ID. Outside the qualified task profile, hooks make no Core requests. Admitted task
+contexts use the retirement adapter below; it can revoke permission but never
+approve, select a task ID, reset usage or change provider outcomes. An incomplete or contradictory hook identity
 cannot select an incarnation. The host's current invocation assertion remains
 mandatory because SDK lifecycle notifications are detached and may arrive late.
 
 Trusted composition outside the default entry must call
 `registerNativeSessionLifecycle(api)` once during registration and use
-`bindNativeSessionInvocation(api, context, signal)` for the raw task client.
+`bindNativeSessionInvocation(api, context, signal)` for the raw task client. For
+durable Core retirement also call `registerNativeTaskLifecycle(api)` and wrap
+the raw or memory-aware client with `withNativeTaskLifecycle(api, options, context, client)`.
 The memory-aware client automatically uses that same per-API binding. A delivered
 reset/end invalidates retained callbacks, in-flight post-await checks and final
 post-preflight confirmation. A previously accepted provider effect can still
@@ -260,3 +265,51 @@ Google task case observes one scope decision, three Docs sends and one grid send
 including uncertain-result fencing and observation-only reconciliation. Workspace
 traffic records89 Docs and57 Sheets requests. Owner/context/model/provider inputs
 remain synthetic; this is not live host/approval UI/Google qualification.
+
+
+## Ordinary continuation and exact session retirement
+
+Model tools enroll only live, owner-bound, explicitly qualified task contexts.
+Registration alone reads no credentials and makes no requests, including in
+read-only/default profiles. Completing one admitted model run does not end the
+scope: another current owner run in the same session incarnation uses the retained
+Core grant/counts without another scope prompt. Retained old tool closures still
+fail their original host assertions.
+
+For an enrolled context, delivered `before_reset`/`session_end` first revoke local
+invocation authority, then send only native `invalidate` through the existing
+operator-authenticated command bus. The callback captures its exact Gateway,
+agent, session key/session ID, Core destination and owner while current; it cannot
+choose a task, approve anything or dispatch a provider member after end. Core
+atomically persists a non-expiring exact-context receipt and closes matching old
+permission/unsent captures. It retains spent IDs, counts and uncertain/applied
+operation evidence. Even notification-before-proposal ordering cannot recreate a
+retired context. Duplicate or late old notifications never select a successor or
+a freshly confirmed replacement Gateway grant. Receipt storage is operational
+authority metadata in the same SQLite journal, not personal memory or a new FSM.
+
+A successor waits for the exact retirement ACK before other native task requests.
+At most64 enrolled contexts are held per API; no live revocation capability is
+evicted. Metadata failure remains blocked and a later admitted request may retry
+that idempotent retirement once. It never retries a provider effect or owner
+decision. Successful retirement releases only that context's transient approval
+ordering barriers. Revocation requests have a five-second network bound; it is
+not a task lifetime. Uncertain members and native note fences remain unresolved
+until observation/reconciliation; a new owner scope cannot bypass them.
+
+Automatic retirement covers contexts enrolled in the current API/Gateway process.
+Opaque earlier grants after an unclean Gateway restart require explicit operator
+recovery, or same-incarnation inspection/reconfirmation before further work;
+ended context strings alone cannot authorize broader cleanup. Full target command
+routing, actual owner provenance and live host/UI qualification remain separate.
+Supported extension evidence (2026-11-15, agent-vqot3_rl): actual locked SDK
+lifecycle/typecheck/build/validation,42 Python,217 Rust/37 doctests,107 Bun,
+55 Node/SDK cases,seven script cases,all seven Google scenarios and75 protected
+cases pass. Ordinary next-turn continuation uses one scope decision; actual
+Gateway before-reset/session-end emitters retire old contexts, duplicate/late
+notifications cannot select successors, and uncertain members still fence a new
+scope. The normal-startup Google path checks two separate scope decisions,
+four Docs sends/one grid send and native note refresh after a delivered reset.
+Workspace traffic records95 Docs/57 Sheets requests. All219 source hashes remain
+unchanged and owned cleanup succeeds. Synthetic requester/session inputs and
+Google/model stand-ins do not qualify real host command routing or owner UI.

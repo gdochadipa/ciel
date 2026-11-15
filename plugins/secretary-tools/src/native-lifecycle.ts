@@ -1,7 +1,7 @@
 import type {OpenClawPluginApi,OpenClawPluginToolContext} from 'openclaw/plugin-sdk/plugin-entry';
 import {bindNativeInvocation} from './native-authority.js';
 
-type Identity={agentId?:string;sessionKey?:string;sessionId?:string};
+export type NativeSessionIdentity={agentId?:string;sessionKey?:string;sessionId?:string};
 const MAX_ENDED_SESSIONS=4096;
 
 /** Local revocation supplements the host assertion; detached hooks cannot replace it. */
@@ -9,7 +9,7 @@ export class NativeSessionLifecycle {
  private readonly ended=new Set<string>();
  private saturated=false;
 
- end(identity:Identity):void {
+ end(identity:NativeSessionIdentity):void {
   const key=this.key(identity);
   if(key===undefined || this.ended.has(key))return;
   // Never evict a revocation and accidentally revive a retained task callback.
@@ -28,7 +28,7 @@ export class NativeSessionLifecycle {
   return {...native,get senderIsOwner(){return native.senderIsOwner;},assertInvocationCurrent:check};
  }
 
- private key(identity:Identity):string|undefined {
+ private key(identity:NativeSessionIdentity):string|undefined {
   if(![identity.agentId,identity.sessionKey,identity.sessionId].every(value=>typeof value==='string' && value.length>0 && value.length<=512))return undefined;
   return JSON.stringify([identity.agentId,identity.sessionKey,identity.sessionId]);
  }
@@ -47,15 +47,21 @@ export function bindNativeSessionInvocation(api:OpenClawPluginApi,context:OpenCl
 }
 
 const registered=new WeakSet<OpenClawPluginApi>();
-/** Revoke only the exact old incarnation; never select a task or call Core from a hook. */
-export function registerNativeSessionLifecycle(api:OpenClawPluginApi):void {
+const endHandlers=new WeakMap<OpenClawPluginApi,(identity:NativeSessionIdentity)=>Promise<void>>();
+/** Revoke locally first; an optional trusted task adapter retires only enrolled contexts. */
+export function registerNativeSessionLifecycle(api:OpenClawPluginApi,onEnded?:(identity:NativeSessionIdentity)=>Promise<void>):void {
+ if(onEnded!==undefined)endHandlers.set(api,onEnded);
  if(registered.has(api))return;
  const lifecycle=lifecycleFor(api);
- api.on('before_reset',(_event,context)=>{lifecycle.end(context);});
+ function end(context:NativeSessionIdentity):Promise<void>|undefined {
+  const captured={agentId:context.agentId,sessionKey:context.sessionKey,sessionId:context.sessionId};
+  lifecycle.end(captured);return endHandlers.get(api)?.(captured);
+ }
+ api.on('before_reset',(_event,context)=>end(context));
  api.on('session_end',(event,context)=>{
   // A contradictory payload is unusable; it must not revoke a successor.
   if(event.sessionId!==context.sessionId || (event.sessionKey!==undefined && context.sessionKey!==undefined && event.sessionKey!==context.sessionKey))return;
-  lifecycle.end(context);
+  return end(context);
  });
  registered.add(api);
 }

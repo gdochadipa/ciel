@@ -2,6 +2,7 @@
 import type {OpenClawPluginApi,OpenClawPluginToolContext} from 'openclaw/plugin-sdk/plugin-entry';
 import {createNativeTaskClient,createMemoryNativeTaskClient,type NativeTaskClient,type NativeTaskProposal} from './task-native.js';
 
+import {withNativeTaskLifecycle} from './task-lifecycle.js';
 import {isTaskApprovalTool,type TaskToolName} from './task-tool-specs.js';
 function fail(code:string):never {throw new Error(code);}
 /** Explicit opt-in only; credentials are captured from trusted process configuration. */
@@ -13,7 +14,8 @@ export function taskToolClient(api:OpenClawPluginApi,context:OpenClawPluginToolC
  const coreToken=process.env.SECRETARY_CORE_TOKEN??'',nativeToken=process.env.SECRETARY_APPROVAL_TOKEN??'';
  if(coreToken.length===0||nativeToken===coreToken)fail('INVALID_CONFIGURATION');
  const options={coreUrl:typeof config.coreUrl==='string'?config.coreUrl:undefined,owner:typeof config.owner==='string'?config.owner:'',nativeToken,summaryMemoryEnabled:config.summaryMemoryEnabled===true,qualified:true};
- return options.summaryMemoryEnabled?createMemoryNativeTaskClient({...options,coreToken},api,context,signal):createNativeTaskClient(options,context,signal);
+ const client=options.summaryMemoryEnabled?createMemoryNativeTaskClient({...options,coreToken},api,context,signal):createNativeTaskClient(options,context,signal);
+ return withNativeTaskLifecycle(api,options,context,client);
 }
 type Pending={input:string;proposal:NativeTaskProposal|null;current:()=>void};
 const MAX_PENDING=64;

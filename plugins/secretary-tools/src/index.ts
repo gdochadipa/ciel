@@ -3,10 +3,11 @@ import type {OpenClawPluginApi,OpenClawPluginToolContext,AnyAgentTool} from 'ope
 import {defineToolPlugin} from 'openclaw/plugin-sdk/tool-plugin';
 import {Type} from 'typebox';
 import {bindNativeInvocation,NativeApprovalAuthority} from './native-authority.js';
-import {bindNativeSessionInvocation,registerNativeSessionLifecycle} from './native-lifecycle.js';
+import {bindNativeSessionInvocation} from './native-lifecycle.js';
 import {executeWithSummaryMemory} from './summary-memory.js';
 import {createSecretary, secretaryModelText, reminderTools, secretaryToolNames, commitTools, type Options} from './bridge.js';
 import {taskToolNames,taskToolSchemas,taskToolDescriptions,isTaskTool,isTaskApprovalTool,taskToolInput} from './task-tool-specs.js';
+import {registerNativeTaskLifecycle} from './task-lifecycle.js';
 import {taskToolClient,TaskToolApprovals,executeTaskTool} from './task-tools.js';
 // Tasks use native host composition; the legacy bridge cannot grant scope.
 const allToolNames=[...secretaryToolNames,...taskToolNames];
@@ -135,7 +136,7 @@ const entry=defineToolPlugin({
 // The authoring helper registers v1 callbacks. Preserve its static metadata, but
 // explicitly opt runtime factories into the SDK's host-bound v2 authority.
 entry.register=(api)=>{
- registerNativeSessionLifecycle(api);
+ registerNativeTaskLifecycle(api);
  for(const name of allToolNames)api.registerTool({contextVersion:2,create:context=>createTool(api,context,name)},{name});
  api.on('before_tool_call',async(event,context)=>{
   if(isTaskTool(event.toolName)){
@@ -145,7 +146,10 @@ entry.register=(api)=>{
     const native=authorityFor(api).capture(event.toolName,context);
     const input=taskToolInput(event.toolName,event.params),client=taskToolClient(api,native,context.abortSignal);
     return {requireApproval:await taskApprovalsFor(api).prepare(event.toolName,input,native,client)};
-   }catch{return {block:true,blockReason:'Current native owner authority and qualified task transport are required'};}
+   }catch(error){
+    if(error instanceof Error&&error.message==='TASK_LIFECYCLE_RECONCILIATION_REQUIRED')return {block:true,blockReason:'Previous session retirement is not confirmed. Inspect or retry that retirement before proposing a task; never resend a write.'};
+    return {block:true,blockReason:'Current native owner authority and qualified task transport are required'};
+   }
   }
   if(!commitTools.some(tool=>tool===event.toolName))return;
   if(api.pluginConfig?.readOnlyRuntime===true)return {block:true,blockReason:'Read-only runtime forbids mutations'};
@@ -159,3 +163,5 @@ export default entry;
 
 export {createNativeTaskClient,createMemoryNativeTaskClient} from "./task-native.js";
 export {bindNativeSessionInvocation,registerNativeSessionLifecycle} from './native-lifecycle.js';
+
+export {registerNativeTaskLifecycle,withNativeTaskLifecycle} from './task-lifecycle.js';

@@ -104,6 +104,8 @@ impl JournalWriteTasks {
         }
         sqlx::query("CREATE TABLE IF NOT EXISTS write_tasks(id TEXT PRIMARY KEY,conversation TEXT NOT NULL,context TEXT NOT NULL,scope TEXT NOT NULL,digest TEXT NOT NULL,phase TEXT NOT NULL CHECK(phase IN ('proposed','active','suspended','closed')),revision INTEGER NOT NULL,instance TEXT NOT NULL,admitted INTEGER NOT NULL DEFAULT 0,prompt_expires INTEGER NOT NULL,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,ended_at INTEGER,reason TEXT)")
             .execute(&mut *tx).await.map_err(db)?;
+        sqlx::query("CREATE TABLE IF NOT EXISTS write_task_ended_contexts(conversation TEXT NOT NULL,context TEXT NOT NULL,ended_at INTEGER NOT NULL,PRIMARY KEY(conversation,context))")
+            .execute(&mut *tx).await.map_err(db)?;
         sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS write_tasks_one_unfinished ON write_tasks(conversation) WHERE phase<>'closed'").execute(&mut *tx).await.map_err(db)?;
         sqlx::query("CREATE TABLE IF NOT EXISTS write_task_operations(operation_id TEXT PRIMARY KEY REFERENCES operations(operation_id),task_id TEXT NOT NULL REFERENCES write_tasks(id),ordinal INTEGER NOT NULL,grant_revision INTEGER NOT NULL,preview_digest TEXT NOT NULL,resource_key TEXT NOT NULL,UNIQUE(task_id,ordinal))")
             .execute(&mut *tx).await.map_err(db)?;
@@ -183,6 +185,19 @@ impl JournalWriteTasks {
         scope.validate()?;
         let mut tx = self.transaction().await?;
         let conversation = self.conversation(context);
+        // A detached notification can overtake an already sent proposal. Keep
+        // the exact ended identity even when there was no task to close yet.
+        let ended: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM write_task_ended_contexts WHERE conversation=? AND context=?",
+        )
+        .bind(&conversation)
+        .bind(encode(context)?)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(db)?;
+        if ended != 0 {
+            return Err(denied("write_task_context_ended"));
+        }
         if sqlx::query("SELECT id FROM write_tasks WHERE conversation=? AND phase<>'closed'")
             .bind(&conversation)
             .fetch_optional(&mut *tx)
@@ -661,9 +676,17 @@ impl JournalWriteTasks {
     ///
     /// # Errors
     /// Rejects invalid host context or storage failure. This is not a model tool.
+    /// A retained exact-context receipt also rejects delayed future proposals;
+    /// it never selects a successor or clears operation recovery evidence.
     pub async fn invalidate_context(&self, context: &TaskContext) -> Result<(), CoreError> {
         context.validate()?;
         let mut tx = self.transaction().await?;
+        let inserted = sqlx::query("INSERT OR IGNORE INTO write_task_ended_contexts(conversation,context,ended_at) VALUES(?,?,?)")
+            .bind(self.conversation(context)).bind(encode(context)?).bind(chrono::Utc::now().timestamp())
+            .execute(&mut *tx).await.map_err(db)?.rows_affected();
+        if inserted != 0 {
+            audit(&mut tx, None, "write_task_context_ended").await?;
+        }
         let ids = sqlx::query_scalar::<_, String>(
             "SELECT id FROM write_tasks WHERE conversation=? AND context=? AND phase<>'closed'",
         )
@@ -1240,5 +1263,97 @@ mod tests {
             "task_authority_required"
         );
         ledger.claim(id, &ctx, "edit").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn ended_context_cannot_create_a_delayed_proposal_after_invalidation() {
+        let directory = tempfile::tempdir().unwrap();
+        let journal = Journal::open(directory.path()).await.unwrap();
+        let ledger = JournalWriteTasks::open(journal.clone(), "owner", "v1")
+            .await
+            .unwrap();
+        let ctx = context();
+        ledger.invalidate_context(&ctx).await.unwrap();
+        assert_eq!(
+            ledger.propose(&ctx, &scope()).await.unwrap_err().1,
+            "write_task_context_ended"
+        );
+        assert_eq!(ledger.history(20, 0).await.unwrap()["tasks"], json!([]));
+        assert!(journal.find("edit").await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn ended_receipts_survive_restart_and_do_not_select_a_successor() {
+        let directory = tempfile::tempdir().unwrap();
+        let ctx = context();
+        {
+            let journal = Journal::open(directory.path()).await.unwrap();
+            let ledger = JournalWriteTasks::open(journal, "owner", "v1")
+                .await
+                .unwrap();
+            ledger.invalidate_context(&ctx).await.unwrap();
+            ledger.invalidate_context(&ctx).await.unwrap();
+        }
+        let journal = Journal::open(directory.path()).await.unwrap();
+        let ledger = JournalWriteTasks::open(journal.clone(), "owner", "v1")
+            .await
+            .unwrap();
+        assert_eq!(
+            ledger.propose(&ctx, &scope()).await.unwrap_err().1,
+            "write_task_context_ended"
+        );
+        let mut next = ctx.clone();
+        next.session_id = "successor".into();
+        let proposal = ledger.propose(&next, &scope()).await.unwrap();
+        let id = proposal["task_id"].as_str().unwrap();
+        let hash = proposal["scope_digest"].as_str().unwrap();
+        ledger
+            .decide(id, &next, hash, 0, TaskDecision::Approve)
+            .await
+            .unwrap();
+        ledger.invalidate_context(&ctx).await.unwrap();
+        ledger.admit(id, &next, preview()).await.unwrap();
+        assert_eq!(
+            ledger.history(20, 0).await.unwrap()["tasks"][0]["admitted_operations"],
+            1
+        );
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM write_task_ended_contexts")
+            .fetch_one(&journal.pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[tokio::test]
+    async fn a_late_gateway_end_cannot_retire_a_freshly_confirmed_replacement() {
+        let directory = tempfile::tempdir().unwrap();
+        let journal = Journal::open(directory.path()).await.unwrap();
+        let ledger = JournalWriteTasks::open(journal, "owner", "v1")
+            .await
+            .unwrap();
+        let old = context();
+        let proposal = ledger.propose(&old, &scope()).await.unwrap();
+        let id = proposal["task_id"].as_str().unwrap();
+        let hash = proposal["scope_digest"].as_str().unwrap();
+        ledger
+            .decide(id, &old, hash, 0, TaskDecision::Approve)
+            .await
+            .unwrap();
+        let mut replacement = old.clone();
+        replacement.gateway_instance = "replacement-gateway".into();
+        ledger
+            .decide(id, &replacement, hash, 1, TaskDecision::Approve)
+            .await
+            .unwrap();
+        ledger.invalidate_context(&old).await.unwrap();
+        ledger.admit(id, &replacement, preview()).await.unwrap();
+        assert_eq!(
+            ledger.history(20, 0).await.unwrap()["tasks"][0]["phase"],
+            "active"
+        );
+        assert_eq!(
+            ledger.propose(&old, &scope()).await.unwrap_err().1,
+            "write_task_context_ended"
+        );
     }
 }

@@ -163,3 +163,39 @@ documents.rs, presentation/task_native.rs and tests/task_native.rs.
 Evidence for the model-task claim: agent-i3hl29kj/verification.log;
 agent-i3hl29kj/simulations/secretary-acceptance.lQIAP0/{sim.ndjson,task-client.log};
 agent-i3hl29kj/acceptance.log; agent-i3hl29kj/source-check.json.
+
+
+## Task continuation/retirement extension — supported, 2026-11-15
+
+- id: enrolled-task-session-retirement
+- status: supported
+- claim: The normal Core startup/model-tool path can retire an enrolled ended
+  session and admit a separately approved successor without clearing uncertain
+  source evidence or retrying a provider write.
+- reason: agent-vqot3_rl exercises the new metadata adapter, durable receipts,
+  normal Core startup, built model tools and native note IO against both Google
+  members. Actual outcomes and send counters support this bounded simulated path;
+  the new SDK/Core tests separately exercise real before-reset/session-end emitters.
+- verification: Full supported Linux gate on2026-11-15 passes official locked SDK
+  build/validation,217 Rust/37 doctests,107 Bun,55 Node/SDK cases,all7 Google
+  scenarios and75 protected cases. Ordinary admitted turns retain grant/counts
+  with one scope prompt. New/reset retires old permission and unsent capture,
+  admits a separately approved successor and ignores duplicate/late notifications.
+  Journal tests reject a delayed proposal after end and after restart,without
+  selecting a reconfirmed replacement Gateway. Uncertain history/fences survive
+  reset and block a new member even under a new approved scope. The Google case
+  observes2 scope decisions,4 Docs sends/1 grid send and post-reset note refresh;
+  Workspace traffic records95 google-docs/57 google requests. Final219 input
+  hashes are unchanged and owned cleanup succeeds. Actual target requester,
+  full command/UI behavior and opaque preexisting Gateway recovery remain separate.
+- source: plugins/secretary-tools/src/task-lifecycle.ts;
+  plugins/secretary-tools/src/native-lifecycle.ts;
+  plugins/secretary-tools/src/task-native.ts;
+  services/secretary-core/src/infrastructure/journal/write_tasks.rs;
+  plugins/secretary-tools/test/task-continuation.node.mjs;
+  scripts/acceptance-task-tools.mjs.
+- updated_at: 2026-11-15
+
+Retirement evidence: agent-vqot3_rl/verification.log;
+agent-vqot3_rl/simulations/secretary-acceptance.6ojZ9T/{sim.ndjson,task-client.log};
+agent-vqot3_rl/acceptance.log; agent-vqot3_rl/source-check.json.

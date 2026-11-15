@@ -54,6 +54,38 @@ function grant(value:unknown):Grant {
  return {taskId:task.task_id,scopeDigest:task.scope_digest,revision:task.grant_revision};
 }
 
+function destination(options:NativeTaskOptions):URL {
+ const url=new URL(options.coreUrl??'http://127.0.0.1:8787');
+ if(url.protocol!=='http:' || !['127.0.0.1','[::1]'].includes(url.hostname) || url.username || url.password || url.pathname!=='/' || url.search || url.hash)fail('INVALID_CORE_DESTINATION');
+ if(!text(options.owner,256) || options.nativeToken.length<12)fail('INVALID_CONFIGURATION');
+ return url;
+}
+export type NativeTaskRevoker={identity:{agentId:string;sessionKey:string;sessionId:string};connection:string;check:()=>void;revoke:()=>Promise<void>};
+/** Capture a revocation capability while live; it can only retire that exact context.
+ * Ended invocations cannot pass normal client guards. This callback deliberately
+ * sends metadata-only invalidation after end, never a decision or provider member.
+ */
+export function captureNativeTaskRevoker(options:NativeTaskOptions,context:OpenClawPluginToolContext):NativeTaskRevoker {
+ if(options.qualified!==true)fail('TASK_TRANSPORT_UNQUALIFIED');
+ const native=bindNativeInvocation(context);
+ if(!text(native.agentId,256)||!text(native.sessionKey,512)||!text(native.sessionId,256))fail('NATIVE_AUTHORITY_REQUIRED');
+ const identity={agentId:native.agentId,sessionKey:native.sessionKey,sessionId:native.sessionId};
+ const ended={gateway_instance:gatewayInstance,agent_id:identity.agentId,session_key:identity.sessionKey,session_id:identity.sessionId};
+ const url=destination(options),owner=options.owner,token=options.nativeToken;
+ const check=():void=>{native.assertInvocationCurrent();if(native.senderIsOwner!==true||native.requesterSenderId!==owner)fail('OWNER_REQUIRED');};check();
+ return {identity,connection:JSON.stringify([url.origin,owner]),check,async revoke(){
+  try{
+   const response=await fetch(new URL('/v1/write-tasks/native',url),{method:'POST',redirect:'error',headers:{'content-type':'application/json',authorization:`Bearer ${token}`},body:JSON.stringify({action:'invalidate',context:ended}),signal:AbortSignal.timeout(5000)});
+   const result=object(await boundedJSON(response));
+   if(!response.ok||result.ok!==true||result.owner!==owner||object(result.data).invalidated!==true)fail('TASK_LIFECYCLE_RECONCILIATION_REQUIRED');
+   // These entries order native ACKs, not grants. An acknowledged exact-context
+   // retirement frees them without touching durable task usage or evidence.
+   const prefix=JSON.stringify([url.origin,owner,ended]).slice(0,-1)+',';
+   for(const key of taskAcknowledgements.keys())if(key.startsWith(prefix))taskAcknowledgements.delete(key);
+  }catch{fail('TASK_LIFECYCLE_RECONCILIATION_REQUIRED');}
+ }};
+}
+
 /** Bind every task control/confirmation to one genuine current native factory context. */
 export function createNativeTaskClient(options:NativeTaskOptions,context:OpenClawPluginToolContext,signal:AbortSignal|undefined):NativeTaskClient {
  return taskClient(options,context,signal,(_operationId,dispatch)=>dispatch());
@@ -79,9 +111,7 @@ function taskClient(options:NativeTaskOptions,context:OpenClawPluginToolContext,
  const native=bindNativeInvocation(context,signal);
  if(!text(native.agentId,256) || !text(native.sessionKey,512) || !text(native.sessionId,256))fail('NATIVE_AUTHORITY_REQUIRED');
  const identity={gateway_instance:gatewayInstance,agent_id:native.agentId,session_key:native.sessionKey,session_id:native.sessionId};
- const url=new URL(options.coreUrl??'http://127.0.0.1:8787');
- if(url.protocol!=='http:' || !['127.0.0.1','[::1]'].includes(url.hostname) || url.username || url.password || url.pathname!=='/' || url.search || url.hash)fail('INVALID_CORE_DESTINATION');
- if(!text(options.owner,256) || options.nativeToken.length<12)fail('INVALID_CONFIGURATION');
+ const url=destination(options);
  // Capture credentials/config; a later mutation of the options object grants nothing.
  const owner=options.owner,token=options.nativeToken;
  function check():void {

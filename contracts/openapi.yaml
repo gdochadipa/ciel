@@ -28,7 +28,8 @@
       "authority": "Actual current SDK v2 owner context plus distinct operator bearer; no model boolean grants scope.",
       "dispatch": "One awaited member; fresh preflight, native challenge, durable one-use receipt, shared FSM and observer.",
       "lifetime": "No task TTL; dialog/capture/dispatch handshake have separate bounds.",
-      "qualification": "Supported Linux/SDK and live target qualification remain separate. Optional native summary memory uses the shared per-source stale fence and refresh; memory result is independent of write state."
+      "qualification": "Supported Linux/SDK and live target qualification remain separate. Optional native summary memory uses the shared per-source stale fence and refresh; memory result is independent of write state.",
+      "lifecycle": "Ordinary turns retain scope/counts. Qualified enrolled host contexts retire exact ended sessions through operator-only invalidate, with durable exact-context receipts rejecting delayed proposals. Successors wait for retirement ACK; uncertain source outcomes remain observation-only. No automatic retirement of opaque prior Gateway grants."
     }
   },
   "servers": [

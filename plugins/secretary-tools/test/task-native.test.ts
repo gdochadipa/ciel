@@ -1,5 +1,5 @@
 import {test,expect,spyOn} from 'bun:test';
-import {createNativeTaskClient} from '../src/task-native';
+import {createNativeTaskClient,captureNativeTaskRevoker} from '../src/task-native';
 const id='11111111-1111-4111-8111-111111111111';
 const nonce='22222222-2222-4222-8222-222222222222';
 const digest='a'.repeat(64);
@@ -170,4 +170,39 @@ test('a differently configured Core owner cannot issue a native grant or confirm
   f.fetch.mockImplementation(async(input,init)=>{const request=new Request(input,init),member=await request.json();f.paths.push(new URL(request.url).pathname);return new Response(JSON.stringify({type:'ready',owner:'other-owner',challenge:{member,preview_digest:digest,nonce}})+'\n',{headers:{'content-type':'application/vnd.ciel.task-dispatch+ndjson;version=1'}});});
   await expect(f.client.execute(id,1,'op')).rejects.toThrow('CORE_OWNER_MISMATCH');expect(f.paths).toHaveLength(2);
  }finally{f.fetch.mockRestore();}
+});
+
+
+test('acknowledged lifecycle retirement releases only its old native ACK barriers',async()=>{
+ const original=globalThis.fetch;let invalidations=0;
+ globalThis.fetch=async(input,init)=>{
+  const request=new Request(input,init),body=await request.json();
+  if(body.action==='invalidate'){invalidations++;return Response.json({ok:true,owner:'owner',data:{invalidated:true}});}
+  expect(body.action).toBe('propose');
+  return Response.json({ok:true,owner:'owner',data:{task_id:id,scope,scope_digest:digest,grant_revision:0,phase:'proposed'}});
+ };
+ try{
+  for(let index=0;index<70;index++){
+   let active=true;const context={agentId:'agent',sessionKey:'lifecycle-capacity',sessionId:String(index),requesterSenderId:'owner',senderIsOwner:true,assertInvocationCurrent(){if(!active)throw Error('INVOCATION_EXPIRED');}};
+   const options={coreUrl:'http://127.0.0.1:29999',qualified:true,owner:'owner',nativeToken:'synthetic-native-token',summaryMemoryEnabled:false};
+   const client=createNativeTaskClient(options,context,new AbortController().signal),retirement=captureNativeTaskRevoker(options,context);
+   await client.propose(scope);active=false;await retirement.revoke();
+  }
+  expect(invalidations).toBe(70);
+ }finally{globalThis.fetch=original;}
+});
+
+test('unacknowledged or foreign retirement replies cannot release a pending scope barrier',async()=>{
+ const original=globalThis.fetch;
+ try{
+  const replies=[()=>Response.json({ok:true,owner:'other',data:{invalidated:true}}),()=>Response.json({ok:true,owner:'owner',data:{invalidated:false}}),()=>Response.json({ok:false},{status:409}),()=>new Response('invalid JSON')];
+  for(let index=0;index<replies.length;index++){
+   let calls=0;globalThis.fetch=async(input,init)=>{calls++;const body=await new Request(input,init).json();return body.action==='propose'?Response.json({ok:true,owner:'owner',data:{task_id:id,scope,scope_digest:digest,grant_revision:0,phase:'proposed'}}):replies[index]();};
+   const context={agentId:'agent',sessionKey:'unacknowledged',sessionId:String(index),requesterSenderId:'owner',senderIsOwner:true,assertInvocationCurrent(){}};
+   const options={coreUrl:'http://127.0.0.1:'+String(28200+index),qualified:true,owner:'owner',nativeToken:'synthetic-native-token',summaryMemoryEnabled:false};
+   const client=createNativeTaskClient(options,context,new AbortController().signal);await client.propose(scope);
+   await expect(captureNativeTaskRevoker(options,context).revoke()).rejects.toThrow('TASK_LIFECYCLE_RECONCILIATION_REQUIRED');
+   await expect(client.capture(id,{})).rejects.toThrow('APPROVAL_PENDING');expect(calls).toBe(2);
+  }
+ }finally{globalThis.fetch=original;}
 });
