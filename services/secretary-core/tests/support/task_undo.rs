@@ -268,3 +268,85 @@ async fn native_undo_source_drift_and_lost_response_never_resend_or_refill_origi
         }
     }
 }
+
+#[tokio::test]
+async fn unavailable_original_remains_visible_but_native_capture_and_reconcile_do_no_source_io() {
+    use sqlx::Connection;
+    let f = fixture(true).await;
+    let forward = grant(&f).await;
+    capture_compound(&f, &forward, "original").await;
+    assert_eq!(
+        dispatch(&f, &forward, "original").await["data"]["state"],
+        "applied"
+    );
+    close(&f, &forward).await;
+    // Seed a future cleanup result only in this disposable fixture. There is no
+    // runtime cleanup route or authority to remove real journal evidence yet.
+    let mut conn = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(f._dir.path().join("secretary.sqlite3")),
+    )
+    .await
+    .unwrap();
+    let mut tx = conn.begin().await.unwrap();
+    sqlx::query("DELETE FROM operation_evidence WHERE operation_id='original'")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE operations SET evidence_cleanup=? WHERE operation_id='original'")
+        .bind(json!({"version":1,"cleanup_id":"fixture-cleanup","removed_at":100}).to_string())
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    drop(conn);
+    let reads = f.source.reads.load(Ordering::SeqCst);
+    let undo = undo_grant(&f, json!({"kind":"task","task_id":forward["task_id"]})).await;
+    let review = control(
+        &f.app,
+        json!({"action":"review","task_id":undo["task_id"],"context":context()}),
+    )
+    .await;
+    assert_eq!(review["undo_next"]["original_id"], "original");
+    assert_eq!(review["undo_next"]["evidence"], "unavailable");
+    let (_, denied) = value(
+        post(
+            &f.app,
+            "/v1/write-tasks/native",
+            inverse(&undo, "inverse", "original"),
+            NATIVE,
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(denied["error"]["code"], "operation_evidence_unavailable");
+    assert!(f.journal.find("inverse").await.unwrap().is_none());
+    let (_, denied) = value(
+        post(
+            &f.app,
+            "/v1/operations/original/reconcile",
+            json!({}),
+            NATIVE,
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(denied["error"]["code"], "operation_evidence_unavailable");
+    let (_, history) = value(
+        post(
+            &f.app,
+            "/v1/tools/operations_get_history",
+            json!({"operation_id":"original"}),
+            CORE,
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(
+        history["data"]["operation"]["evidence"]["status"],
+        "unavailable"
+    );
+    assert_eq!(history["data"]["operation"]["state"], "applied");
+    assert_eq!(f.source.reads.load(Ordering::SeqCst), reads);
+    assert_eq!(f.source.sends.load(Ordering::SeqCst), 1);
+}

@@ -14,6 +14,7 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
+mod evidence;
 pub mod read_budget;
 pub mod write_tasks;
 struct JournalLock {
@@ -129,6 +130,7 @@ impl Journal {
             .map_err(|_| storage())?;
         }
         tx.commit().await.map_err(|_| storage())?;
+        evidence::initialize(&journal.pool).await?;
         journal.recover().await?;
         Ok(journal)
     }
@@ -194,6 +196,9 @@ impl Journal {
             .map_err(|_| storage())?;
         sqlx::query("CREATE TABLE IF NOT EXISTS operations(operation_id TEXT PRIMARY KEY, request_digest TEXT NOT NULL, preview TEXT NOT NULL, state TEXT NOT NULL, updated_at INTEGER NOT NULL)").execute(&pool).await.map_err(|_|storage())?;
         sqlx::query("CREATE TABLE IF NOT EXISTS audit(sequence INTEGER PRIMARY KEY AUTOINCREMENT, operation_id TEXT, event TEXT NOT NULL, occurred_at INTEGER NOT NULL)").execute(&pool).await.map_err(|_|storage())?;
+        if recover {
+            evidence::initialize(&pool).await?;
+        }
         let journal = Self {
             pool,
             directory: directory.to_owned(),
@@ -236,19 +241,9 @@ impl Journal {
         Ok(())
     }
     pub async fn find(&self, id: &str) -> Result<Option<Operation>, CoreError> {
-        let row = sqlx::query("SELECT preview,state FROM operations WHERE operation_id=?")
-            .bind(id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|_| storage())?;
-        row.map(|r| {
-            Ok(Operation {
-                preview: serde_json::from_str(r.get::<&str, _>("preview"))
-                    .map_err(|_| storage())?,
-                state: r.get::<&str, _>("state").parse()?,
-            })
-        })
-        .transpose()
+        let row = sqlx::query("SELECT o.*,e.preview FROM operations o LEFT JOIN operation_evidence e USING(operation_id) WHERE o.operation_id=?")
+            .bind(id).fetch_optional(&self.pool).await.map_err(|_| storage())?;
+        row.as_ref().map(evidence::retained).transpose()
     }
     pub async fn get(&self, id: &str) -> Result<Operation, CoreError> {
         self.find(id)
@@ -258,7 +253,7 @@ impl Journal {
     pub async fn create(&self, mut p: Preview) -> Result<Preview, CoreError> {
         let mut tx = self.pool.begin().await.map_err(|_| storage())?;
         if let Some(row) =
-            sqlx::query("SELECT request_digest,preview FROM operations WHERE operation_id=?")
+            sqlx::query("SELECT o.*,e.preview FROM operations o LEFT JOIN operation_evidence e USING(operation_id) WHERE o.operation_id=?")
                 .bind(&p.operation_id)
                 .fetch_optional(&mut *tx)
                 .await
@@ -267,12 +262,11 @@ impl Journal {
             if row.get::<&str, _>("request_digest") != p.request_digest() {
                 return Err(conflict());
             }
-            return serde_json::from_str(row.get::<&str, _>("preview")).map_err(|_| storage());
+            return Ok(evidence::retained(&row)?.preview);
         }
         p.preview_digest.clear();
         p.preview_digest = digest(&serde_json::to_value(&p).map_err(|_| storage())?);
-        let encoded = serde_json::to_string(&p).map_err(|_| storage())?;
-        sqlx::query("INSERT INTO operations(operation_id,request_digest,preview,state,updated_at) VALUES(?,?,?,'previewed',?)").bind(&p.operation_id).bind(p.request_digest()).bind(encoded).bind(chrono::Utc::now().timestamp()).execute(&mut *tx).await.map_err(|_|storage())?;
+        evidence::insert(&mut tx, &p).await?;
         sqlx::query("INSERT INTO audit(operation_id,event,occurred_at) VALUES(?,'previewed',?)")
             .bind(&p.operation_id)
             .bind(chrono::Utc::now().timestamp())
@@ -291,13 +285,13 @@ impl Journal {
         {
             return Err(CoreError(ErrorKind::Forbidden, "task_authority_required"));
         }
-        let row = sqlx::query("SELECT state FROM operations WHERE operation_id=?")
+        let row = sqlx::query("SELECT o.*,e.preview FROM operations o LEFT JOIN operation_evidence e USING(operation_id) WHERE o.operation_id=?")
             .bind(id)
             .fetch_optional(&mut *tx)
             .await
             .map_err(|_| storage())?
             .ok_or(CoreError(ErrorKind::NotFound, "operation_not_found"))?;
-        let current: OperationState = row.get::<&str, _>("state").parse()?;
+        let current = evidence::retained(&row)?.state;
         let state = current.transition(event)?;
         if matches!(event, OperationEvent::Finish(_)) {
             write_tasks::suspend_on_outcome(&mut tx, id, state).await?;
@@ -374,22 +368,24 @@ impl Journal {
             return Err(CoreError::invalid());
         }
         if let Some(id) = operation {
-            let o = self.get(id).await?;
+            let row = sqlx::query("SELECT o.*,e.preview FROM operations o LEFT JOIN operation_evidence e USING(operation_id) WHERE o.operation_id=?")
+                .bind(id).fetch_optional(&self.pool).await.map_err(|_| storage())?
+                .ok_or(CoreError(ErrorKind::NotFound, "operation_not_found"))?;
+            let operation = evidence::public(&row)?;
             let audit=sqlx::query("SELECT sequence,event,occurred_at FROM audit WHERE operation_id=? ORDER BY sequence DESC LIMIT ? OFFSET ?").bind(id).bind((limit+1)as i64).bind(cursor as i64).fetch_all(&self.pool).await.map_err(|_|storage())?;
             let more = audit.len() > limit;
             let entries:Vec<_>=audit.into_iter().take(limit).map(|r|json!({"sequence":r.get::<i64,_>("sequence"),"event":r.get::<String,_>("event"),"occurred_at":r.get::<i64,_>("occurred_at")})).collect();
             return Ok(
-                json!({"operation":o.preview.public(o.state.as_str()),"events":entries,"next_cursor":if more{Some((cursor+limit).to_string())}else{None}}),
+                json!({"operation":operation,"events":entries,"next_cursor":if more{Some((cursor+limit).to_string())}else{None}}),
             );
         }
-        let rows=sqlx::query("SELECT preview,state FROM operations ORDER BY updated_at DESC,operation_id LIMIT ? OFFSET ?").bind((limit+1)as i64).bind(cursor as i64).fetch_all(&self.pool).await.map_err(|_|storage())?;
+        let rows=sqlx::query("SELECT o.*,e.preview FROM operations o LEFT JOIN operation_evidence e USING(operation_id) ORDER BY o.updated_at DESC,o.operation_id LIMIT ? OFFSET ?").bind((limit+1)as i64).bind(cursor as i64).fetch_all(&self.pool).await.map_err(|_|storage())?;
         let more = rows.len() > limit;
-        let mut records = Vec::new();
-        for row in rows.into_iter().take(limit) {
-            let p: Preview = serde_json::from_str(row.get("preview")).map_err(|_| storage())?;
-            let state: OperationState = row.get::<&str, _>("state").parse()?;
-            records.push(p.public(state.as_str()))
-        }
+        let records: Vec<_> = rows
+            .iter()
+            .take(limit)
+            .map(evidence::public)
+            .collect::<Result<_, _>>()?;
         Ok(
             json!({"operations":records,"next_cursor":if more{Some((cursor+limit).to_string())}else{None}}),
         )

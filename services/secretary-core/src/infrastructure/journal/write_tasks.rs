@@ -90,7 +90,7 @@ impl JournalWriteTasks {
                 return Err(denied("write_task_binding"));
             }
         } else {
-            let foreign:i64=sqlx::query_scalar("SELECT COUNT(*) FROM operations WHERE json_type(preview,'$.actor') IS NOT 'text' OR json_extract(preview,'$.actor')<>?")
+            let foreign:i64=sqlx::query_scalar("SELECT COUNT(*) FROM operations WHERE json_type(identity,'$.actor') IS NOT 'text' OR json_extract(identity,'$.actor')<>?")
                 .bind(owner).fetch_one(&mut *tx).await.map_err(db)?;
             if foreign != 0 {
                 return Err(denied("write_task_legacy_owner"));
@@ -381,8 +381,9 @@ impl JournalWriteTasks {
         .fetch_optional(&mut *tx)
         .await
         .map_err(db)?;
-        if let Some(old)=sqlx::query("SELECT o.preview,o.state,l.task_id FROM operations o LEFT JOIN write_task_operations l ON l.operation_id=o.operation_id WHERE o.operation_id=?")
+        if let Some(old)=sqlx::query("SELECT o.*,e.preview,l.task_id FROM operations o LEFT JOIN operation_evidence e USING(operation_id) LEFT JOIN write_task_operations l ON l.operation_id=o.operation_id WHERE o.operation_id=?")
             .bind(&p.operation_id).fetch_optional(&mut *tx).await.map_err(db)? {
+            super::evidence::retained(&old)?;
             if old.get::<Option<String>,_>("task_id").as_deref()!=Some(id) || old.get::<&str,_>("preview")!=encode(&p)? || prior_link.as_deref()!=original_id {
                 return Err(denied("operation_conflict"));
             }
@@ -404,8 +405,7 @@ impl JournalWriteTasks {
         // A separate task/ID cannot evade an unresolved earlier write to this
         // physical source, including a pre-existing legacy operation.
         source_clear(&mut tx, &p).await?;
-        sqlx::query("INSERT INTO operations(operation_id,request_digest,preview,state,updated_at) VALUES(?,?,?,'previewed',?)")
-            .bind(&p.operation_id).bind(p.request_digest()).bind(encode(&p)?).bind(now).execute(&mut *tx).await.map_err(db)?;
+        super::evidence::insert(&mut tx, &p).await?;
         sqlx::query("INSERT INTO write_task_operations VALUES(?,?,?,?,?,?)")
             .bind(&p.operation_id)
             .bind(id)
@@ -457,12 +457,13 @@ impl JournalWriteTasks {
         let mut tx = self.transaction().await?;
         let row = task(&mut tx, id).await?;
         self.active(&row, context)?;
-        let member=sqlx::query("SELECT o.preview,o.state,l.grant_revision FROM operations o JOIN write_task_operations l ON l.operation_id=o.operation_id WHERE l.task_id=? AND o.operation_id=?")
+        let member=sqlx::query("SELECT o.*,e.preview,l.grant_revision FROM operations o LEFT JOIN operation_evidence e USING(operation_id) JOIN write_task_operations l ON l.operation_id=o.operation_id WHERE l.task_id=? AND o.operation_id=?")
             .bind(id).bind(operation_id).fetch_optional(&mut *tx).await.map_err(db)?.ok_or_else(||denied("write_task_membership"))?;
         if member.get::<i64, _>("grant_revision") != row.get::<i64, _>("revision") {
             return Err(denied("write_task_stale_member"));
         }
-        let before: OperationState = member.get::<&str, _>("state").parse()?;
+        let operation = super::evidence::retained(&member)?;
+        let before = operation.state;
         let state = before.transition(OperationEvent::Reject)?;
         if before != state {
             sqlx::query("UPDATE operations SET state=?,updated_at=? WHERE operation_id=?")
@@ -474,7 +475,7 @@ impl JournalWriteTasks {
                 .map_err(db)?;
             audit(&mut tx, Some(operation_id), "rejected").await?;
         }
-        let preview = decode(member.get("preview"))?;
+        let preview = operation.preview;
         tx.commit().await.map_err(db)?;
         Ok(Operation { preview, state })
     }
@@ -512,12 +513,12 @@ impl JournalWriteTasks {
             return Err(denied("write_task_stale_member"));
         }
 
-        let member=sqlx::query("SELECT o.preview,o.state,l.grant_revision,l.preview_digest FROM operations o JOIN write_task_operations l ON l.operation_id=o.operation_id WHERE l.task_id=? AND o.operation_id=?")
+        let member=sqlx::query("SELECT o.*,e.preview,l.grant_revision,l.preview_digest AS member_digest FROM operations o LEFT JOIN operation_evidence e USING(operation_id) JOIN write_task_operations l ON l.operation_id=o.operation_id WHERE l.task_id=? AND o.operation_id=?")
             .bind(id).bind(operation_id).fetch_optional(&mut *tx).await.map_err(db)?.ok_or_else(||denied("write_task_membership"))?;
-        let p: Preview = decode(member.get("preview"))?;
+        let p = super::evidence::retained(&member)?.preview;
         let mut sealed = p.clone();
         sealed.preview_digest.clear();
-        if p.preview_digest != member.get::<&str, _>("preview_digest")
+        if p.preview_digest != member.get::<&str, _>("member_digest")
             || p.preview_digest != digest(&serde_json::to_value(sealed).map_err(|_| storage())?)
         {
             return Err(storage());
@@ -725,18 +726,21 @@ impl JournalWriteTasks {
             return Err(CoreError::invalid());
         }
         let mut tx = self.journal.pool.begin().await.map_err(db)?;
-        let original = load_operation(&mut tx, original_id).await?;
-        if original.preview.actor != self.owner {
+        let row = sqlx::query("SELECT o.*,e.preview FROM operations o LEFT JOIN operation_evidence e USING(operation_id) WHERE o.operation_id=?")
+            .bind(original_id).fetch_optional(&mut *tx).await.map_err(db)?
+            .ok_or(CoreError(ErrorKind::NotFound, "operation_not_found"))?;
+        let original = super::evidence::public(&row)?;
+        if original["actor"] != self.owner {
             return Err(denied("undo_unavailable"));
         }
         // Immutable IDs keep outcome updates from moving references between pages.
-        let rows=sqlx::query("SELECT c.inverse_id,c.original_digest,c.inverse_digest,o.state,l.task_id,l.grant_revision,l.ordinal FROM operation_compensations c JOIN operations o ON o.operation_id=c.inverse_id JOIN write_task_operations l ON l.operation_id=c.inverse_id WHERE c.original_id=? ORDER BY c.inverse_id LIMIT ? OFFSET ?")
+        let rows=sqlx::query("SELECT c.inverse_id,c.original_digest,c.inverse_digest,o.state,o.evidence_cleanup,l.task_id,l.grant_revision,l.ordinal FROM operation_compensations c JOIN operations o ON o.operation_id=c.inverse_id JOIN write_task_operations l ON l.operation_id=c.inverse_id WHERE c.original_id=? ORDER BY c.inverse_id LIMIT ? OFFSET ?")
             .bind(original_id).bind(i64::from(limit)+1).bind(i64::from(offset)).fetch_all(&mut *tx).await.map_err(db)?;
         let more = rows.len() > limit as usize;
-        let attempts:Vec<Value>=rows.iter().take(limit as usize).map(|row|json!({"operation_id":row.get::<String,_>("inverse_id"),"task_id":row.get::<String,_>("task_id"),"grant_revision":row.get::<i64,_>("grant_revision"),"original_digest":row.get::<String,_>("original_digest"),"preview_digest":row.get::<String,_>("inverse_digest"),"state":row.get::<String,_>("state")})).collect();
+        let attempts:Vec<Value>=rows.iter().take(limit as usize).map(|row|json!({"operation_id":row.get::<String,_>("inverse_id"),"task_id":row.get::<String,_>("task_id"),"grant_revision":row.get::<i64,_>("grant_revision"),"original_digest":row.get::<String,_>("original_digest"),"preview_digest":row.get::<String,_>("inverse_digest"),"state":row.get::<String,_>("state"),"evidence":if row.get::<Option<String>,_>("evidence_cleanup").is_some(){"unavailable"}else{"retained"}})).collect();
         tx.commit().await.map_err(db)?;
         Ok(
-            json!({"original_id":original_id,"original_state":original.state.as_str(),"attempts":attempts,"next_offset":if more {Some(offset+limit)} else {None}}),
+            json!({"original_id":original_id,"original_state":original["state"],"original_evidence":original.get("evidence").cloned().unwrap_or(json!({"status":"retained"})),"attempts":attempts,"next_offset":if more {Some(offset+limit)} else {None}}),
         )
     }
 
@@ -768,6 +772,9 @@ impl JournalWriteTasks {
                 outcomes.insert(state.as_str().into(), json!(count.get::<i64, _>("count")));
             }
             record["operation_states"] = Value::Object(outcomes);
+            let unavailable: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM write_task_operations l JOIN operations o USING(operation_id) WHERE l.task_id=? AND o.evidence_cleanup IS NOT NULL")
+                .bind(row.get::<&str,_>("id")).fetch_one(&mut *tx).await.map_err(db)?;
+            record["unavailable_evidence"] = json!(unavailable);
             tasks.push(record);
         }
         tx.commit().await.map_err(db)?;
@@ -782,23 +789,32 @@ async fn undo_next(
     let row = match source {
         UndoSource::Task { task_id } => {
             task(tx, task_id).await?;
-            sqlx::query("SELECT o.operation_id,o.state FROM write_task_operations l JOIN operations o ON o.operation_id=l.operation_id WHERE l.task_id=? AND o.state NOT IN ('known_failure','rejected','expired') AND NOT EXISTS(SELECT 1 FROM operation_compensations c JOIN operations i ON i.operation_id=c.inverse_id WHERE c.original_id=o.operation_id AND i.state='applied') ORDER BY l.ordinal DESC LIMIT 1")
+            sqlx::query("SELECT o.*,e.preview FROM write_task_operations l JOIN operations o ON o.operation_id=l.operation_id LEFT JOIN operation_evidence e ON e.operation_id=o.operation_id WHERE l.task_id=? AND o.state NOT IN ('known_failure','rejected','expired') AND NOT EXISTS(SELECT 1 FROM operation_compensations c JOIN operations i ON i.operation_id=c.inverse_id WHERE c.original_id=o.operation_id AND i.state='applied') ORDER BY l.ordinal DESC LIMIT 1")
                 .bind(task_id).fetch_optional(&mut **tx).await.map_err(db)?
         }
         UndoSource::Operation { operation_id } => {
-            load_operation(tx, operation_id).await?;
-            sqlx::query("SELECT operation_id,state FROM operations WHERE operation_id=? AND NOT EXISTS(SELECT 1 FROM operation_compensations c JOIN operations i ON i.operation_id=c.inverse_id WHERE c.original_id=operations.operation_id AND i.state='applied')")
+            let exists: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM operations WHERE operation_id=?")
+                    .bind(operation_id)
+                    .fetch_one(&mut **tx)
+                    .await
+                    .map_err(db)?;
+            if exists == 0 {
+                return Err(CoreError(ErrorKind::NotFound, "operation_not_found"));
+            }
+            sqlx::query("SELECT o.*,e.preview FROM operations o LEFT JOIN operation_evidence e USING(operation_id) WHERE o.operation_id=? AND NOT EXISTS(SELECT 1 FROM operation_compensations c JOIN operations i ON i.operation_id=c.inverse_id WHERE c.original_id=o.operation_id AND i.state='applied')")
                 .bind(operation_id).fetch_optional(&mut **tx).await.map_err(db)?
         }
     };
     let Some(row) = row else {
         return Ok(Value::Null);
     };
+    let original = super::evidence::public(&row)?;
     let original_id: String = row.get("operation_id");
     let attempt = sqlx::query("SELECT c.inverse_id,o.state FROM operation_compensations c JOIN operations o ON o.operation_id=c.inverse_id WHERE c.original_id=? AND o.state NOT IN ('known_failure','expired','rejected') LIMIT 1")
         .bind(&original_id).fetch_optional(&mut **tx).await.map_err(db)?;
     Ok(
-        json!({"original_id":original_id,"state":row.get::<String,_>("state"),"blocking_inverse":attempt.map(|r|json!({"operation_id":r.get::<String,_>("inverse_id"),"state":r.get::<String,_>("state")}))}),
+        json!({"original_id":original_id,"state":row.get::<String,_>("state"),"evidence":if original.get("evidence").is_some(){"unavailable"}else{"retained"},"blocking_inverse":attempt.map(|r|json!({"operation_id":r.get::<String,_>("inverse_id"),"state":r.get::<String,_>("state")}))}),
     )
 }
 
@@ -856,20 +872,10 @@ async fn load_operation(
     tx: &mut Transaction<'_, Sqlite>,
     id: &str,
 ) -> Result<Operation, CoreError> {
-    let row = sqlx::query("SELECT preview,state FROM operations WHERE operation_id=?")
-        .bind(id)
-        .fetch_optional(&mut **tx)
-        .await
-        .map_err(db)?
+    let row = sqlx::query("SELECT o.*,e.preview FROM operations o LEFT JOIN operation_evidence e USING(operation_id) WHERE o.operation_id=?")
+        .bind(id).fetch_optional(&mut **tx).await.map_err(db)?
         .ok_or(CoreError(ErrorKind::NotFound, "operation_not_found"))?;
-    let preview: Preview = decode(row.get("preview"))?;
-    if preview.operation_id != id {
-        return Err(storage());
-    }
-    Ok(Operation {
-        preview,
-        state: row.get::<&str, _>("state").parse()?,
-    })
+    super::evidence::retained(&row)
 }
 
 async fn check_inverse(
@@ -995,7 +1001,7 @@ async fn source_clear_except(
     // Legacy structured/tab records do not retain the physical spreadsheet ID
     // in record_id. Conservatively fence Sheets while any such write is unresolved.
     let prefix = format!("{}:", physical_id(p));
-    let blocked:i64=sqlx::query_scalar("SELECT COUNT(*) FROM operations WHERE operation_id<>? AND state IN ('applying','uncertain','reconciliation','conflict') AND ((json_extract(preview,'$.resource_kind')='google_docs' AND ?='google_docs' AND json_extract(preview,'$.record_id')=?) OR (?<>'google_docs' AND COALESCE(json_extract(preview,'$.resource_kind'),'sheets')<>'google_docs' AND (COALESCE(json_extract(preview,'$.resource_kind'),'sheets')<>'sheets_grid' OR substr(json_extract(preview,'$.record_id'),1,length(?))=?)))")
+    let blocked:i64=sqlx::query_scalar("SELECT COUNT(*) FROM operations WHERE operation_id<>? AND state IN ('applying','uncertain','reconciliation','conflict') AND ((json_extract(identity,'$.resource_kind')='google_docs' AND ?='google_docs' AND json_extract(identity,'$.record_id')=?) OR (?<>'google_docs' AND COALESCE(json_extract(identity,'$.resource_kind'),'sheets')<>'google_docs' AND (COALESCE(json_extract(identity,'$.resource_kind'),'sheets')<>'sheets_grid' OR substr(json_extract(identity,'$.record_id'),1,length(?))=?)))")
         .bind(except).bind(resource_kind(p)).bind(&p.record_id).bind(resource_kind(p)).bind(&prefix).bind(&prefix).fetch_one(&mut **tx).await.map_err(db)?;
     if blocked != 0 {
         return Err(denied("write_task_source_unresolved"));

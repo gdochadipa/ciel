@@ -2,7 +2,8 @@
 
 Status: scoped writes, same-tab compound capture, native lifecycle and selected-
 original provider undo have supported local Linux/SDK/simulated-Google evidence.
-Evidence cleanup and live host qualification remain unfinished. No production
+Evidence-unavailable storage/read semantics are implemented; owner-approved
+cleanup execution and live host qualification remain unfinished. No production
 write, service, native job or delivery activation is enabled. See
 [native transport](task-native-transport.md).
 
@@ -329,6 +330,42 @@ IDs, request/preview digests, owner, target identity, original/inverse links,
 outcomes and audit. Old preview/approval/apply/reconcile requests must not recreate
 authority or refill removed evidence. Never modify existing previews in place to
 fake tombstones or delete operation rows to free their IDs.
+
+The storage upgrade separates immutable preview JSON into `operation_evidence`.
+Permanent `operations` rows retain owner/registered and physical target identity,
+request/preview digests, outcome and membership/compensation/audit references.
+Legacy previews move byte for byte within one SQLite transaction; a failed
+migration rolls back schema and data. This is a forward schema upgrade: an older
+binary cannot read the upgraded layout. Use a matched pre-upgrade backup for a
+rollback; do not run an old binary against the upgraded journal.
+
+Missing payload alone is a storage error. A distinct, versioned cleanup receipt
+and an eligible resolved outcome are required to represent unavailable evidence.
+History then returns the retained identity/outcome plus
+`evidence: {status: "unavailable", cleanup_id, removed_at}` without source bodies.
+Retained-preview history is unchanged. Same-ID replay cannot repopulate evidence;
+preview/approval/apply/reconciliation/inverse capture refuse with
+`operation_evidence_unavailable` (or an earlier authority denial), without source
+access. This is availability metadata, not a new FSM state or proof of failure.
+Task history reports `unavailable_evidence` counts; inverse-reference history keeps
+original/attempt outcomes, digests and evidence status. `undo_next.evidence` reports
+`retained` or `unavailable`; an unavailable member is not silently skipped.
+
+No runtime removal or receipt-writing API is exposed yet. Synthetic unavailable
+records exist only in disposable tests. This foundation does not authorize purge,
+release bytes, shrink the database/WAL or delete backups/native memory.
+
+The foundation gate on 2026-11-16 passes the actual locked SDK build/validation,
+42 Python, 236 Rust/37 doctests, 108 Bun, 56 SDK Node, 7 script contract cases,
+all seven Google scenarios and 75 protected Linux cases. All 225 frozen inputs
+remain unchanged. Migration tests preserve exact legacy bytes/digests/foreign
+keys across restart and rollback, cover multiple bounded batches and injected
+payload-storage failure. Disposable unavailable records preserve history/links,
+spend IDs and refuse native inverse capture/reconciliation with no source IO.
+The Google scenarios regress retained-evidence paths: their existing Workspace
+fixture still observes 4 scope decisions, 10 Docs sends/14 replacements and 2 grid
+sends, including lost-response observation without resend. They do not exercise
+an actual cleanup command or qualify a live host. No runtime removal API exists.
 
 Cleanup preview must select completed tasks/age ranges and disclose affected undo
 coverage and estimated reusable bytes. Under the shared writer boundary, check

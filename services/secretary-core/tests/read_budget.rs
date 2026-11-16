@@ -262,14 +262,16 @@ async fn readonly_journal_binding_denies_legacy_recovery_and_owner_changes() {
         "readonly_state_binding"
     );
     let old = directory.path().join("legacy");
-    let journal = Journal::open(&old).await.unwrap();
-    let options = sqlx::sqlite::SqliteConnectOptions::new().filename(old.join("secretary.sqlite3"));
+    std::fs::create_dir(&old).unwrap();
+    let options = sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(old.join("secretary.sqlite3"))
+        .create_if_missing(true);
     let mut conn = sqlx::SqliteConnection::connect_with(&options)
         .await
         .unwrap();
+    sqlx::query("CREATE TABLE operations(operation_id TEXT PRIMARY KEY,request_digest TEXT NOT NULL,preview TEXT NOT NULL,state TEXT NOT NULL,updated_at INTEGER NOT NULL)").execute(&mut conn).await.unwrap();
     sqlx::query("INSERT INTO operations(operation_id,request_digest,preview,state,updated_at) VALUES('synthetic-op','digest','{}','applying',0)").execute(&mut conn).await.unwrap();
     drop(conn);
-    drop(journal);
     assert_eq!(
         Journal::open_read_only_bound(&old, "owner", "generation")
             .await

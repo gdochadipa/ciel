@@ -1729,3 +1729,81 @@ async fn unresolved_later_original_on_another_source_blocks_earlier_undo() {
     );
     assert!(journal.find("inverse-first").await.unwrap().is_none());
 }
+
+#[tokio::test]
+async fn unavailable_original_and_inverse_keep_task_outcomes_and_compensation_links() {
+    let directory = tempfile::tempdir().unwrap();
+    let journal = Journal::open(directory.path()).await.unwrap();
+    let ledger = JournalWriteTasks::open(journal.clone(), "owner", "deployment-1")
+        .await
+        .unwrap();
+    let forward = authorized(&ledger).await;
+    let original = applied_member(&ledger, &journal, id(&forward), "original", false).await;
+    ledger
+        .end(id(&forward), &context(), TaskEnd::Completed)
+        .await
+        .unwrap();
+    let undo = authorized(&ledger).await;
+    let candidate = inverse_capture(&original, "inverse");
+    ledger
+        .admit_inverse(id(&undo), &context(), "original", candidate.clone())
+        .await
+        .unwrap();
+    ledger
+        .claim(id(&undo), &context(), "inverse")
+        .await
+        .unwrap();
+    journal.finish("inverse", Outcome::Applied).await.unwrap();
+    ledger
+        .end(id(&undo), &context(), TaskEnd::Completed)
+        .await
+        .unwrap();
+    let pool = sqlx::SqlitePool::connect_with(
+        sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(directory.path().join("secretary.sqlite3")),
+    )
+    .await
+    .unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    sqlx::query("DELETE FROM operation_evidence")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE operations SET evidence_cleanup=?")
+        .bind(json!({"version":1,"cleanup_id":"fixture-cleanup","removed_at":100}).to_string())
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    pool.close().await;
+    let history = ledger.inverse_history("original", 20, 0).await.unwrap();
+    assert_eq!(history["original_state"], "applied");
+    assert_eq!(history["original_evidence"]["status"], "unavailable");
+    assert_eq!(history["attempts"][0]["operation_id"], "inverse");
+    assert_eq!(history["attempts"][0]["state"], "applied");
+    assert_eq!(history["attempts"][0]["evidence"], "unavailable");
+    assert_eq!(
+        history["attempts"][0]["original_digest"],
+        original.preview.preview_digest
+    );
+    let page = ledger.history(20, 0).await.unwrap();
+    for task in [&forward, &undo] {
+        let record = task_record(&page, id(task));
+        assert_eq!(record["unavailable_evidence"], 1);
+        assert_eq!(record["operation_states"]["applied"], 1);
+    }
+    let fresh = authorized(&ledger).await;
+    error(
+        ledger
+            .admit_inverse(id(&fresh), &context(), "original", candidate)
+            .await,
+        "operation_evidence_unavailable",
+    );
+    assert_eq!(
+        ledger.history(20, 0).await.unwrap()["tasks"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
+}

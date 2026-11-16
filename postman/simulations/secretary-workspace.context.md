@@ -274,3 +274,39 @@ Undo evidence: agent-vbznb0a7/{verification.log,workspace-retry.log,acceptance.l
 verification-summary.json,fixture-correction.json,source-check.json,stages.json,
 result.json}; agent-vbznb0a7/simulations/secretary-acceptance.XxOTdE/
 {sim.ndjson,task-client.log}. Diagnostic red: ciel-undo-count-red-ah3erqfl.
+
+
+## Split journal evidence regression — supported, 2026-11-16
+
+- id: retained-provider-paths-after-evidence-split
+- status: supported
+- claim: The existing retained-evidence Workspace workflows preserve conditional
+  grid/Docs undo and no-resend recovery after the journal payload-storage upgrade.
+- reason: Real Core/SQLite and the actual built SDK use the new evidence table;
+  unchanged Google stand-ins still serve the same bounded source/write contracts.
+  This regression claim concerns retained payloads. Unavailable-evidence guards
+  are tested separately through disposable SQLite/native-Core controlled sources.
+- verification: agent-to0rw9px passes full scripts/verify.sh, genuine locked SDK
+  lifecycle/build/validation,42 Python,236 Rust/37 doctests,108 Bun,56 SDK Node,
+  7 script cases,all7 Google scenarios and75 protected Linux cases. All225 frozen
+  inputs remain unchanged; no production or fixture correction was needed.
+  Workspace records129 google-docs/62 google request events. Normal startup/model
+  tools retain4 scope decisions,10 Docs sends/14 replacement requests,2 grid sends,
+  original history,conditional undo restoration and lost-response observation
+  without resend. Error/slow conditions have no member request events; caller
+  outcomes qualify those injected scenarios. New native Core unavailable records
+  refuse inverse capture/reconciliation before source IO and preserve history,
+  outcomes,spent IDs and links. No runtime removal/receipt-writing API is exposed;
+  no operator evidence was purged. Live owner/UI/model/Google and actual cleanup,
+  physical erasure,WAL/backups and target activation remain unqualified.
+- source: services/secretary-core/src/infrastructure/journal/evidence.rs;
+  services/secretary-core/src/infrastructure/journal/evidence/tests.rs;
+  services/secretary-core/tests/support/task_undo.rs;
+  services/secretary-core/tests/write_tasks.rs;scripts/acceptance-task-tools.mjs.
+- updated_at: 2026-11-16
+
+Evidence: agent-to0rw9px/{verification.log,acceptance.log,source-check.json,
+verification-summary.json,stages.json,result.json,cleanup.log};
+agent-to0rw9px/simulations/secretary-acceptance.9vhY6M/{sim.ndjson,task-client.log}.
+Fingerprint: parent49de22d plus the frozen225-input evidence-foundation changes,
+Postman1.75.0. Only public Markdown status/evidence changes follow the green gate.

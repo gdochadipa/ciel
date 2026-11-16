@@ -83,3 +83,13 @@ An interrupted `applying` operation becomes `reconciliation` on startup. Operato
 - `main.rs`: environment loading and adapter composition.
 
 HTTP tool names, JSON envelopes and stored operation names remain stable. Internal Rust write construction now keeps credentials in presentation: create `Writes::new(journal, enabled)`, then `AppState::with_writes(writes, approval_token)` validates the distinct operator secret. Application-only callers can dispatch typed `Command`s directly without transport credentials; they are trusted code, not externally callable LLM tools.
+
+Journal evidence storage now upgrades transactionally from inline previews to
+separate `operation_evidence` payloads, preserving exact preview bytes/digests,
+permanent IDs, outcomes, task/undo links and audit. An older binary cannot read the
+upgraded schema; rollback requires the matched pre-upgrade backup. Retained history
+keeps its existing shape. A future approved cleanup receipt can mark source evidence
+unavailable while history preserves identity/outcome; replay and undo then fail
+closed. Missing payload without a valid receipt is a journal error. No runtime
+cleanup/removal API is currently exposed, and startup does not remove evidence.
+See [task/undo contract](../../contracts/task-approval-undo.md).
