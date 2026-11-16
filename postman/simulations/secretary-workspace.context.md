@@ -234,3 +234,43 @@ agent-vqot3_rl/acceptance.log; agent-vqot3_rl/source-check.json.
 Compound evidence: agent-xxvu2vp7/{verification.log,acceptance.log,source-check.json,
 full-stage-summary.json,stages.json,result.json};
 agent-xxvu2vp7/simulations/secretary-acceptance.53nFKE/{sim.ndjson,task-client.log}.
+
+
+## Provider undo task extension — supported, 2026-11-16
+
+- id: selected-original-provider-undo
+- status: supported
+- claim: Separately authorized undo tasks conditionally reverse original single,
+  compound Docs and literal grid members in reverse order, retain original
+  history and observe lost inverse responses without another provider send.
+- reason: The new typed undo selector, Core-derived capture and existing journal
+  inverse linkage feed the same real adapters. Existing Google stand-ins already
+  model the required text/revision and entered-cell operations; no new provider
+  responses or routes are invented for undo.
+- verification: agent-vbznb0a7 passes the actual locked SDK lifecycle/build/
+  validation, 42 Python, 227 Rust/37 doctests, 108 Bun, 56 actual SDK Node, 7 script
+  cases, all 7 Google scenarios and 75 protected cases. An initial fixture expected
+  11 model calls instead of 12: existing applied-history refresh policy adds one
+  call for the new original-history observation. A narrowed red run verifies
+  exact 10->11->12 boundaries,then a fixture-only correction passes SDK/build/
+  registration/Workspace and protected retry. Production,adapter,lock and SDK
+  bytes remain identical to the completed full verifier/six Google scenarios.
+  Normal startup/model tools observes 4 scope decisions, two forward/two undo,
+  10 Docs sends containing 14 replacements, 2 grid sends, full text/affected-cell
+  restoration,untouched other tab,original history and native note refresh.
+  Lost inverse response is reconciled without resend. Workspace logs 129 Docs/
+  62 Sheets member requests. Both 223-input source snapshots are unchanged.
+  Local Core tests additionally prove outside-target human content survives,
+  drift blocks dispatch and uncertain inverse links survive restart. Error/slow
+  injected cases lack member request events; their caller outcomes qualify those
+  cases. Real owner/UI/collaborator/model behavior remains unqualified.
+- source: services/secretary-core/src/application/task_authority/inverse.rs;
+  services/secretary-core/src/infrastructure/journal/write_tasks.rs;
+  scripts/acceptance-task-tools.mjs;
+  plugins/secretary-tools/test/task-native-core.node.mjs.
+- updated_at: 2026-11-16
+
+Undo evidence: agent-vbznb0a7/{verification.log,workspace-retry.log,acceptance.log,
+verification-summary.json,fixture-correction.json,source-check.json,stages.json,
+result.json}; agent-vbznb0a7/simulations/secretary-acceptance.XxOTdE/
+{sim.ndjson,task-client.log}. Diagnostic red: ciel-undo-count-red-ah3erqfl.

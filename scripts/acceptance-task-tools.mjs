@@ -75,5 +75,46 @@ try{
  assert.equal((await member('tasks_inspect',{task_id:successor.task_id})).data.admitted_operations,1);
  assert.equal((await member('tasks_end',{task_id:successor.task_id,grant_revision:successor.grant_revision,reason:'completed'})).data.phase,'closed');
  assert.equal(prompts,2);assert.equal(models,6);
- console.log(JSON.stringify({acceptance:'passed',scenario:'native-task-model-tools',owner_prompts:prompts,docs_sends:5,docs_replacement_requests:7,grid_sends:1,scope:'built model tools/normal startup/Core/journal/native note IO with simulated Google/model; host authority/owner routing are synthetic, not live qualification'}));
+ async function approveUndo(originalTask){
+  const params={scope:{...scope,objective:'Conditionally undo only the selected original task',undo_of:{kind:'task',task_id:originalTask}}};
+  const decision=await hooks.beforeToolCall({toolName:'tasks_propose',params},{...currentContext,abortSignal:abort.signal,requester:{senderId:owner,senderIsOwner:true}});assert.equal(decision.requireApproval.title,'Authorize Workspace undo task');prompts++;
+  await decision.requireApproval.onResolution('allow-once');const result=await run('tasks_propose',params);assert.equal(result.ok,true);return result.data;
+ }
+ async function inverse(task,original_id,operation_id,lose=false){
+  const observed=await member('tasks_inspect',{task_id:task.task_id});assert.equal(observed.data.undo_next.original_id,original_id);
+  const change={kind:'inverse',original_id,operation_id};const preview=await member('tasks_capture',{task_id:task.task_id,change});assert.equal(preview.data.state,'previewed');
+  assert.equal((await member('tasks_capture',{task_id:task.task_id,change})).data.preview_digest,preview.data.preview_digest);
+  if(lose)await fixture(docsUrl,'/__fixture/lose-next-response',{});
+  const result=await member('tasks_execute',{task_id:task.task_id,grant_revision:task.grant_revision,operation_id});assert.equal(result.data.state,lose?'uncertain':'applied');
+  assert.equal((await member('tasks_execute',{task_id:task.task_id,grant_revision:task.grant_revision,operation_id})).ok,false);
+  return preview.data;
+ }
+ const undoSuccessor=await approveUndo(successor.task_id);
+ await inverse(undoSuccessor,resumed.operation_id,'undo-successor');
+ assert.equal((await member('tasks_end',{task_id:undoSuccessor.task_id,grant_revision:undoSuccessor.grant_revision,reason:'completed'})).data.phase,'closed');
+ const undo=await approveUndo(task_id);
+ assert.equal((await member('tasks_capture',{task_id:undo.task_id,change:{kind:'inverse',operation_id:'undo-wrong-order',original_id:'task-doc-one'}})).ok,false);
+ assert.equal((await member('tasks_inspect',{task_id:undo.task_id})).data.admitted_operations,0);
+ await inverse(undo,lost.operation_id,'undo-lost-compound');
+ await inverse(undo,grid.operation_id,'undo-grid');
+ await inverse(undo,compound.operation_id,'undo-compound');
+ await inverse(undo,'task-doc-two','undo-two');
+ await inverse(undo,'task-doc-one','undo-one',true);
+ assert.equal((await run('docs_read',{document:'notes',mode:'discovery_summary'})).error.code,'SUMMARY_MEMORY_RECONCILIATION_REQUIRED');
+ const inverseResponse=await fetch(coreUrl+'/v1/operations/undo-one/reconcile',{method:'POST',headers:{authorization:'Bearer synthetic-separate-operator-token','content-type':'application/json'},body:'{}',signal:AbortSignal.timeout(5000)});assert.equal((await inverseResponse.json()).data.state,'applied');
+ assert.equal(models,10,'before inverse history observation');
+ assert.equal((await run('operations_get_history',{operation_id:'undo-one'})).data.operation.state,'applied');
+ assert.equal(models,11,'after inverse history observation');
+ assert.equal((await run('operations_get_history',{operation_id:'task-doc-one'})).data.operation.state,'applied');
+ assert.equal(models,12,'after original applied history observation');
+ const finalUndo=await member('tasks_inspect',{task_id:undo.task_id});assert.equal(finalUndo.data.undo_next,null);assert.equal(finalUndo.data.admitted_operations,5);
+ assert.equal((await member('tasks_end',{task_id:undo.task_id,grant_revision:finalUndo.data.grant_revision,reason:'completed'})).data.phase,'closed');
+ assert.deepEqual(await fixture(docsUrl,'/__fixture/stats'),{applies:10,batchRequests:14});
+ assert.equal((await fixture(sheetsUrl,'/__fixture/stats')).gridWrites,gridBefore.gridWrites+2);
+ const restored=await fetch(docsUrl+'/documents/demo-document?includeTabsContent=true&suggestionsViewMode=SUGGESTIONS_INLINE').then(response=>response.json());
+ const text=tab=>tab.documentTab.body.content.flatMap(p=>p.paragraph?.elements??[]).map(e=>e.textRun?.content??'').join('');
+ assert.equal(text(restored.tabs[0]),'Hello sample\n');assert.equal(text(restored.tabs[1]),'Untouched tab\n');
+ // Applied history observations each refresh native memory under the existing policy.
+ assert.equal(prompts,4);assert.equal(models,12);
+ console.log(JSON.stringify({acceptance:'passed',scenario:'native-task-model-tools',owner_prompts:prompts,docs_sends:10,docs_replacement_requests:14,grid_sends:2,undo_round_trip:true,scope:'built model tools/normal startup/Core/journal/native note IO with simulated Google/model; host authority/owner routing are synthetic, not live qualification'}));
 }finally{await rm(workspace,{recursive:true,force:true});}

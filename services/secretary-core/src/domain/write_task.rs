@@ -158,6 +158,31 @@ pub struct TaskScope {
     pub targets: Vec<WriteTarget>,
     /// Finite admitted operation count, including failed/discarded attempts.
     pub max_operations: u32,
+    /// Explicit original selection for a newly owner-authorized undo task.
+    /// Omission preserves existing persisted scope JSON and its digest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub undo_of: Option<UndoSource>,
+}
+
+/// Original evidence selected by an undo scope, never provider request content.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum UndoSource {
+    /// Reverse supported applied members of this closed original task in order.
+    Task { task_id: String },
+    /// Reverse one retained applied original, including a supported legacy edit.
+    Operation { operation_id: String },
+}
+
+impl UndoSource {
+    fn valid(&self) -> bool {
+        match self {
+            Self::Task { task_id } => {
+                uuid::Uuid::parse_str(task_id).is_ok_and(|id| id.to_string() == *task_id)
+            }
+            Self::Operation { operation_id } => super::write_model::valid_id(operation_id),
+        }
+    }
 }
 
 impl TaskScope {
@@ -167,6 +192,7 @@ impl TaskScope {
     /// Rejects malformed, duplicate or unbounded scope.
     pub fn validate(&self) -> Result<(), CoreError> {
         if !bounded(&self.objective, 2048)
+            || self.undo_of.as_ref().is_some_and(|source| !source.valid())
             || !bounded(&self.mapping_version, 128)
             || self.targets.is_empty()
             || self.targets.len() > 8
@@ -230,6 +256,11 @@ pub enum TaskCapture {
     Grid(super::write_model::Change),
     /// Registered unique plain-text replacement.
     Document(super::documents::DocChange),
+    /// Core derives intent from retained evidence; callers supply no inverse fields.
+    Inverse {
+        operation_id: String,
+        original_id: String,
+    },
 }
 
 impl TaskScope {
@@ -285,6 +316,23 @@ impl TaskScope {
     /// # Errors
     /// Returns write_task_scope for a different resource/action/rectangle.
     pub fn permits_capture(&self, change: &TaskCapture) -> Result<(), CoreError> {
+        if let TaskCapture::Inverse {
+            operation_id,
+            original_id,
+        } = change
+        {
+            if self.undo_of.is_none()
+                || !super::write_model::valid_id(operation_id)
+                || !super::write_model::valid_id(original_id)
+                || operation_id == original_id
+            {
+                return Err(CoreError(ErrorKind::Forbidden, "write_task_undo_scope"));
+            }
+            return Ok(());
+        }
+        if self.undo_of.is_some() {
+            return Err(CoreError(ErrorKind::Forbidden, "write_task_undo_scope"));
+        }
         let allowed = self.targets.iter().any(|target| match (target, change) {
             (
                 WriteTarget::Grid {

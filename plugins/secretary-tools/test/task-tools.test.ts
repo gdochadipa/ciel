@@ -76,3 +76,13 @@ test('scope binding accepts reordered object keys without changing intent and bo
  expect(()=>taskToolInput('tasks_propose',{scope:deep})).toThrow('INVALID_INPUT');
  for(const input of [undefined,null,[],{task_id:id,operation_id:''},{task_id:id,operation_id:'bad\n'}])expect(()=>taskToolInput('tasks_discard',input)).toThrow('INVALID_INPUT');
 });
+
+test('undo tool input snapshots exact original selection and carries selectors without caller inverse values',async()=>{
+ const f=fixture(),selection={kind:'task',task_id:id};
+ const input={scope:{...scope,undo_of:selection}},captured=taskToolInput('tasks_propose',input);
+ selection.task_id='22222222-2222-4222-8222-222222222222';
+ expect(captured.scope).toEqual({...scope,undo_of:{kind:'task',task_id:id}});
+ const change={kind:'inverse',operation_id:'undo',original_id:'original'};
+ expect(await executeTaskTool('tasks_capture',{task_id:id,change},f.context,f.client,f.approvals)).toEqual({ok:true,data:{state:'previewed'}});
+ expect(f.calls).toEqual([['capture',id,change]]);expect(f.proposals()).toBe(0);
+});

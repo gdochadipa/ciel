@@ -206,8 +206,9 @@ regressions,Workspace/native memory and all75 protected cases; the210-input fina
 source check is unchanged. These emitter and simulated-provider integration tests
 do not establish actual live reset commands or production owner routing.
 
-Normal model task-tool/startup composition below passes its supported Linux gate. Broader same-source composition, formal provider undo and
-evidence cleanup remain unfinished. Keep
+Normal model task-tool/startup composition below passes its supported Linux gate.
+Cross-resource composition, evidence cleanup and live qualification remain
+unfinished. Selected-original provider undo has local evidence in the later section. Keep
 every live/approval/write activation gate disabled until
 its own qualification and explicit activation authorization exist.
 
@@ -333,3 +334,28 @@ Uncertainty is reconciled by observation without resend. All 221 recorded source
 hashes are unchanged. These remain local/simulated proofs, not live owner/UI/Google
 qualification or production activation.
 Cross-tab/resource dependency composition and provider undo remain separate work.
+
+
+## Selected original undo tasks
+
+The existing 33 tools also support explicit undo scopes and Core-derived inverse
+capture. `tasks_propose` accepts scope.undo_of selecting one original task or
+operation; native approval is labeled as undo and binds that exact selector.
+`tasks_capture` accepts only inverse selectors inside that scope. Execution still
+uses one current factory assertion, one Core preflight/checkpoint and one dispatch
+receipt per member. No separate undo executor or automatic rollback loop runs
+past host cancellation. The journal rechecks ordering/original links at admission,
+claim and final permit. `tasks_inspect.undo_next` is observation-only metadata.
+See [undo contract](task-approval-undo.md#scoped-provider-undo-integration).
+The supported agent-vbznb0a7 gate passes 227 Rust/37 doctests, 108 Bun, 56 actual
+SDK Node, all 7 Google scenarios and 75 protected cases with actual locks/SDK.
+A third actual SDK/Core profile uses two separate native scope decisions for
+forward and undo work, retains original evidence and stops on a lost inverse
+response. Normal startup/model tools/Google restores single/compound Docs and
+grid data with 4 scope decisions,10 Docs sends/14 replacements and 2 grid sends.
+A fixture-only memory-count correction was reproduced at history boundaries;
+SDK/build/registration/Workspace and protected stages pass on the corrected
+snapshot. The completed full verifier and six other scenarios retain identical
+production inputs. Both 223-input snapshots remain unchanged during tests.
+These are local/simulated proofs; real owner/UI/Google/model qualification and
+production activation remain separate.

@@ -6,7 +6,7 @@ use crate::domain::{
     error::{CoreError, ErrorKind},
     operation::{digest, Operation, OperationEvent, OperationState, Preview},
     write_model::valid_id,
-    write_task::{TaskContext, TaskScope},
+    write_task::{TaskContext, TaskScope, UndoSource},
 };
 use serde_json::{json, Value};
 use sqlx::{sqlite::SqliteRow, Row, Sqlite, Transaction};
@@ -361,6 +361,7 @@ impl JournalWriteTasks {
         let row = task(&mut tx, id).await?;
         self.active(&row, context)?;
         let scope = self.checked_scope(&row)?;
+        check_undo_scope(&mut tx, &scope, original_id).await?;
         scope.permits(&p, &self.owner)?;
         if !valid_id(&p.operation_id) || p.source_revision.is_empty() || encode(&p)?.len() > 393216
         {
@@ -524,8 +525,9 @@ impl JournalWriteTasks {
         if member.get::<i64, _>("grant_revision") != row.get::<i64, _>("revision") {
             return Err(denied("write_task_stale_member"));
         }
-        self.checked_scope(&row)?.permits(&p, &self.owner)?;
-        check_inverse_link(&mut tx, &p, &self.owner).await?;
+        let scope = self.checked_scope(&row)?;
+        scope.permits(&p, &self.owner)?;
+        check_inverse_link(&mut tx, &p, &self.owner, &scope).await?;
         let state: OperationState = member.get::<&str, _>("state").parse()?;
         let approved = state.transition(OperationEvent::Approve)?;
         source_clear(&mut tx, &p).await?;
@@ -578,11 +580,12 @@ impl JournalWriteTasks {
         {
             return Err(denied("write_task_stale_member"));
         }
-        self.checked_scope(&row)?.permits(expected, &self.owner)?;
+        let scope = self.checked_scope(&row)?;
+        scope.permits(expected, &self.owner)?;
         if expected.expires_at <= chrono::Utc::now().timestamp() {
             return Err(denied("write_task_capture_expired"));
         }
-        check_inverse_link(&mut tx, expected, &self.owner).await?;
+        check_inverse_link(&mut tx, expected, &self.owner, &scope).await?;
         source_clear_except(&mut tx, expected, &member.operation_id).await?;
         let exists: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM write_task_dispatches WHERE operation_id=?")
@@ -772,17 +775,79 @@ impl JournalWriteTasks {
     }
 }
 
+async fn undo_next(
+    tx: &mut Transaction<'_, Sqlite>,
+    source: &UndoSource,
+) -> Result<Value, CoreError> {
+    let row = match source {
+        UndoSource::Task { task_id } => {
+            task(tx, task_id).await?;
+            sqlx::query("SELECT o.operation_id,o.state FROM write_task_operations l JOIN operations o ON o.operation_id=l.operation_id WHERE l.task_id=? AND o.state NOT IN ('known_failure','rejected','expired') AND NOT EXISTS(SELECT 1 FROM operation_compensations c JOIN operations i ON i.operation_id=c.inverse_id WHERE c.original_id=o.operation_id AND i.state='applied') ORDER BY l.ordinal DESC LIMIT 1")
+                .bind(task_id).fetch_optional(&mut **tx).await.map_err(db)?
+        }
+        UndoSource::Operation { operation_id } => {
+            load_operation(tx, operation_id).await?;
+            sqlx::query("SELECT operation_id,state FROM operations WHERE operation_id=? AND NOT EXISTS(SELECT 1 FROM operation_compensations c JOIN operations i ON i.operation_id=c.inverse_id WHERE c.original_id=operations.operation_id AND i.state='applied')")
+                .bind(operation_id).fetch_optional(&mut **tx).await.map_err(db)?
+        }
+    };
+    let Some(row) = row else {
+        return Ok(Value::Null);
+    };
+    let original_id: String = row.get("operation_id");
+    let attempt = sqlx::query("SELECT c.inverse_id,o.state FROM operation_compensations c JOIN operations o ON o.operation_id=c.inverse_id WHERE c.original_id=? AND o.state NOT IN ('known_failure','expired','rejected') LIMIT 1")
+        .bind(&original_id).fetch_optional(&mut **tx).await.map_err(db)?;
+    Ok(
+        json!({"original_id":original_id,"state":row.get::<String,_>("state"),"blocking_inverse":attempt.map(|r|json!({"operation_id":r.get::<String,_>("inverse_id"),"state":r.get::<String,_>("state")}))}),
+    )
+}
+
+async fn check_undo_scope(
+    tx: &mut Transaction<'_, Sqlite>,
+    scope: &TaskScope,
+    original_id: Option<&str>,
+) -> Result<(), CoreError> {
+    // Existing trusted library scopes omitted this optional selector. Public
+    // native inverse capture below requires it before any source access.
+    let Some(selection) = &scope.undo_of else {
+        return Ok(());
+    };
+    let original_id = original_id.ok_or_else(|| denied("write_task_undo_scope"))?;
+    let matches = match selection {
+        UndoSource::Operation { operation_id } => operation_id == original_id,
+        UndoSource::Task { task_id } => {
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM write_task_operations WHERE task_id=? AND operation_id=?",
+            )
+            .bind(task_id)
+            .bind(original_id)
+            .fetch_one(&mut **tx)
+            .await
+            .map_err(db)?
+                == 1
+        }
+    };
+    if !matches {
+        return Err(denied("write_task_undo_scope"));
+    }
+    Ok(())
+}
+
 async fn check_inverse_link(
     tx: &mut Transaction<'_, Sqlite>,
     p: &Preview,
     owner: &str,
+    scope: &TaskScope,
 ) -> Result<(), CoreError> {
     if let Some(link) = sqlx::query("SELECT original_id,original_digest,inverse_digest FROM operation_compensations WHERE inverse_id=?")
             .bind(&p.operation_id).fetch_optional(&mut **tx).await.map_err(db)? {
+            check_undo_scope(tx, scope, Some(link.get("original_id"))).await?;
             let original = check_inverse(tx, link.get("original_id"), p, owner).await?;
             if original.preview.preview_digest != link.get::<&str,_>("original_digest") || p.preview_digest != link.get::<&str,_>("inverse_digest") {
                 return Err(storage());
             }
+        } else if scope.undo_of.is_some() {
+            return Err(denied("write_task_undo_scope"));
         }
     Ok(())
 }
@@ -818,6 +883,15 @@ async fn check_inverse(
     }
     let original = load_operation(tx, original_id).await?;
     Inverse::from_applied(&original, &p.operation_id, owner)?.validate_preview(p)?;
+    check_original_ready(tx, original_id, &p.operation_id).await?;
+    Ok(original)
+}
+
+async fn check_original_ready(
+    tx: &mut Transaction<'_, Sqlite>,
+    original_id: &str,
+    inverse_id: &str,
+) -> Result<(), CoreError> {
     let nested: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM operation_compensations WHERE inverse_id=?")
             .bind(original_id)
@@ -830,16 +904,16 @@ async fn check_inverse(
     if let Some(member)=sqlx::query("SELECT l.task_id,l.ordinal,t.phase FROM write_task_operations l JOIN write_tasks t ON t.id=l.task_id WHERE l.operation_id=?")
         .bind(original_id).fetch_optional(&mut **tx).await.map_err(db)? {
         if member.get::<&str,_>("phase")!="closed" { return Err(denied("undo_original_task_active")); }
-        let later:i64=sqlx::query_scalar("SELECT COUNT(*) FROM write_task_operations l JOIN operations o ON o.operation_id=l.operation_id WHERE l.task_id=? AND l.ordinal>? AND o.state='applied' AND NOT EXISTS(SELECT 1 FROM operation_compensations c JOIN operations i ON i.operation_id=c.inverse_id WHERE c.original_id=l.operation_id AND i.state='applied')")
+        let later:i64=sqlx::query_scalar("SELECT COUNT(*) FROM write_task_operations l JOIN operations o ON o.operation_id=l.operation_id WHERE l.task_id=? AND l.ordinal>? AND (o.state IN ('applying','uncertain','reconciliation','conflict') OR (o.state='applied' AND NOT EXISTS(SELECT 1 FROM operation_compensations c JOIN operations i ON i.operation_id=c.inverse_id WHERE c.original_id=l.operation_id AND i.state='applied')))")
             .bind(member.get::<&str,_>("task_id")).bind(member.get::<i64,_>("ordinal")).fetch_one(&mut **tx).await.map_err(db)?;
         if later!=0 { return Err(denied("undo_reverse_order")); }
     }
     let attempts:i64=sqlx::query_scalar("SELECT COUNT(*) FROM operation_compensations c JOIN operations o ON o.operation_id=c.inverse_id WHERE c.original_id=? AND c.inverse_id<>? AND o.state NOT IN ('known_failure','expired','rejected')")
-        .bind(original_id).bind(&p.operation_id).fetch_one(&mut **tx).await.map_err(db)?;
+        .bind(original_id).bind(inverse_id).fetch_one(&mut **tx).await.map_err(db)?;
     if attempts != 0 {
         return Err(denied("undo_attempt_blocked"));
     }
-    Ok(original)
+    Ok(())
 }
 
 fn resource_kind(p: &Preview) -> &'static str {
@@ -1017,7 +1091,7 @@ impl crate::application::task_authority::TaskLedger for JournalWriteTasks {
             context.validate()?;
             let mut tx = self.transaction().await?;
             let row = task(&mut tx, id).await?;
-            self.checked_scope(&row)?;
+            let scope = self.checked_scope(&row)?;
             let old: TaskContext = decode(row.get("context"))?;
             if !old.same_conversation(context) {
                 return Err(denied("write_task_context"));
@@ -1030,6 +1104,9 @@ impl crate::application::task_authority::TaskLedger for JournalWriteTasks {
                     || row.get::<&str, _>("instance") != self.instance
                     || row.get::<&str, _>("phase") == "suspended"
             );
+            if let Some(selection) = &scope.undo_of {
+                summary["undo_next"] = undo_next(&mut tx, selection).await?;
+            }
             tx.commit().await.map_err(db)?;
             Ok(summary)
         })
@@ -1080,6 +1157,38 @@ impl crate::application::task_authority::TaskLedger for JournalWriteTasks {
         preview: Preview,
     ) -> crate::application::ports::PortFuture<'a, Result<Operation, CoreError>> {
         Box::pin(self.admit(id, context, preview))
+    }
+    fn inverse_original<'a>(
+        &'a self,
+        id: &'a str,
+        context: &'a TaskContext,
+        original_id: &'a str,
+        operation_id: &'a str,
+    ) -> crate::application::ports::PortFuture<'a, Result<Operation, CoreError>> {
+        Box::pin(async move {
+            let mut tx = self.transaction().await?;
+            let row = task(&mut tx, id).await?;
+            self.active(&row, context)?;
+            let scope = self.checked_scope(&row)?;
+            if scope.undo_of.is_none() {
+                return Err(denied("write_task_undo_scope"));
+            }
+            check_undo_scope(&mut tx, &scope, Some(original_id)).await?;
+            let original = load_operation(&mut tx, original_id).await?;
+            Inverse::from_applied(&original, operation_id, &self.owner)?;
+            check_original_ready(&mut tx, original_id, operation_id).await?;
+            tx.commit().await.map_err(db)?;
+            Ok(original)
+        })
+    }
+    fn admit_inverse<'a>(
+        &'a self,
+        id: &'a str,
+        context: &'a TaskContext,
+        original_id: &'a str,
+        preview: Preview,
+    ) -> crate::application::ports::PortFuture<'a, Result<Operation, CoreError>> {
+        Box::pin(self.admit_inverse(id, context, original_id, preview))
     }
     fn discard<'a>(
         &'a self,

@@ -25,6 +25,7 @@ fn scope() -> TaskScope {
         objective: "Correct the registered sample cells and note".into(),
         mapping_version: "mapping-1".into(),
         max_operations: 10,
+        undo_of: None,
         targets: vec![
             WriteTarget::Grid {
                 spreadsheet: "sheet".into(),
@@ -1655,4 +1656,76 @@ async fn supported_legacy_original_keeps_its_identity_and_requires_fresh_task_au
             .unwrap()["attempts"][0]["state"],
         "applying"
     );
+}
+
+#[test]
+fn omitted_undo_selection_preserves_scope_serialization_and_invalid_selectors_fail_closed() {
+    let legacy = serde_json::to_value(scope()).unwrap();
+    assert!(legacy.get("undo_of").is_none());
+    assert_eq!(
+        serde_json::to_value(serde_json::from_value::<TaskScope>(legacy.clone()).unwrap()).unwrap(),
+        legacy
+    );
+    for selection in [
+        json!({"kind":"task","task_id":"bad"}),
+        json!({"kind":"operation","operation_id":"../bad"}),
+    ] {
+        let mut selected = legacy.clone();
+        selected["undo_of"] = selection;
+        error(
+            serde_json::from_value::<TaskScope>(selected)
+                .unwrap()
+                .validate(),
+            "write_task_scope",
+        );
+    }
+    let mut extra = legacy;
+    extra["undo_of"] = json!({"kind":"operation","operation_id":"original","approved":true});
+    assert!(serde_json::from_value::<TaskScope>(extra).is_err());
+}
+
+#[tokio::test]
+async fn unresolved_later_original_on_another_source_blocks_earlier_undo() {
+    let directory = tempfile::tempdir().unwrap();
+    let journal = Journal::open(directory.path()).await.unwrap();
+    let ledger = JournalWriteTasks::open(journal.clone(), "owner", "deployment-1")
+        .await
+        .unwrap();
+    let forward = authorized(&ledger).await;
+    ledger
+        .admit(id(&forward), &context(), capture("first", false))
+        .await
+        .unwrap();
+    ledger
+        .claim(id(&forward), &context(), "first")
+        .await
+        .unwrap();
+    journal.finish("first", Outcome::Applied).await.unwrap();
+    let first = journal.get("first").await.unwrap();
+    ledger
+        .admit(id(&forward), &context(), capture("later", true))
+        .await
+        .unwrap();
+    ledger
+        .claim(id(&forward), &context(), "later")
+        .await
+        .unwrap();
+    journal.finish("later", Outcome::Uncertain).await.unwrap();
+    ledger
+        .end(id(&forward), &context(), TaskEnd::Cancelled)
+        .await
+        .unwrap();
+    let undo = authorized(&ledger).await;
+    error(
+        ledger
+            .admit_inverse(
+                id(&undo),
+                &context(),
+                "first",
+                inverse_capture(&first, "inverse-first"),
+            )
+            .await,
+        "undo_reverse_order",
+    );
+    assert!(journal.find("inverse-first").await.unwrap().is_none());
 }

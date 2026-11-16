@@ -5924,6 +5924,46 @@
                 }
               ]
             }
+          },
+          "undo_of": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "task_id"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "task"
+                  },
+                  "task_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "operation_id"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "operation"
+                  },
+                  "operation_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
           }
         },
         "additionalProperties": false
@@ -6231,6 +6271,32 @@
                           }
                         },
                         "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "operation_id",
+                      "original_id"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "inverse"
+                      },
+                      "operation_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[A-Za-z0-9_-]+$"
+                      },
+                      "original_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[A-Za-z0-9_-]+$"
                       }
                     },
                     "additionalProperties": false

@@ -1048,3 +1048,6 @@ async fn scoped_journal_cannot_be_composed_under_another_configured_owner() {
     assert_eq!(f.source.reads.load(Ordering::SeqCst), 0);
     assert_eq!(f.source.sends.load(Ordering::SeqCst), 0);
 }
+
+#[path = "support/task_undo.rs"]
+mod task_undo;

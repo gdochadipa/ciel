@@ -11,6 +11,7 @@ use crate::domain::{
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
+mod inverse;
 
 /// Scoped persistence, sharing the exact operation store used for execution.
 ///
@@ -69,6 +70,24 @@ pub trait TaskLedger: Send + Sync {
         context: &'a TaskContext,
         preview: Preview,
     ) -> PortFuture<'a, Result<Operation, CoreError>>;
+    /// Load an original within the exact current undo selection before source IO.
+    /// Errors reject stale authority, a different original or unavailable evidence.
+    fn inverse_original<'a>(
+        &'a self,
+        id: &'a str,
+        context: &'a TaskContext,
+        original_id: &'a str,
+        operation_id: &'a str,
+    ) -> PortFuture<'a, Result<Operation, CoreError>>;
+    /// Atomically retain fresh inverse intent and its authoritative original link.
+    /// Errors reject changed evidence, ordering, duplicate attempts or stale grants.
+    fn admit_inverse<'a>(
+        &'a self,
+        id: &'a str,
+        context: &'a TaskContext,
+        original_id: &'a str,
+        preview: Preview,
+    ) -> PortFuture<'a, Result<Operation, CoreError>>;
     /// Reject unsent intent without closing or replenishing the task grant.
     /// Errors reject wrong membership, revision or a member already dispatched.
     fn discard<'a>(
@@ -120,6 +139,11 @@ pub trait DispatchConfirmation: Send + Sync {
 }
 
 pub use crate::domain::write_task::TaskCapture;
+
+enum ForwardCapture {
+    Grid(crate::domain::write_model::Change),
+    Document(crate::domain::documents::DocChange),
+}
 
 /// Typed native control requests; never decoded from a model-facing tool route.
 #[derive(Deserialize)]
@@ -187,25 +211,44 @@ pub(super) async fn control(bus: &CommandBus, command: TaskControl) -> Result<Va
             let scope = ledger.scope(&task_id, &context).await?;
             scope.registered(&bus.registry)?;
             scope.permits_capture(&change)?;
+            let change = match change {
+                TaskCapture::Grid(c) => ForwardCapture::Grid(c),
+                TaskCapture::Document(c) => ForwardCapture::Document(c),
+                TaskCapture::Inverse {
+                    operation_id,
+                    original_id,
+                } => {
+                    return inverse::capture(
+                        bus,
+                        ledger.as_ref(),
+                        &scope,
+                        &task_id,
+                        &context,
+                        &operation_id,
+                        &original_id,
+                    )
+                    .await;
+                }
+            };
             let operation_id = match &change {
-                TaskCapture::Grid(c) => &c.operation_id,
-                TaskCapture::Document(c) => &c.operation_id,
+                ForwardCapture::Grid(c) => &c.operation_id,
+                ForwardCapture::Document(c) => &c.operation_id,
             };
             if !crate::domain::write_model::valid_id(operation_id) {
                 return Err(CoreError::invalid());
             }
             let previous = match &change {
-                TaskCapture::Grid(c) => writes.journal.find(&c.operation_id).await?,
-                TaskCapture::Document(c) => writes.journal.find(&c.operation_id).await?,
+                ForwardCapture::Grid(c) => writes.journal.find(&c.operation_id).await?,
+                ForwardCapture::Document(c) => writes.journal.find(&c.operation_id).await?,
             };
             if let Some(previous) = previous {
                 let matches = match &change {
-                    TaskCapture::Grid(c) => crate::domain::write_model::matches_request(
+                    ForwardCapture::Grid(c) => crate::domain::write_model::matches_request(
                         &previous.preview,
                         c,
                         &bus.owner,
                     ),
-                    TaskCapture::Document(c) => {
+                    ForwardCapture::Document(c) => {
                         crate::domain::documents::matches(&previous.preview, c, &bus.owner)
                     }
                 };
@@ -216,8 +259,8 @@ pub(super) async fn control(bus: &CommandBus, command: TaskControl) -> Result<Va
                 return Ok(op.preview.public(op.state.as_str()));
             }
             let preview = match change {
-                TaskCapture::Grid(c) => writes.capture_grid(bus, c).await?,
-                TaskCapture::Document(c) => writes.capture_document(bus, c).await?,
+                ForwardCapture::Grid(c) => writes.capture_grid(bus, c).await?,
+                ForwardCapture::Document(c) => writes.capture_document(bus, c).await?,
             };
             let op = ledger.admit(&task_id, &context, preview).await?;
             Ok(op.preview.public(op.state.as_str()))

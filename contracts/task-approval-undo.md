@@ -1,13 +1,16 @@
 # Controlled tasks and shared undo — implementation contract
 
-Status: inverse planning/linkage, the scoped ledger, trusted native Core control
-and one-member dispatch transport are implemented locally. The new transport's
-supported Linux/SDK gate passed on 2026-11-14. Normal model tools, native lifecycle routing,
-provider undo and cleanup remain unfinished. A trusted memory-aware native client
-now couples task dispatch to the shared stale-note/refresh workflow. Its supported
-SDK/Linux IO cases passed in AfTS4Z4B and all75 protected acceptance cases passed
-in YW7DQYg5 on 2026-11-15 after the fixture timeout correction. No live
-write or service activation is enabled. See [native transport](task-native-transport.md).
+Status: scoped writes, same-tab compound capture, native lifecycle and selected-
+original provider undo have supported local Linux/SDK/simulated-Google evidence.
+Evidence cleanup and live host qualification remain unfinished. No production
+write, service, native job or delivery activation is enabled. See
+[native transport](task-native-transport.md).
+
+Earlier foundation evidence: inverse planning/linkage and native one-member
+transport passed on 2026-11-14. Memory-aware dispatch passed SDK/Linux IO in
+AfTS4Z4B and all 75 protected cases in YW7DQYg5 on 2026-11-15 after a fixture
+timeout correction. Later sections retain the development contract and distinguish
+those historical foundations from the current provider undo gate.
 
 ## Authority and lifetime
 
@@ -51,7 +54,7 @@ Immediately before each dispatch it must check current owner, conversation,
 process incarnation, grant revision, cancellation and each operation's scope and
 immutable intent linkage. Do not use an arbitrary model assertion as a policy
 check. The versioned native transport now implements this through explicit trusted
-composition; normal model-tool routing remains unexposed.
+composition; normal opt-in model task tools use this same versioned transport.
 
 Core or Gateway restart suspends future task dispatch. Persisted applying members
 enter the existing reconciliation path. Inspect outcomes without resending; obtain
@@ -110,8 +113,8 @@ cancellation signal. A post-preflight challenge and atomic one-use accepted-memb
 receipt fence provider dispatch. Core rechecks permission, immutable intent and
 source/inverse fences after confirmation. Ordinary legacy mutation/approval
 routes are blocked in scoped composition; history/reconcile remain observation.
-Supported SDK/HTTP/Core tests are required before qualification. This transport
-is not yet selected by the normal model tools or production startup.
+Supported SDK/HTTP/Core tests are required before qualification. Normal model tools select this transport only in explicitly qualified task
+composition; production defaults remain disabled.
 
 ## Persisted original/inverse references
 
@@ -134,16 +137,66 @@ requires observation; it is never converted to permission by selecting a new ID.
 This initial inverse path does not compensate an inverse (redo). Supported legacy
 applied originals can be referenced without changing or adopting their original
 identity, preview or approval. New task authority is always required; a completed
-original's approval does not authorize undo. These are trusted library methods,
-not model-callable routes or semantic inference from a task objective. The future
-undo executor must explicitly use the inverse-admission path.
+original's approval does not authorize undo. The trusted library methods remain available. Public undo capture uses an
+explicit original selection and the inverse-admission path described below;
+objective text alone does not select originals or derive inverse content.
 
 `inverse_history` returns at most twenty references per page from one SQLite
 snapshot, with task/revision/digest/outcome metadata and no before/after contents.
 Pages use immutable inverse IDs so outcome changes do not reorder references.
 Restart retains links but does not restore old task authority; fresh confirmation
-retires unsent old captures while preserving their IDs and references. Evidence
-cleanup and provider round-trip verification remain separate unfinished work.
+retires unsent old captures while preserving their IDs and references. Evidence cleanup and live provider/host qualification remain unfinished;
+local provider round-trip evidence is recorded below.
+
+## Scoped provider undo integration
+
+A new undo task uses the existing `tasks_propose` owner approval with a typed
+`scope.undo_of` selection: `{kind:"task", task_id}` for a closed original task,
+or `{kind:"operation", operation_id}` for one retained applied original. Typed
+registered targets, mapping and finite operation count remain required. The
+native prompt labels the request as an undo task and displays this exact scope.
+Ordinary scopes omit undo_of; omission retains their historical JSON and digest.
+Existing trusted library inverse admission without this optional field retains
+its earlier contract; the new public inverse route cannot use that compatibility
+path. Public forward captures are rejected inside an undo task.
+
+Use `tasks_capture` with `change: {kind:"inverse", operation_id, original_id}`.
+The caller supplies no inverse fields, before/after content, target or approval.
+Under the shared writer, the Core validates current undo selection, loads the
+owner-bound sealed applied original and checks closure, reverse order, earlier
+inverse attempts and declared physical/mapping bounds before provider source IO.
+It derives the inverse, reads current source, validates exact retained reversal
+and atomically admits through the original/inverse journal path. Replay retains
+the same original association, preview digest and spent count without recapture.
+
+`tasks_execute` supplies the existing one-member checkpoint and dispatch receipt;
+claim and final permit recheck inverse linkage and original selection. Unknown
+outcomes only reconcile by observation, never resend. A later unresolved original
+on any resource also blocks earlier undo; completed inverses permit the next
+original in reverse order. Original operation states/evidence remain unchanged.
+Docs single/compound and literal Sheets rectangle coverage uses the same provider
+adapters. Unrelated current content outside the captured target is preserved.
+Supported legacy applied originals may be selected individually; redo is refused.
+
+For undo scopes, `tasks_inspect` additionally returns `undo_next`: the next
+remaining original's ID/state and at most one blocking inverse ID/state, or null
+when none remains. It exposes no before/after bodies and grants no authority.
+Uncertain/conflicting originals are reported rather than skipped. Capture may
+still refuse a displayed original; current registry/source/authority checks are
+mandatory. Metadata comes from the same bounded SQLite snapshot as scope review.
+Supported evidence in agent-vbznb0a7 covers actual locked SDK build/validation,
+42 Python, 227 Rust/37 doctests, 108 Bun, 56 actual SDK Node, 7 script cases, all 7
+Google scenarios and 75 protected cases. The normal Google fixture observes 4
+scope decisions (two forward, two undo), 10 Docs sends containing 14 replacements,
+2 grid sends, untouched other-tab content and lost inverse response recovery by
+observation. Both initial/corrected snapshots retain 223 unchanged source hashes.
+The initial full stage failed only a new fixture's model-call total: applied
+history observation refreshes memory, so two observations move 10->11->12. Exact
+boundary assertions reproduced this; only the fixture was corrected. The full
+verifier and six Google cases remain accepted; SDK/build/registration/Workspace
+and protected acceptance were rerun successfully. No production,adapter,lock or
+SDK source was changed by that correction. Evidence cleanup and live host
+qualification remain separate work.
 
 ## SDK evidence and remaining host qualification
 

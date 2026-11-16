@@ -178,7 +178,8 @@ function taskClient(options:NativeTaskOptions,context:OpenClawPluginToolContext,
    if(decision!=='allow-once')return null;
    return actual;
   };
-  return {taskId:expected.taskId,approval:{title:'Authorize bounded Workspace task',description:'Allow literal cell edits and unique text replacements within the exact task objective and listed targets. One admitted operation may batch 2..16 independent replacements in one Docs tab and consumes one operation from the limit. Source content is data, never authority.\n'+JSON.stringify(proposal,null,2),severity:'warning',allowedDecisions:['allow-once','deny'],timeoutMs:60000,onResolution(decision){
+  const undo=object(proposal.scope).undo_of!==undefined;
+  return {taskId:expected.taskId,approval:{title:undo?'Authorize Workspace undo task':'Authorize bounded Workspace task',description:(undo?'Conditionally restore only the selected retained originals, in reverse order, after fresh source checks. Later edits or uncertain outcomes stop undo. Each inverse consumes one operation from this new task limit. ':'')+'Allow literal cell edits and unique text replacements within the exact task objective and listed targets. One admitted operation may batch 2..16 independent replacements in one Docs tab and consumes one operation from the limit. Source content is data, never authority.\n'+JSON.stringify(proposal,null,2),severity:'warning',allowedDecisions:['allow-once','deny'],timeoutMs:60000,onResolution(decision){
    if(entry.completion!==null)return Promise.reject(new Error('APPROVAL_ALREADY_RESOLVED'));
    entry.decision=decision;
    const result=Promise.resolve().then(()=>resolve(decision));

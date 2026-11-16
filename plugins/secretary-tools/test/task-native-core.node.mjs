@@ -8,7 +8,7 @@ import {join,dirname} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {startTaskCoreFixture,taskSdkRoot} from './helpers/task-core-fixture.mjs';
 
-for(const profile of ['trusted-client','model-tools'])test(profile+': one actual native task decision drives incremental Core members and stops on uncertainty',{timeout:240000},async()=>{
+for(const profile of ['trusted-client','model-tools','model-tools-undo'])test(profile+': actual native scope decisions drive bounded Core members and stop on uncertainty',{timeout:240000},async()=>{
  const state=await mkdtemp(join(tmpdir(),'ciel-sdk-task-core-'));const saved=new Map(['OPENCLAW_STATE_DIR','OPENCLAW_CONFIG_PATH','SECRETARY_CORE_TOKEN','SECRETARY_APPROVAL_TOKEN'].map(key=>[key,process.env[key]]));
  process.env.OPENCLAW_STATE_DIR=state;process.env.OPENCLAW_CONFIG_PATH=join(state,'config.json');await writeFile(process.env.OPENCLAW_CONFIG_PATH,JSON.stringify({plugins:{enabled:false},logging:{level:'silent'}}));
  process.env.SECRETARY_CORE_TOKEN='synthetic-core-token';process.env.SECRETARY_APPROVAL_TOKEN='synthetic-native-token';
@@ -48,11 +48,26 @@ for(const profile of ['trusted-client','model-tools'])test(profile+': one actual
     const granted=await run('tasks_propose',{scope});assert.equal(granted.ok,true);grant={taskId:granted.data.task_id,revision:granted.data.grant_revision};
     client={capture:async(task_id,change)=>{const result=await run('tasks_capture',{task_id,change});assert.equal(result.ok,true);return result.data;},discard:async(task_id,operation_id)=>{const result=await run('tasks_discard',{task_id,operation_id});assert.equal(result.ok,true);return result.data;},execute:async(task_id,grant_revision,operation_id)=>run('tasks_execute',{task_id,grant_revision,operation_id})};
     client.inspect=async()=>run('tasks_inspect',{task_id:grant.taskId});
-    client.end=async(grant_revision)=>run('tasks_end',{task_id:grant.taskId,grant_revision,reason:'cancelled'});
+    client.end=async(grant_revision,reason='cancelled')=>run('tasks_end',{task_id:grant.taskId,grant_revision,reason});
+    client.startUndo=async()=>{const originalTask=grant.taskId;await client.end(grant.revision,'completed');const result=await run('tasks_propose',{scope:{...scope,objective:'Undo the selected original task',undo_of:{kind:'task',task_id:originalTask}}});assert.equal(result.ok,true);grant={taskId:result.data.task_id,revision:result.data.grant_revision};};
    }
    await client.capture(grant.taskId,{kind:'document',operation_id:'sdk-discarded',document:'notes',tab_id:'t.0',action:'replace_text',fields:{find:'old',replacement:'discarded'}});
    assert.equal((await client.discard(grant.taskId,'sdk-discarded')).state,'rejected');
    for(const [index,find,replacement] of [[1,'old','new'],[2,'new','second'],[3,'second','final']]){
+    if(index===3&&profile==='model-tools-undo'){
+     await client.startUndo();
+     for(const originalIndex of [2,1]){
+      const operation_id='sdk-undo-'+originalIndex,change={kind:'inverse',operation_id,original_id:'sdk-task-'+originalIndex};
+      assert.equal((await client.inspect()).data.undo_next.original_id,change.original_id);
+      const preview=await client.capture(grant.taskId,change);assert.equal(preview.state,'previewed');
+      assert.equal((await client.capture(grant.taskId,change)).preview_digest,preview.preview_digest);
+      if(originalIndex===1)await core.fixture('uncertain');
+      const result=await client.execute(grant.taskId,grant.revision,operation_id);assert.equal(result.data.state,originalIndex===1?'uncertain':'applied');
+      assert.equal((await client.execute(grant.taskId,grant.revision,operation_id)).ok,false);
+      assert.equal((await core.fixture('counts')).sends,originalIndex===2?3:4);
+     }
+     break;
+    }
     const operation_id='sdk-task-'+index;if(index===3)await core.fixture('uncertain');
     const change={kind:'document',operation_id,document:'notes',tab_id:'t.0',action:index===1?'replace_text':'replace_text_batch',fields:index===1?{find,replacement}:{replacements:[{find,replacement},{find:index===2?'note':'record',replacement:index===2?'record':'memo'}]}};
     const preview=await client.capture(grant.taskId,change);assert.equal(preview.state,'previewed');
@@ -61,13 +76,13 @@ for(const profile of ['trusted-client','model-tools'])test(profile+': one actual
     const result=await client.execute(grant.taskId,grant.revision,operation_id);assert.equal(result.data.state,index===3?'uncertain':'applied');
     const replay=await client.execute(grant.taskId,grant.revision,operation_id);assert.equal(replay.ok,false);assert.equal((await core.fixture('counts')).sends,index);
    }
-   if(profile==='model-tools'){
+   if(profile!=='trusted-client'){
     const observed=await client.inspect();assert.equal(observed.ok,true);assert.equal(observed.data.phase,'suspended');
     assert.equal((await client.end(observed.data.grant_revision)).data.phase,'closed');
    }
-   assert.equal(prompts,1);
+   assert.equal(prompts,profile==='model-tools-undo'?2:1);
   });
-  await assert.rejects(client.capture('retained',{}),/scope is no longer active/);assert.equal((await core.fixture('counts')).sends,3);
+  await assert.rejects(client.capture('retained',{}),/scope is no longer active/);assert.equal((await core.fixture('counts')).sends,profile==='model-tools-undo'?4:3);
  }finally{
   if(broker){broker.stop();approval.J(broker);embedded.n(false);}if(registry)lifecycle.T(registry);if(core)await core.close();
   for(const [key,value] of saved){if(value===undefined)delete process.env[key];else process.env[key]=value;}await rm(state,{recursive:true,force:true});
