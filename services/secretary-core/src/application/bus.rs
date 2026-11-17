@@ -120,6 +120,22 @@ impl CommandBus {
 
     async fn dispatch(&self, command: Command) -> Result<Value, CoreError> {
         match command {
+            Command::Cleanup(command) => {
+                if self.is_read_only() {
+                    return Err(CoreError(ErrorKind::Forbidden, "readonly_profile"));
+                }
+                let writes = self
+                    .writes
+                    .as_ref()
+                    .ok_or(CoreError(ErrorKind::Unavailable, "cleanup_unavailable"))?;
+                let ledger = writes
+                    .tasks
+                    .as_ref()
+                    .filter(|ledger| ledger.owner() == self.owner.as_ref())
+                    .ok_or(CoreError(ErrorKind::Unavailable, "cleanup_unavailable"))?;
+                let _writer = writes.writer.lock().await;
+                return ledger.cleanup(&command).await;
+            }
             Command::TaskControl(command) => {
                 return super::task_authority::control(self, command).await
             }
@@ -158,7 +174,7 @@ impl CommandBus {
             return Err(CoreError(ErrorKind::Forbidden, "readonly_profile"));
         }
         match command {
-            Command::TaskControl(_) | Command::TaskExecute { .. } => {
+            Command::Cleanup(_) | Command::TaskControl(_) | Command::TaskExecute { .. } => {
                 unreachable!("task commands routed above")
             }
 

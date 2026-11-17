@@ -90,6 +90,13 @@ permanent IDs, outcomes, task/undo links and audit. An older binary cannot read 
 upgraded schema; rollback requires the matched pre-upgrade backup. Retained history
 keeps its existing shape. A future approved cleanup receipt can mark source evidence
 unavailable while history preserves identity/outcome; replay and undo then fail
-closed. Missing payload without a valid receipt is a journal error. No runtime
-cleanup/removal API is currently exposed, and startup does not remove evidence.
+closed. Missing payload without a valid receipt is a journal error. Startup does
+not remove evidence. The operator-only `/v1/evidence-cleanup` endpoint previews
+exact completed-task/legacy selections and requires one digest-bound owner decision.
+It checks task/recovery/undo references under the shared writer, preserves native
+memory observation metadata, and commits payload removal plus audit atomically.
+Use inspect after a lost response. It performs no provider IO, VACUUM, explicit WAL
+truncation or backups/native-memory deletion. It is absent from model tools and
+cannot elevate read-only policy. See the contract for bounded selection and restart
+semantics; no actual operator purge or live qualification follows from tests.
 See [task/undo contract](../../contracts/task-approval-undo.md).

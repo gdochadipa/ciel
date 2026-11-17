@@ -4746,6 +4746,210 @@
           }
         }
       }
+    },
+    "/v1/evidence-cleanup": {
+      "post": {
+        "operationId": "operator_evidence_cleanup",
+        "description": "Operator-only digest-bound operational evidence cleanup through the shared writer. No model tool or provider write. Preview selects at most20 whole closed/resolved task or standalone legacy IDs and at most200 resolved retained members before a Unix cutoff; no truncation. Require no unfinished task/recovery and the complete compensation reference graph. One explicit owner decision atomically removes payloads and records audit/receipt, preserving permanent identities, digests, outcomes, task/inverse/native-memory observation references. Pending previews bind this Core process; restart needs a fresh preview. Inspect or approved replay observes a committed result without deleting twice. Reusable pages/payload bytes do not promise physical DB/WAL/backups or personal-memory deletion. Read-only profile cannot be elevated.",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "const": "preview"
+                      },
+                      "selection": {
+                        "type": "object",
+                        "properties": {
+                          "task_ids": {
+                            "type": "array",
+                            "maxItems": 20,
+                            "uniqueItems": true,
+                            "items": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+                            }
+                          },
+                          "operation_ids": {
+                            "type": "array",
+                            "maxItems": 20,
+                            "uniqueItems": true,
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            }
+                          },
+                          "completed_before": {
+                            "type": "integer",
+                            "minimum": 1
+                          }
+                        },
+                        "required": [
+                          "task_ids",
+                          "operation_ids",
+                          "completed_before"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "selection"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "const": "inspect"
+                      },
+                      "cleanup_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "cleanup_id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "const": "decide"
+                      },
+                      "cleanup_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+                      },
+                      "preview_digest": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "decision": {
+                        "enum": [
+                          "approve",
+                          "reject"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "cleanup_id",
+                      "preview_digest",
+                      "decision"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Exact cleanup preview/inspection or committed owner-decision receipt. Inspect data.decision; this envelope grants no provider mutation authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "data": {
+                      "type": "object"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Distinct operator credential required before decoding.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Read-only policy cannot be elevated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unsafe references, stale preview/digest, missing evidence or conflicting decision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Task-ledger cleanup unavailable or journal cannot safely retain/commit evidence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid strict command or selection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Selected task/operation or cleanup receipt not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4757,7 +4961,7 @@
       "OperatorBearer": {
         "type": "http",
         "scheme": "bearer",
-        "description": "Distinct operator credential for authorized legacy decisions, observation-only reconciliation and read-only task lifecycle; task increases grant no mutation authority. Never supplied as model input. Explicit scoped native task composition also uses this trusted adapter credential; it cannot elevate read-only policy."
+        "description": "Distinct operator credential for authorized legacy decisions, observation-only reconciliation and read-only task lifecycle; task increases grant no mutation authority. Never supplied as model input. Explicit scoped native task composition also uses this trusted adapter credential; it cannot elevate read-only policy. Also authenticates explicit evidence-cleanup previews and exact owner decisions; it is never supplied to model tool input."
       }
     },
     "schemas": {

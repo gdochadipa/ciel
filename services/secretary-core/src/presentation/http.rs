@@ -180,6 +180,10 @@ fn decode_tool(name: &str, input: Value) -> Result<Command, CoreError> {
 }
 pub fn router(state: AppState) -> Router {
     Router::new()
+        .route(
+            "/v1/evidence-cleanup",
+            post(super::evidence_cleanup::handle),
+        )
         .route("/v1/write-tasks/native", post(super::task_native::control))
         .route("/v1/write-tasks/execute", post(super::task_native::execute))
         .route("/v1/write-tasks/confirm", post(super::task_native::confirm))

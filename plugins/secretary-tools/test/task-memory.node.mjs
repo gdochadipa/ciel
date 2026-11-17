@@ -184,3 +184,21 @@ test('memory composition requires explicit opt-in, paired owner, private authori
   f.api.pluginConfig.readOnlyRuntime=true;assert.throws(()=>f.client(),/INVALID_CONFIGURATION/);assert.equal(f.paths.length,0);assert.deepEqual(await readdir(f.workspace),[]);
  }finally{await f.close();}
 });
+
+test('an applied cleanup tombstone resolves a stale native note through permanent history, without another write',async()=>{
+ const f=await fixture();try{
+  f.state.modelError=true;
+  const result=await f.client().execute(id,1,'cleaned-op');
+  assert.equal(result.data.state,'applied');assert.equal(result.summary_memory.status,'refresh_failed');
+  const stale=await readFile(f.note,'utf8');assert(stale.includes('"pending_operation_id": "cleaned-op"'));
+  // Exact identity/outcome projection retained by the real Core cleanup route;
+  // this SDK IO fixture does not remove a real operator journal or personal note.
+  const op=f.operation('cleaned-op');op.evidence={status:'unavailable',cleanup_id:'33333333-3333-4333-8333-333333333333',removed_at:1};
+  for(const key of ['before','after','fields','source_revision','expires_at'])delete op[key];
+  f.state.modelError=false;
+  const refreshed=await f.run('docs_read',discovery);
+  assert.equal(refreshed.details.data.cache,'refreshed');assert.equal(f.state.sends,1);
+  assert.equal(f.paths.filter(path=>path.endsWith('/execute')).length,1);
+  assert(!(await readFile(f.note,'utf8')).includes('pending_operation_id'));
+ }finally{await f.close();}
+});

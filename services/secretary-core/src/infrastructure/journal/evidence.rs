@@ -1,7 +1,7 @@
 //! Separate removable source payloads from permanent operation identity.
 //!
-//! This module introduces storage/read semantics only. No runtime cleanup command
-//! exists yet: an owner-bound selection and reference check must precede removal.
+//! Owner-bound cleanup removes payloads only after exact selection/reference
+//! checks; permanent identities and observation-only native memory references survive.
 use super::storage;
 use crate::domain::{
     error::{CoreError, ErrorKind},
@@ -184,13 +184,7 @@ fn removal(row: &SqliteRow, state: OperationState) -> Result<Option<Removal>, Co
             if receipt.version != 1
                 || !crate::domain::write_model::valid_id(&receipt.cleanup_id)
                 || receipt.removed_at <= 0
-                || !matches!(
-                    state,
-                    OperationState::Applied
-                        | OperationState::KnownFailure
-                        | OperationState::Rejected
-                        | OperationState::Expired
-                )
+                || !crate::domain::cleanup::eligible(state)
             {
                 return Err(storage());
             }
@@ -224,27 +218,33 @@ pub(super) fn retained(row: &SqliteRow) -> Result<Operation, CoreError> {
     Ok(Operation { preview, state })
 }
 
-pub(super) fn public(row: &SqliteRow) -> Result<Value, CoreError> {
+pub(super) fn cleanup_identity(row: &SqliteRow) -> Result<Value, CoreError> {
     let (identity, state) = metadata(row)?;
+    let mut out = serde_json::to_value(identity).map_err(|_| storage())?;
+    out["state"] = json!(state.as_str());
+    out["request_digest"] = json!(row.get::<&str, _>("request_digest"));
+    if out["resource_kind"] == "google_docs" {
+        let object = out.as_object_mut().ok_or_else(storage)?;
+        let document = object.remove("spreadsheet").ok_or_else(storage)?;
+        let tab = object.remove("view").ok_or_else(storage)?;
+        object.insert("document".into(), document);
+        object.insert("tab_id".into(), tab);
+    }
+    Ok(out)
+}
+
+pub(super) fn public(row: &SqliteRow) -> Result<Value, CoreError> {
+    let (_, state) = metadata(row)?;
     if let Some(receipt) = removal(row, state)? {
-        let mut out = serde_json::to_value(identity).map_err(|_| storage())?;
-        out["state"] = json!(state.as_str());
-        out["request_digest"] = json!(row.get::<&str, _>("request_digest"));
+        let mut out = cleanup_identity(row)?;
         out["evidence"] = json!({"status":"unavailable","cleanup_id":receipt.cleanup_id,"removed_at":receipt.removed_at});
-        if out["resource_kind"] == "google_docs" {
-            let object = out.as_object_mut().ok_or_else(storage)?;
-            let document = object.remove("spreadsheet").ok_or_else(storage)?;
-            let tab = object.remove("view").ok_or_else(storage)?;
-            object.insert("document".into(), document);
-            object.insert("tab_id".into(), tab);
-        }
         return Ok(out);
     }
     let operation = retained(row)?;
     Ok(operation.preview.public(operation.state.as_str()))
 }
 
-// No removal writer is exported here. Tests use private synthetic journals to
-// exercise the future cleanup representation, never an operator's evidence.
+// These tests exercise representation corruption independently of the guarded
+// cleanup writer. All mutations use disposable synthetic journals.
 #[cfg(test)]
 mod tests;

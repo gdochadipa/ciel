@@ -2,8 +2,9 @@
 
 Status: scoped writes, same-tab compound capture, native lifecycle and selected-
 original provider undo have supported local Linux/SDK/simulated-Google evidence.
-Evidence-unavailable storage/read semantics are implemented; owner-approved
-cleanup execution and live host qualification remain unfinished. No production
+Evidence-unavailable storage/read semantics are implemented; owner-operated
+cleanup execution has supported local Linux/SDK/simulated-Google evidence below.
+Live host qualification remains unfinished. No production
 write, service, native job or delivery activation is enabled. See
 [native transport](task-native-transport.md).
 
@@ -351,9 +352,10 @@ Task history reports `unavailable_evidence` counts; inverse-reference history ke
 original/attempt outcomes, digests and evidence status. `undo_next.evidence` reports
 `retained` or `unavailable`; an unavailable member is not silently skipped.
 
-No runtime removal or receipt-writing API is exposed yet. Synthetic unavailable
-records exist only in disposable tests. This foundation does not authorize purge,
-release bytes, shrink the database/WAL or delete backups/native memory.
+At the foundation gate below no runtime removal API existed; unavailable records
+were synthetic tests. The subsequent owner-operated cleanup protocol is specified
+in the final section. Development authorization never authorizes operator purge,
+physical database/WAL shrink or backups/native-memory deletion.
 
 The foundation gate on 2026-11-16 passes the actual locked SDK build/validation,
 42 Python, 236 Rust/37 doctests, 108 Bun, 56 SDK Node, 7 script contract cases,
@@ -365,9 +367,10 @@ spend IDs and refuse native inverse capture/reconciliation with no source IO.
 The Google scenarios regress retained-evidence paths: their existing Workspace
 fixture still observes 4 scope decisions, 10 Docs sends/14 replacements and 2 grid
 sends, including lost-response observation without resend. They do not exercise
-an actual cleanup command or qualify a live host. No runtime removal API exists.
+an actual cleanup command or qualify a live host. That historical foundation did
+not expose a runtime removal API.
 
-Cleanup preview must select completed tasks/age ranges and disclose affected undo
+Cleanup preview must select closed tasks with resolved outcomes/age ranges and disclose affected undo
 coverage and estimated reusable bytes. Under the shared writer boundary, check
 live task/grant/dialog/inverse/recovery/native-memory references, then atomically
 commit approved removal and audit only if the selection and references still
@@ -396,3 +399,97 @@ of operational evidence does not clean OpenClaw personal memory or backups.
 6. Formatting, warnings-denied Clippy, full verifier, relevant Google simulations
    and protected admission regressions with actual locks/SDK. Keep all target/live
    approval, service and write activation evidence separately qualified.
+
+## Owner-operated evidence cleanup
+
+`POST /v1/evidence-cleanup` uses the distinct configured operator bearer,
+authenticates before decoding, and dispatches directly through the existing bus
+and shared writer. It is intentionally absent from the 33 model-facing tools.
+The ordinary Core bearer and caller approval booleans cannot authorize cleanup.
+An attached owner/deployment-bound task ledger is required. The application port
+can run with provider writes disabled; it cannot elevate the read-only profile.
+Normal binary task-profile startup retains its existing opt-in qualification gates.
+
+The operator first posts:
+
+```json
+{"action":"preview","selection":{"task_ids":["11111111-1111-4111-8111-111111111111"],"operation_ids":[],"completed_before":1794873600}}
+```
+
+Use actual selected IDs and an elapsed Unix cutoff, not the illustrative values.
+At most20 selectors and200 retained operations are accepted; an oversized selection
+is refused rather than truncated. Task selections include all members of a closed, resolved task, including a
+cancelled/retired task whose individual outcomes are resolved. Its closure reason
+is disclosed; cancellation alone never establishes provider failure. Standalone operation selectors are for legacy records without
+membership. Applied, known-failure, rejected and expired evidence is eligible;
+conflicts and uncertain/interrupted work remain protected. The preview discloses
+objectives/targets/outcomes/digests, affected IDs, source-payload byte estimates,
+applied originals losing conditional undo evidence and inverse payload counts.
+It exposes no before/after source bodies. All preview contents bind its digest.
+
+Before preview and again inside the approval transaction, require a quiescent
+owner/deployment: no proposed/active/suspended task or unresolved operation. Both
+ends of every compensation edge must belong to the exact selection; select whole
+original/inverse tasks and any standalone legacy original together. This first
+maintenance profile deliberately refuses unrelated unfinished work too. Closing
+a task does not resolve an uncertain member. No provider read or send is used.
+
+Native memory's pending-operation reference is preserved, not removed or asserted
+absent. Cleanup validates the permanent history projection required by the shipped
+native observer: operation ID, document/tab, physical ID, mapping and terminal
+outcome remain identical. Payload-dependent undo/recovery is protected separately.
+This does not enumerate host indexes, delete notes, claim physical expiry or grant
+native-memory authority. Native repair still holds its normal lock/policy and reads
+current source; it never reconstructs removed journal evidence or resends a write.
+
+After owner review, post exactly one captured decision:
+
+```json
+{"action":"decide","cleanup_id":"SERVER_RETURNED_ID","preview_digest":"SERVER_RETURNED_DIGEST","decision":"approve"}
+```
+
+`reject` retains every payload. Approve recomputes the selection/references under
+the shared writer and SQLite writer lock. It atomically deletes only payload rows,
+sets versioned cleanup references on permanent records, records per-operation
+removal and owner-decision audit, and stores the committed result. Failure rolls
+back the entire transaction. IDs, digests, parent rows, outcomes and links survive.
+No additional human prompt is required per selected operation.
+
+Pending previews belong to the current Core process; after restart make and review
+a fresh preview. There is no task permission countdown. Use
+`{"action":"inspect","cleanup_id":"SERVER_RETURNED_ID"}` after an unknown response.
+Matching approved replay returns the persisted result, including after restart,
+without another removal; a conflicting decision/digest is refused. No blind retry
+with a new selection or cleanup ID may substitute for observing the original.
+
+Results report removed payload bytes, SQLite page size and reusable pages before/
+after the transaction. These are separate from physical database/WAL shrinkage and
+backup copies. This endpoint performs no VACUUM, explicit WAL truncation, backup
+removal or native personal-memory deletion. Preview/receipt/audit metadata remains
+operational history. Low storage prevents new intents from being safely persisted;
+cleanup storage failures do not authorize provider writes or partial deletion.
+
+
+Cleanup qualification, 2026-11-17: the frozen229-input agent-xg7_yq_o gate passes
+actual locked SDK lifecycle/build/validation,42 Python,248 Rust/37 doctests,
+108 Bun,57 SDK Node,7 script cases,all7 Google scenarios and75 protected cases.
+No source or fixture changes occur during these gates. Pre-gate review corrected
+an unknown-tool fixture status/duplicate JS name and aligned the copied operator
+response schema; all final code/schema/test bytes were frozen before the full run.
+New tests cover exact/full-preview digest binding, owner/model credential
+separation, read-only refusal, disabled-provider composition, complete inverse
+references, concurrent undo and duplicate decisions, pending restart rejection,
+committed receipt replay and injected per-operation/final-audit rollback. An actual
+SQLite max_page_count bound produces SQLITE_FULL code13; this is engine quota
+failure evidence, not host-volume exhaustion. A test-only child is killed before
+and after commit, then reopened: removal is atomic and lost-ACK observation works.
+
+The actual built SDK/Core/Google Workspace fixture explicitly approves one cleanup
+of two completed linked payloads. It checks receipt replay, unchanged native-note
+bytes during cleanup and successful native repair from permanent history without
+another Google write. Source counters remain10 Docs sends/14 replacement requests
+and2 grid sends; scope decisions4,cleanup owner decisions1,synthetic model calls13.
+Member logs contain131 Docs/63 Sheets request events, including fixture controls.
+Controlled-source Core tests separately assert no provider IO for cleanup itself.
+This establishes local/simulated behavior, not real owner UI,host/Google/model,
+physical erasure or operator-journal purge. Production qualification stays separate.

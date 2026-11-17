@@ -350,3 +350,151 @@ async fn unavailable_original_remains_visible_but_native_capture_and_reconcile_d
     assert_eq!(f.source.reads.load(Ordering::SeqCst), reads);
     assert_eq!(f.source.sends.load(Ordering::SeqCst), 1);
 }
+
+#[tokio::test]
+async fn operator_cleanup_requires_exact_decision_and_never_uses_model_authority_or_provider_io() {
+    let f = fixture(true).await;
+    let forward = grant(&f).await;
+    capture_compound(&f, &forward, "cleanup-original").await;
+    assert_eq!(
+        dispatch(&f, &forward, "cleanup-original").await["data"]["state"],
+        "applied"
+    );
+    close(&f, &forward).await;
+    let reads = f.source.reads.load(Ordering::SeqCst);
+    let selection = json!({"task_ids":[forward["task_id"]],"operation_ids":[],"completed_before":chrono::Utc::now().timestamp()});
+    let preview = json!({"action":"preview","selection":selection});
+    let (status, denied) =
+        value(post(&f.app, "/v1/evidence-cleanup", json!({"bad":"model"}), CORE).await).await;
+    assert_eq!(status, 401);
+    assert_eq!(denied["error"]["code"], "unauthorized");
+    let (status, plan) = value(post(&f.app, "/v1/evidence-cleanup", preview, NATIVE).await).await;
+    assert_eq!(status, 200, "{plan}");
+    assert_eq!(
+        plan["data"]["plan"]["members"][0]["identity"]["operation_id"],
+        "cleanup-original"
+    );
+    assert!(f.journal.get("cleanup-original").await.is_ok());
+    let decide = json!({"action":"decide","cleanup_id":plan["data"]["cleanup_id"],"preview_digest":plan["data"]["preview_digest"],"decision":"approve"});
+    let mut forged = decide.clone();
+    forged["owner_approved"] = json!(true);
+    assert_eq!(
+        value(post(&f.app, "/v1/evidence-cleanup", forged, NATIVE).await)
+            .await
+            .0,
+        400
+    );
+    let (status, denied) =
+        value(post(&f.app, "/v1/tools/evidence_cleanup", decide.clone(), CORE).await).await;
+    assert_eq!(status, 404);
+    assert_eq!(denied["error"]["code"], "unknown_tool");
+    let (status, applied) =
+        value(post(&f.app, "/v1/evidence-cleanup", decide.clone(), NATIVE).await).await;
+    assert_eq!(status, 200, "{applied}");
+    assert_eq!(applied["data"]["decision"], "applied");
+    assert_eq!(applied["data"]["removed_operations"], 1);
+    assert_eq!(
+        value(post(&f.app, "/v1/evidence-cleanup", decide, NATIVE).await)
+            .await
+            .1,
+        applied
+    );
+    let (_, history) = value(
+        post(
+            &f.app,
+            "/v1/tools/operations_get_history",
+            json!({"operation_id":"cleanup-original"}),
+            CORE,
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(history["data"]["operation"]["state"], "applied");
+    assert_eq!(
+        history["data"]["operation"]["evidence"]["cleanup_id"],
+        plan["data"]["cleanup_id"]
+    );
+    let (_, denied) = value(
+        post(
+            &f.app,
+            "/v1/operations/cleanup-original/reconcile",
+            json!({}),
+            NATIVE,
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(denied["error"]["code"], "operation_evidence_unavailable");
+    assert_eq!(f.source.reads.load(Ordering::SeqCst), reads);
+    assert_eq!(f.source.sends.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn operator_cleanup_needs_no_enabled_provider_writes_but_cannot_elevate_readonly() {
+    let f = fixture(true).await;
+    let task = grant(&f).await;
+    capture_compound(&f, &task, "retained").await;
+    assert_eq!(
+        dispatch(&f, &task, "retained").await["data"]["state"],
+        "applied"
+    );
+    close(&f, &task).await;
+    let Fixture {
+        app,
+        journal,
+        source,
+        _dir,
+    } = f;
+    drop(app);
+    drop(journal);
+    let journal = Journal::open(_dir.path()).await.unwrap();
+    let ledger = JournalWriteTasks::open(journal.clone(), "owner", "deployment")
+        .await
+        .unwrap();
+    let registry=serde_json::from_value(json!({"version":"v1","spreadsheets":[],"documents":[{"alias":"notes","id":"doc","readable":true,"writable":false}]})).unwrap();
+    let app = router(
+        AppState::new(registry, CORE.into(), "owner".into(), source.clone())
+            .unwrap()
+            .with_writes(Writes::with_task_ledger(ledger, false), NATIVE.into())
+            .unwrap(),
+    );
+    let reads = source.reads.load(Ordering::SeqCst);
+    let (_,proposal)=value(post(&app,"/v1/evidence-cleanup",json!({"action":"preview","selection":{"task_ids":[task["task_id"]],"operation_ids":[],"completed_before":chrono::Utc::now().timestamp()}}),NATIVE).await).await;
+    assert_eq!(proposal["ok"], true, "{proposal}");
+    let decision = json!({"action":"decide","cleanup_id":proposal["data"]["cleanup_id"],"preview_digest":proposal["data"]["preview_digest"],"decision":"approve"});
+    assert_eq!(
+        value(post(&app, "/v1/evidence-cleanup", decision, NATIVE).await)
+            .await
+            .1["data"]["removed_operations"],
+        1
+    );
+    assert_eq!(source.reads.load(Ordering::SeqCst), reads);
+    assert_eq!(source.sends.load(Ordering::SeqCst), 1);
+    let separate = tempfile::tempdir().unwrap();
+    let ro_journal = Journal::open(separate.path()).await.unwrap();
+    let ro_ledger = JournalWriteTasks::open(ro_journal, "owner", "deployment")
+        .await
+        .unwrap();
+    let registry=serde_json::from_value(json!({"version":"v1","spreadsheets":[],"documents":[{"alias":"notes","id":"doc","readable":true}]})).unwrap();
+    let core = "synthetic-readonly-core-token-00000000";
+    let operator = "synthetic-readonly-operator-token-0000";
+    let readonly = router(
+        AppState::new_read_only(registry, core.into(), "owner".into(), source.clone())
+            .unwrap()
+            .with_writes(Writes::with_task_ledger(ro_ledger, false), operator.into())
+            .unwrap(),
+    );
+    let (status, denied) = value(
+        post(
+            &readonly,
+            "/v1/evidence-cleanup",
+            json!({"action":"inspect","cleanup_id":proposal["data"]["cleanup_id"]}),
+            operator,
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(status, 403);
+    assert_eq!(denied["error"]["code"], "readonly_profile");
+    assert_eq!(source.reads.load(Ordering::SeqCst), reads);
+}

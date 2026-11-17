@@ -310,3 +310,44 @@ verification-summary.json,stages.json,result.json,cleanup.log};
 agent-to0rw9px/simulations/secretary-acceptance.9vhY6M/{sim.ndjson,task-client.log}.
 Fingerprint: parent49de22d plus the frozen225-input evidence-foundation changes,
 Postman1.75.0. Only public Markdown status/evidence changes follow the green gate.
+
+
+## Owner-operated cleanup and retained memory reference — supported, 2026-11-17
+
+- id: explicit-operator-cleanup-retains-native-observer-reference
+- status: supported
+- claim: One exact operator cleanup decision removes two completed linked source
+  payloads while native memory can still resolve their permanent operation history;
+  normal task writes and lost-response undo do not send again.
+- reason: Real Core/SQLite now separates the cleanup preview/decision receipt from
+  provider authority. Reference guards and the atomic transaction retain IDs,
+  identity,outcomes and compensation links. Google stand-ins are unchanged; the
+  new fixture consumes existing observer/source routes to repair its stale note.
+- verification: agent-xg7_yq_o passes actual locked SDK lifecycle/build/validation,
+  full scripts/verify.sh(42 Python,248 Rust/37 doctests,108 Bun,57 SDK Node,7 script
+  cases),all7 Google scenarios and75 protected cases(100.738s). All229 frozen
+  source/root hashes remain unchanged; no source/fixture correction during gates.
+  Pre-gate review fixes are recorded separately and included in the frozen inputs.
+  Normal startup/model tasks retain4 scope decisions,10 Docs sends/14 replacements,
+  2 grid sends and conditional undo/lost-response recovery. One synthetic operator
+  decision removes2 linked payloads; replay/inspection observes the same receipt.
+  Cleanup leaves the native pending note byte-identical; a subsequent authorized
+  discovery resolves the tombstone metadata and refreshes from current source.
+  Synthetic model calls13; member events131 google-docs/63 google,including fixture
+  controls. Error/slow conditions lack member request events; caller outcomes
+  qualify those injected cases. Native Core tests separately prove no source IO
+  during cleanup and model/read-only denial. Unit cases exercise actual SQLite
+  quota-driven FULL code13, audit rollback, concurrent undo/duplicate decisions and
+  process kill before/after commit. No host-volume fill,real owner UI,live Google/
+  model,physical database/WAL/backups deletion or operator-journal purge is claimed.
+- source: services/secretary-core/src/infrastructure/journal/write_tasks/cleanup.rs;
+  services/secretary-core/src/infrastructure/journal/write_tasks/cleanup/tests.rs;
+  services/secretary-core/tests/support/task_undo.rs;
+  plugins/secretary-tools/test/task-memory.node.mjs;scripts/acceptance-task-tools.mjs.
+- updated_at: 2026-11-17
+
+Evidence: agent-xg7_yq_o/{verification.log,acceptance.log,source-check.json,
+verification-summary.json,pre-gate-review.json,stages.json,result.json,cleanup.log};
+agent-xg7_yq_o/simulations/secretary-acceptance.U0fO1f/{sim.ndjson,task-client.log}.
+Fingerprint: parent7305e0f plus229 frozen owner-cleanup inputs;Postman1.75.0.
+Only public Markdown qualification/evidence changes follow the green gate.

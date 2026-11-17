@@ -2,7 +2,8 @@
  * Host requester/approval delivery and optional model output are controlled inputs.
  */
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
+import {mkdtemp,rm,readFile,writeFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import entry from '../plugins/secretary-tools/dist/index.js';
@@ -116,5 +117,31 @@ try{
  assert.equal(text(restored.tabs[0]),'Hello sample\n');assert.equal(text(restored.tabs[1]),'Untouched tab\n');
  // Applied history observations each refresh native memory under the existing policy.
  assert.equal(prompts,4);assert.equal(models,12);
- console.log(JSON.stringify({acceptance:'passed',scenario:'native-task-model-tools',owner_prompts:prompts,docs_sends:10,docs_replacement_requests:14,grid_sends:2,undo_round_trip:true,scope:'built model tools/normal startup/Core/journal/native note IO with simulated Google/model; host authority/owner routing are synthetic, not live qualification'}));
+ // The operator explicitly previews and approves one whole dependency graph.
+ // Keep a resolved pending native fence to exercise the retained-ID reference,
+ // rather than assuming that cleanup can delete or enumerate personal notes.
+ const note=join(workspace,'memory/ciel-docs',createHash('sha256').update('notes\0demo-document').digest('hex')+'.md');
+ const noteBytes=await readFile(note,'utf8');
+ await writeFile(note,'# Ciel Docs discovery summary — untrusted source data\n\n```json\n'+JSON.stringify({kind:'ciel_docs_summary_v1',cache_status:'stale',document:'notes',document_id:'demo-document',pending_operation_id:resumed.operation_id})+'\n```\n');
+ const fencedNote=await readFile(note,'utf8');assert.notEqual(fencedNote,noteBytes);
+ async function cleanup(input,token='synthetic-separate-operator-token'){
+  const response=await fetch(coreUrl+'/v1/evidence-cleanup',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify(input),signal:AbortSignal.timeout(5000)});
+  return {status:response.status,body:await response.json()};
+ }
+ const cleanupPreview=await cleanup({action:'preview',selection:{task_ids:[successor.task_id,undoSuccessor.task_id],operation_ids:[],completed_before:Math.floor(Date.now()/1000)}});
+ assert.equal(cleanupPreview.status,200);assert.equal(cleanupPreview.body.data.plan.members.length,2);
+ assert.equal(cleanupPreview.body.data.plan.applied_originals_losing_evidence,1);assert.equal(cleanupPreview.body.data.plan.inverse_payloads,1);
+ const cleanupDecision={action:'decide',cleanup_id:cleanupPreview.body.data.cleanup_id,preview_digest:cleanupPreview.body.data.preview_digest,decision:'approve'};
+ assert.equal((await cleanup(cleanupDecision,'synthetic-acceptance-core-token')).status,401);
+ const cleaned=await cleanup(cleanupDecision);assert.equal(cleaned.status,200);assert.equal(cleaned.body.data.removed_operations,2);
+ assert.deepEqual((await cleanup(cleanupDecision)).body,cleaned.body);
+ assert.equal((await cleanup({action:'inspect',cleanup_id:cleanupDecision.cleanup_id})).body.data.decision,'applied');
+ assert.equal(await readFile(note,'utf8'),fencedNote,'journal cleanup never mutates native memory');
+ const retained=await fetch(coreUrl+'/v1/tools/operations_get_history',{method:'POST',headers:{authorization:'Bearer synthetic-acceptance-core-token','content-type':'application/json'},body:JSON.stringify({operation_id:resumed.operation_id}),signal:AbortSignal.timeout(5000)}).then(r=>r.json());
+ assert.equal(retained.data.operation.state,'applied');assert.equal(retained.data.operation.evidence.status,'unavailable');assert.equal(retained.data.operation.record_id,'demo-document');assert.equal(retained.data.operation.fields,undefined);
+ const cleanupDiscovery=await run('docs_read',{document:'notes',mode:'discovery_summary'});assert.equal(cleanupDiscovery.data.cache,'refreshed');assert.equal(models,13);
+ assert(!(await readFile(note,'utf8')).includes('pending_operation_id'));
+ assert.deepEqual(await fixture(docsUrl,'/__fixture/stats'),{applies:10,batchRequests:14});
+ assert.equal((await fixture(sheetsUrl,'/__fixture/stats')).gridWrites,gridBefore.gridWrites+2);
+ console.log(JSON.stringify({acceptance:'passed',scenario:'native-task-model-tools',owner_prompts:prompts,docs_sends:10,docs_replacement_requests:14,grid_sends:2,undo_round_trip:true,cleanup_operations:2,cleanup_owner_decisions:1,scope:'built model tools/normal startup/Core/journal/native note IO with simulated Google/model; host authority/owner routing are synthetic, not live qualification'}));
 }finally{await rm(workspace,{recursive:true,force:true});}

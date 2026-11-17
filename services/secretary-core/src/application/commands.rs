@@ -4,6 +4,8 @@ use serde::Deserialize;
 /// Typed in-process application requests, including reads and mutations.
 /// HTTP names and JSON decoding belong to presentation.
 pub enum Command {
+    /// Exact owner-only operational evidence maintenance, never provider authority.
+    Cleanup(crate::domain::cleanup::CleanupCommand),
     /// Trusted native scope control, authenticated before decoding.
     TaskControl(super::task_authority::TaskControl),
     /// One member with a host confirmation after source preflight.

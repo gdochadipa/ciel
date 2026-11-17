@@ -26,6 +26,7 @@ fn decode<T: serde::de::DeserializeOwned>(value: &str) -> Result<T, CoreError> {
 }
 
 pub use crate::domain::write_task::{TaskDecision, TaskEnd};
+mod cleanup;
 
 /// One owner/deployment's scoped task authority in the shared SQLite journal.
 ///
@@ -102,6 +103,8 @@ impl JournalWriteTasks {
                 .await
                 .map_err(db)?;
         }
+        sqlx::query("CREATE TABLE IF NOT EXISTS evidence_cleanups(id TEXT PRIMARY KEY,owner TEXT NOT NULL,generation TEXT NOT NULL,instance TEXT NOT NULL,plan TEXT NOT NULL,digest TEXT NOT NULL,decision TEXT NOT NULL CHECK(decision IN ('pending','applied','rejected')),created_at INTEGER NOT NULL,result TEXT)")
+            .execute(&mut *tx).await.map_err(db)?;
         sqlx::query("CREATE TABLE IF NOT EXISTS write_tasks(id TEXT PRIMARY KEY,conversation TEXT NOT NULL,context TEXT NOT NULL,scope TEXT NOT NULL,digest TEXT NOT NULL,phase TEXT NOT NULL CHECK(phase IN ('proposed','active','suspended','closed')),revision INTEGER NOT NULL,instance TEXT NOT NULL,admitted INTEGER NOT NULL DEFAULT 0,prompt_expires INTEGER NOT NULL,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,ended_at INTEGER,reason TEXT)")
             .execute(&mut *tx).await.map_err(db)?;
         sqlx::query("CREATE TABLE IF NOT EXISTS write_task_ended_contexts(conversation TEXT NOT NULL,context TEXT NOT NULL,ended_at INTEGER NOT NULL,PRIMARY KEY(conversation,context))")
@@ -1075,6 +1078,13 @@ pub(super) async fn suspend_on_outcome(
 }
 
 impl crate::application::task_authority::TaskLedger for JournalWriteTasks {
+    fn cleanup<'a>(
+        &'a self,
+        command: &'a crate::domain::cleanup::CleanupCommand,
+    ) -> crate::application::ports::PortFuture<'a, Result<Value, CoreError>> {
+        Box::pin(self.cleanup(command))
+    }
+
     fn owner(&self) -> &str {
         &self.owner
     }

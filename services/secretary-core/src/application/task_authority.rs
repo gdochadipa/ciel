@@ -21,6 +21,16 @@ mod inverse;
 /// fn operations(ledger: &dyn TaskLedger) { let _ = ledger.operations(); }
 /// ```
 pub trait TaskLedger: Send + Sync {
+    /// Owner-credential maintenance under the shared writer; never a model command.
+    /// # Errors
+    /// Default composition denies maintenance when no guarded store is installed.
+    fn cleanup<'a>(
+        &'a self,
+        _command: &'a crate::domain::cleanup::CleanupCommand,
+    ) -> PortFuture<'a, Result<Value, CoreError>> {
+        Box::pin(async { Err(CoreError(ErrorKind::Unavailable, "cleanup_unavailable")) })
+    }
+
     /// Configured owner paired to this store; composition must match the bus.
     fn owner(&self) -> &str;
     /// Return the paired operation store; adapters must never substitute a journal.
