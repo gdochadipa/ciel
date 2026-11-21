@@ -5,6 +5,12 @@ plugin, one loopback Rust Core, one in-process command bus and a durable SQLite
 operation FSM. Registered Google Sheets and Docs are general capabilities; the
 wedding workbook is an optional domain profile. OpenClaw owns reminders and memory.
 
+Already running OpenClaw? Follow the [setup tutorial](https://github.com/gdochadipa/ciel/blob/main/SETUP.md)
+for the downloadable package, existing Google credentials, WhatsApp owner binding,
+registered resources and activation checks. The separate [Ciel skill](https://github.com/gdochadipa/ciel/blob/main/skills/ciel/SKILL.md)
+teaches an OpenClaw agent how to use the tools. Installing either the plugin or
+the skill does not complete Core configuration or qualify a live deployment.
+
 Project instructions start at [AGENTS.md](AGENTS.md). Versioned rules cover
 [code/comments](.agent/rules/code.md), [FSM](.agent/rules/fsm.md),
 [memory](.agent/rules/memory.md) and [processing](.agent/rules/processing.md).
@@ -84,8 +90,9 @@ sudo python3 scripts/install.py install-files --revision "$SECRETARY_REVISION" \
 
 Real filesystem installation requires Linux/root; --root supports a private disposable
 root exercise. Existing config/state is preserved; conflicting releases, units and
-unsafe paths fail closed. The release contains Core, the 26-tool three-file SDK plugin
-archive, MIT license, preflight/backup utilities, inactive templates, this README as
+unsafe paths fail closed. The release contains Core, the three-file SDK plugin
+archive (33 declared tools in the current source), MIT license, preflight/backup
+utilities, inactive templates, this README as
 INSTALLATION.md and a commit/hash receipt. The standalone installer shipped in a release
 supports verify/install-files without a source checkout.
 

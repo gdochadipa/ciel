@@ -1,5 +1,12 @@
 # Secretary OpenClaw bridge
 
+For operator installation on an existing OpenClaw VPS, follow the
+[Ciel setup tutorial](https://github.com/gdochadipa/ciel/blob/main/SETUP.md).
+For model usage, install the separate
+[Ciel skill](https://github.com/gdochadipa/ciel/blob/main/skills/ciel/SKILL.md)
+as described there. The skill name is `ciel`; the plugin ID remains
+`secretary-tools`. A skill supplies instructions, not runtime activation or access.
+
 Owner-only plugin for registered Google Sheets, Google Docs and native reminders, targeting the actual **OpenClaw 2026.10.7** SDK. The 33 declared tools use one loopback Rust Core for deterministic reads and controlled writes. Wedding-specific views/reports are optional domain profiles; general resource access uses `config/workspace.example.json`.
 
 ## Resource capabilities
